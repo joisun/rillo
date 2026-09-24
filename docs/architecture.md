@@ -52,7 +52,7 @@ Shared infrastructure 负责 executable candidate ordering、canonicalization、
 
 Run store 的 one-active-per-Schedule 约束是 UI action availability 的事实来源：空闲时行级 action 提供一次性 Run now；已有 `running` Run 时同一位置切换为 Stop，并与负责周期调度的 Schedule pause/resume action 使用不同图标和语义。`queued`、`claimed` 等尚不能安全停止的阶段会禁用 Run now；409 只保留为并发安全网，不能成为正常交互反馈。
 
-当前只注册 `codex`。增加 runtime 的最小范围应是：
+当前注册 `codex` 和 `opencode`。增加 runtime 的最小范围应是：
 
 1. 新增一个 definition；
 2. 新增该 CLI 的 stream parser；
@@ -107,7 +107,7 @@ Dashboard ──POST steer/stop──────────▶ RunService
 
 ### Context capability isolation
 
-Schedule 可分别把 `skills` 与 `integrations` 设为 `inherit` 或 `disabled`。旧 Markdown 缺省时保持 `inherit / inherit`；Dashboard/API 新建时默认 `disabled / disabled`。`integrations` 只包含 MCP servers、plugin MCP 与 Apps/Connectors，不包含 Web Search 或 Codex core tools；Sandbox 仍独立决定文件系统与网络权限。
+Schedule 可分别把 `skills` 与 `integrations` 设为 `inherit` 或 `disabled`。旧 Markdown 缺省时保持 `inherit / inherit`；Codex 的 Dashboard/API 新建时默认 `disabled / disabled`。`integrations` 只包含 MCP servers、plugin MCP 与 Apps/Connectors，不包含 Web Search 或 Codex core tools；Sandbox 仍独立决定文件系统与网络权限。
 
 Codex adapter 在 spawn 前用同一 executable、cwd 与 child environment 执行 bounded `codex mcp list --json`，再通过本 Run 的 app-server argv 明确禁用 plugins、Apps 和枚举到的 MCP identities。`skills: disabled` 时，adapter 在 `thread/start` 前调用 `skills/list`，为该 Workspace 的每个 Skill path 写入 thread-local disabled config，同时关闭 Skill search 与 Skill MCP dependency install。任何 discovery 失败都在创建 Thread 前 fail closed，返回 typed Run error；不得以“部分禁用”继续执行。
 
@@ -204,3 +204,11 @@ Cadence 输入校验错误返回 `SCHEDULE_INPUT_INVALID`，不能暴露为泛�
 历史对话优先使用原生 `thread/items/list`（倒序分页，每页 8 条，最多 128 页），仅保留 user/assistant messages 后按时间正序展示。字符总量仍限制为 1 MiB，达到页数或容量上限必须标记 truncated；不落盘工具输出。仅旧 CLI 明确返回 method-not-found 时退回有 16 MiB 上限的 `thread/read`。
 
 Run SSE 每 15 秒发送 comment 保活，关闭 response 时同时清理 timer 与订阅。开发代理必须立即转发响应头，不能等下一条事件才让浏览器进入 connected。全局变更只刷新 Run 元数据，避免反复启动 CLI 重读终态对话。
+
+### OpenCode runtime
+
+`opencode` adapter 复用 Registry、RunService、Scheduler 与 ledger。每次 Run 启动只监听 loopback 且随机 Basic auth 的原生 `opencode serve`；HTTP 提交 prompt/abort，SSE 提供即时事件，状态与最近消息轮询用于恢复断线期间遗漏的结束事实。用户消息 ID 使用原生 ascending 格式，最终回复必须匹配当前 prompt 的 parentID，工具调用步骤不能视为任务完成。实时流过滤用户文本与 reasoning，不持久化 SSE 原文。
+
+OpenCode 不支持 OS sandbox 或独立禁用 Skills/MCP。定义与执行边界都拒绝非 `danger-full-access`、禁用扩展能力以及显式 Fast mode/network policy；模型为 provider/model，reasoning 字段保存原生 variant。权限询问和交互问题结束 Run 并保留 Session；不自动扩大工具权限。取消和超时先调用原生 abort，再结束自己创建的进程组。
+
+历史读取使用原生消息接口，最多 100 条、1 MiB 文本；终端恢复先验证 Session，再用已解析的 executable 与 `--session` 参数启动。Session ID、workspace 与 runtime ID 均取自可信 Run，不接受浏览器构造命令。

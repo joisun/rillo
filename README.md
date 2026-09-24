@@ -8,7 +8,7 @@ Tasks Recorder 是运行在本机的 coding-agent 工作记录与自动化控制
 
 - macOS service 与 React Dashboard 可用；Legacy bundle 仅作为回滚资产保留，不是 production entry；
 - Recorder adapter 支持 Codex 和 Claude Code；
-- Scheduled Task runtime 当前支持 Codex；
+- Scheduled Task runtime 支持 Codex 和 OpenCode；
 - runtime registry 已按 multi-CLI contract 设计，后续 runtime 只增加 adapter，不增加第二套调度链路；
 - 所有数据都保存在本机，不需要 cloud account 或 auth token。
 
@@ -32,7 +32,7 @@ tasks-recorder status
 普通安装不需要 clone repository、`npm install` 或 `npm ci`。更谨慎的固定版本安装方式：
 
 ```bash
-version=v0.8.5
+version=v0.8.6
 curl -fsSLO "https://raw.githubusercontent.com/joisun/tasks-recorder/${version}/install.sh"
 less install.sh
 bash install.sh --version "$version"
@@ -168,13 +168,24 @@ Review the repository health and summarize actionable risks.
 - 每项也可设为 `inherit`，沿用本机 Codex 配置；
 - Web Search 与 Codex core tools 不属于 `integrations`，不会被该开关关闭；文件和网络权限仍由 `sandbox` 独立控制。
 
-Dashboard 新建的 Schedule 默认使用 `disabled / disabled`，以获得最小、可预测的自动化上下文。已有 Markdown 未声明 `capabilities` 时保持兼容，按 `inherit / inherit` 读取。每个 Run 会把 policy 写入 immutable execution snapshot；执行期间不会改写全局 Codex 配置，也不需要重启 `taskd`。
+Dashboard 新建的 Codex Schedule 默认使用 `disabled / disabled`，以获得最小、可预测的自动化上下文。已有 Markdown 未声明 `capabilities` 时保持兼容，按 `inherit / inherit` 读取。每个 Run 会把 policy 写入 immutable execution snapshot；执行期间不会改写全局 Codex 配置，也不需要重启 `taskd`。
 
 支持 `once`、`hourly`、`daily`、`weekly` 与 `monthly` cadence。Dashboard 的 Create/Edit/Pause/Resume 会 atomic rewrite Markdown，并用 SHA-256 `etag` 做 compare-and-set；Delete 把 definition 移到 `.trash/`。行级一次性 Run action 在执行期间会切换为 Stop；它与只控制周期调度的 Schedule pause/resume 是两套独立操作。
 
 Codex Schedule 支持 `fast_mode: true`（开启 Fast mode）、`false`（明确使用普通速度）；省略或 `null` 表示跟随 Codex 默认配置。Dashboard 的 Fast mode 选项与此对应。配置随 Run 快照保存，修改 Schedule 不会改变已创建的 Run。该选项仅适用于 Codex，实际可用性及用量规则由所选模型和账号决定。
 
 Codex 的 `workspace-write` 只表示文件写入权限，不等于允许联网。联网采集任务可显式设置 `network_access: true`；`false` 禁止网络，省略/null 继承 Codex 默认。该字段只控制 workspace-write 下的 shell 网络访问，独立于 Fast mode、Web Search 和 MCP 设置；后台审批策略为 `never`，不会弹出额外授权。Dashboard 的“沙箱网络访问”与此对应，选择随 Run 快照保存，不修改全局 Codex 配置。完整采集、编稿、构建与浏览器检查应设置足够的 `timeout`（例如 `2h`），超时仍会终止运行。
+
+
+### OpenCode 定时执行器
+
+安装并配置本机 OpenCode 后，Editor 可选择 `OpenCode`。可通过 `OPENCODE_BIN` 指定可执行文件；模型使用 `provider/model`（例如 `openai/gpt-5.4`），Variant 对应 OpenCode 模型变体，留空继承本机默认设置。模型目录仅显示已连接 provider 的模型。
+
+OpenCode Run 使用独立、带随机认证密码的 loopback `opencode serve`，通过 HTTP 与 SSE 执行任务和推送文本、工具状态。支持到期执行、Run now、追加指令、停止、超时、历史对话，以及 `opencode --session` 终端恢复。取消时调用原生 session abort，再结束本次 Run 自己启动的服务，不影响已有 OpenCode 服务。
+
+OpenCode 不提供 Codex 的操作系统沙箱，首版必须使用 `sandbox: danger-full-access`，并显式继承 `capabilities: { skills: inherit, integrations: inherit }`。Editor 会展示并要求确认这一权限范围。`fast_mode` 与 `network_access` 不适用于 OpenCode；工具权限仍由本机 OpenCode 配置控制。收到权限询问或交互问题时，任务分别以 `RUNTIME_PERMISSION_REQUIRED` / `RUNTIME_INPUT_REQUIRED` 结束，保留 Session 以便人工继续，不会在后台无限等待。
+
+历史读取最多最近 100 条原生消息、1 MiB 可展示文本，仅包含 user/assistant 文本。OpenCode 自己管理会话持久化；Tasks Recorder 不保存第二份完整对话。本适配仅增加定时任务执行器，不包含 OpenCode 工作记录插件。
 
 
 filesystem watcher 提供低延迟刷新，周期性 rescan 保证最终收敛。修改 Definitions directory 时，现有 definitions 会在同一个操作中安全迁移并切换 watcher，不需要重启 `taskd`。

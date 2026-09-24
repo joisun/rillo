@@ -143,7 +143,7 @@ export function RunDetail({ api, run }: { api: DashboardApi; run: RunRecord }) {
           <header className="live-session__header">
             <h3>Session 对话</h3>
             <div className="live-session__header-actions">
-              <span>{conversation.data?.truncated ? '仅展示最近消息' : 'Codex 本地 Session'}</span>
+              <span>{conversation.data?.truncated ? '仅展示最近消息' : `${run.runtime_id === 'opencode' ? 'OpenCode' : 'Codex'} 本地 Session`}</span>
               {conversation.isError && <Button size="xs" variant="quiet" isPending={conversation.isFetching} onPress={() => void conversation.refetch()}><RefreshCw aria-hidden="true" />重新读取</Button>}
               {!run.reviewed_at ? (
                 <Button size="xs" variant="quiet" isPending={reviewed.isPending} onPress={() => reviewed.mutate()}>
@@ -171,7 +171,7 @@ export function RunDetail({ api, run }: { api: DashboardApi; run: RunRecord }) {
       {run.error_code ? (
         <section className="run-detail__section">
           <div className="run-detail__section-heading"><h3>错误</h3></div>
-          <code className="run-detail__error">{run.error_code === 'RUNTIME_PROTOCOL_CLOSED' ? 'Codex 执行连接已关闭，本次任务已结束。可查看退出码后重新运行。' : run.error_code === 'RUNTIME_PROTOCOL_FRAME_TOO_LARGE' ? 'Codex 单条消息超过接收上限，本次运行已中断。Session 已保留时可在 Terminal 恢复。' : run.error_code === 'RUNTIME_TIMEOUT' ? '执行超过任务设置的时间上限。请检查超时配置，或从已保存的 Session 继续。' : run.error_code}</code>
+          <code className="run-detail__error">{run.error_code === 'RUNTIME_PROTOCOL_CLOSED' ? `${run.runtime_id === 'opencode' ? 'OpenCode' : 'Codex'} 执行连接已关闭，本次任务已结束。可查看退出码后重新运行。` : run.error_code === 'RUNTIME_PROTOCOL_FRAME_TOO_LARGE' ? '执行器单条消息超过接收上限，本次运行已中断。Session 已保留时可在 Terminal 恢复。' : run.error_code === 'RUNTIME_TIMEOUT' ? '执行超过任务设置的时间上限。请检查超时配置，或从已保存的 Session 继续。' : run.error_code === 'RUNTIME_PERMISSION_REQUIRED' ? 'OpenCode 正在等待工具权限，本次任务已停止。请调整本机 OpenCode 权限后重新运行，或在 Terminal 恢复。' : run.error_code === 'RUNTIME_INPUT_REQUIRED' ? 'OpenCode 需要交互回答，本次任务已停止。可在 Terminal 恢复后继续。' : run.error_code}</code>
         </section>
       ) : null}
 

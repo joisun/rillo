@@ -4,6 +4,8 @@ const CADENCE_KINDS = new Set(['once', 'hourly', 'daily', 'weekly', 'monthly'])
 const SANDBOX_MODES = new Set(['read-only', 'workspace-write', 'danger-full-access'])
 const MODEL_SLUG = /^[a-z0-9][a-z0-9._-]{0,127}$/
 const REASONING_LEVEL = /^[a-z][a-z0-9_-]{0,15}$/
+const OPENCODE_MODEL = /^(?=.{1,256}$)[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9~][A-Za-z0-9._:/~-]*$/
+const OPENCODE_VARIANT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 const AGENT_ID = /^[a-z][a-z0-9-]{0,63}$/
 const WEEKDAYS = [
   [1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun'],
@@ -20,22 +22,22 @@ function boundedText(value, name, limit) {
   return normalized
 }
 
-function safeModelSlug(value) {
+function safeModelSlug(value, agent = 'codex') {
   const normalized = text(value)
-  return MODEL_SLUG.test(normalized) ? normalized : ''
+  return (agent === 'opencode' ? OPENCODE_MODEL : MODEL_SLUG).test(normalized) ? normalized : ''
 }
 
-function safeReasoningLevel(value) {
+function safeReasoningLevel(value, agent = 'codex') {
   const normalized = text(value)
-  return REASONING_LEVEL.test(normalized) ? normalized : ''
+  return (agent === 'opencode' ? OPENCODE_VARIANT : REASONING_LEVEL).test(normalized) ? normalized : ''
 }
 
-function normalizeModelCatalog(value) {
-  if (!Array.isArray(value) || value.length > 100) throw new TypeError('Runtime model catalog response is invalid')
+function normalizeModelCatalog(value, agent = 'codex') {
+  if (!Array.isArray(value) || value.length > (agent === 'opencode' ? 2000 : 100)) throw new TypeError('Runtime model catalog response is invalid')
   const seen = new Set()
   return value.map((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) throw new TypeError('Runtime model catalog response is invalid')
-    const slug = safeModelSlug(item.id ?? item.slug)
+    const slug = safeModelSlug(item.id ?? item.slug, agent)
     const displayName = text(item.displayName ?? item.display_name ?? slug)
     const description = text(item.description)
     const sourceLevels = item.reasoningLevels ?? item.supported_reasoning_levels ?? []
@@ -46,11 +48,11 @@ function normalizeModelCatalog(value) {
       throw new TypeError('Runtime model catalog response is invalid')
     }
     seen.add(slug)
-    const levels = sourceLevels.map(safeReasoningLevel)
+    const levels = sourceLevels.map((level) => safeReasoningLevel(level, agent))
     if (levels.some((level) => !level) || new Set(levels).size !== levels.length) {
       throw new TypeError('Runtime model catalog response is invalid')
     }
-    const defaultReasoning = safeReasoningLevel(item.defaultReasoningLevel ?? item.default_reasoning_level)
+    const defaultReasoning = safeReasoningLevel(item.defaultReasoningLevel ?? item.default_reasoning_level, agent)
     if (defaultReasoning && !levels.includes(defaultReasoning)) throw new TypeError('Runtime model catalog response is invalid')
     return {
       slug,
@@ -174,8 +176,8 @@ export function normalizeDraft(input = {}) {
   const hour = Number.isInteger(cadence.hour) ? cadence.hour : Number(source.hour)
   const day = Number.isInteger(cadence.day) ? cadence.day : Number(source.day)
   const timeout = Number.isSafeInteger(source.timeout_seconds) ? source.timeout_seconds : Number(source.timeout_seconds)
-  const model = safeModelSlug(source.model)
-  const reasoning = safeReasoningLevel(source.reasoning_effort)
+  const model = safeModelSlug(source.model, source.agent)
+  const reasoning = safeReasoningLevel(source.reasoning_effort, source.agent)
   return {
     ...defaultDraft(),
     title: text(source.title),
@@ -222,6 +224,10 @@ export function draftToPayload(draft = {}, { modelCatalog = [] } = {}) {
     throw new TypeError('danger-full-access requires explicit confirmation')
   }
 
+  if (source.agent === 'opencode' && source.sandbox_mode !== 'danger-full-access') {
+    throw new TypeError('OpenCode 不提供操作系统沙箱，只支持 danger-full-access')
+  }
+
   let cadence
   if (kind === 'once') {
     cadence = { kind, at: onceInstant(source.onceAt), timezone_mode: 'system' }
@@ -244,9 +250,9 @@ export function draftToPayload(draft = {}, { modelCatalog = [] } = {}) {
 
   const model = text(source.model)
   const reasoningEffort = text(source.reasoning_effort)
-  if (model && !MODEL_SLUG.test(model)) throw new TypeError('model is invalid')
-  if (reasoningEffort && !REASONING_LEVEL.test(reasoningEffort)) throw new TypeError('reasoning_effort is invalid')
-  const models = normalizeModelCatalog(modelCatalog)
+  if (model && !safeModelSlug(model, source.agent)) throw new TypeError('model is invalid')
+  if (reasoningEffort && !safeReasoningLevel(reasoningEffort, source.agent)) throw new TypeError('reasoning_effort is invalid')
+  const models = normalizeModelCatalog(modelCatalog, source.agent)
   if (models.length > 0) {
     const selected = model ? models.find((item) => item.slug === model) : null
     if (model && !selected) throw new TypeError('model is not available in Codex')
@@ -267,6 +273,7 @@ export function draftToPayload(draft = {}, { modelCatalog = [] } = {}) {
     ...(Object.hasOwn(source, 'fast_mode') ? { fast_mode: source.agent !== 'codex' || !source.fast_mode ? null : source.fast_mode === 'on' } : {}),
     ...(Object.hasOwn(source, 'network_access') ? { network_access: source.agent !== 'codex' || !source.network_access ? null : source.network_access === 'on' } : {}),
     timeout_seconds: integer(source.timeout_seconds, 'timeout_seconds', 60, 86_400),
+    ...(source.agent === 'opencode' ? { capabilities: { skills: 'inherit', integrations: 'inherit' }, fast_mode: null, network_access: null } : {}),
   }
 }
 
@@ -297,7 +304,7 @@ function sandboxControls(draft, disabled, modelCatalog, modelCatalogState, runti
   const unavailable = disabled ? ' disabled' : ''
   const workspaceWrite = draft.sandbox_mode === 'workspace-write'
   const danger = draft.sandbox_mode === 'danger-full-access'
-  const models = normalizeModelCatalog(modelCatalog)
+  const models = normalizeModelCatalog(modelCatalog, draft.agent)
   const selectedModel = models.find((item) => item.slug === draft.model) ?? null
   const modelMissing = draft.model && !selectedModel
   const reasoningLevels = selectedModel
@@ -324,15 +331,16 @@ function sandboxControls(draft, disabled, modelCatalog, modelCatalogState, runti
     <div class="schedule-editor-group-heading"><div><h3 id="schedule-editor-runtime-title">Execution safeguards</h3></div></div>
     <label class="schedule-editor-field"><span>Agent</span><select name="agent"${unavailable}>${runtimeOptions}</select></label>
     <label class="schedule-editor-field"><span>Sandbox</span><select name="sandbox_mode"${unavailable}>
-      <option value="read-only"${selectedOption(draft.sandbox_mode, 'read-only')}>read-only</option>
-      <option value="workspace-write"${selectedOption(draft.sandbox_mode, 'workspace-write')}>workspace-write</option>
+      ${draft.agent !== 'opencode' ? `<option value="read-only"${selectedOption(draft.sandbox_mode, 'read-only')}>read-only</option>
+      <option value="workspace-write"${selectedOption(draft.sandbox_mode, 'workspace-write')}>workspace-write</option>` : ''}
       <option value="danger-full-access"${selectedOption(draft.sandbox_mode, 'danger-full-access')}>danger-full-access</option>
     </select></label>
+    ${draft.agent === 'opencode' ? '<p class="schedule-editor-warning">OpenCode 没有操作系统沙箱，文件和网络访问不受隔离。Skills 和 MCP 继承本机配置，暂不支持单独禁用。</p>' : ''}
     ${workspaceWrite ? '<p class="schedule-editor-warning" role="status">workspace-write 可修改所选 Workspace 中的文件。</p>' : ''}
     ${danger ? `<label class="schedule-editor-danger"><input name="dangerConfirmed" type="checkbox"${draft.dangerConfirmed ? ' checked' : ''}${unavailable}><span>I understand that danger-full-access requires explicit confirmation.</span></label>` : ''}
     <div class="schedule-editor-advanced">
       <label class="schedule-editor-field"><span>Model</span><select name="model"${catalogControlUnavailable}><option value=""${selectedOption(draft.model, '')}>Scheduler default</option>${modelMissing ? `<option value="${escapeHtml(draft.model)}" selected>${escapeHtml(draft.model)} · unavailable</option>` : ''}${modelOptions}</select></label>
-      <label class="schedule-editor-field"><span>Reasoning</span><select name="reasoning_effort"${catalogControlUnavailable}><option value=""${selectedOption(draft.reasoning_effort, '')}>Scheduler default</option>${reasoningMissing ? `<option value="${escapeHtml(draft.reasoning_effort)}" selected>${escapeHtml(draft.reasoning_effort)} · unavailable</option>` : ''}${reasoningOptions}</select></label>
+      <label class="schedule-editor-field"><span>${draft.agent === 'opencode' ? 'Variant' : 'Reasoning'}</span><select name="reasoning_effort"${catalogControlUnavailable}><option value=""${selectedOption(draft.reasoning_effort, '')}>Scheduler default</option>${reasoningMissing ? `<option value="${escapeHtml(draft.reasoning_effort)}" selected>${escapeHtml(draft.reasoning_effort)} · unavailable</option>` : ''}${reasoningOptions}</select></label>
       ${draft.agent === 'codex' ? `<label class="schedule-editor-field"><span>Fast mode</span><select name="fast_mode"${unavailable}><option value=""${selectedOption(draft.fast_mode ?? '', '')}>跟随 Codex 默认</option><option value="on"${selectedOption(draft.fast_mode, 'on')}>开启</option><option value="off"${selectedOption(draft.fast_mode, 'off')}>关闭（普通速度）</option></select></label>` : ''}
       ${draft.agent === 'codex' ? `<label class="schedule-editor-field"><span>沙箱网络访问</span><select name="network_access"${unavailable}><option value=""${selectedOption(draft.network_access ?? '', '')}>跟随 Codex 默认</option><option value="on"${selectedOption(draft.network_access, 'on')}>允许</option><option value="off"${selectedOption(draft.network_access, 'off')}>禁止</option></select></label>` : ''}
       <label class="schedule-editor-field"><span>Timeout (seconds)</span><input name="timeout_seconds" type="number" min="60" max="86400" value="${escapeHtml(draft.timeout_seconds)}"${unavailable}></label>
@@ -463,7 +471,7 @@ export function createScheduledTaskEditor({
 
   async function fetchModelCatalog(agent) {
     const response = await api.runtimeModels(agent)
-    return normalizeModelCatalog(response?.models)
+    return normalizeModelCatalog(response?.models, agent)
   }
 
   async function openCreate({ trigger = document.activeElement } = {}) {
@@ -501,6 +509,7 @@ export function createScheduledTaskEditor({
     if (state.requestSequence !== request || !state.open) return
     state.runtimes = runtimeState.runtimes
     state.draft.agent = runtimeState.agent
+    if (runtimeState.agent === 'opencode') state.draft.sandbox_mode = 'danger-full-access'
     state.modelCatalog = runtimeState.catalog.models
     state.modelCatalogState = runtimeState.catalog.status
     const activeField = element.querySelector(':focus')?.name
@@ -628,6 +637,8 @@ export function createScheduledTaskEditor({
       }
     }
     if (event.target.name === 'agent') {
+      state.draft.sandbox_mode = state.draft.agent === 'opencode' ? 'danger-full-access' : 'read-only'
+      state.draft.dangerConfirmed = false
       state.draft.model = ''
       state.draft.reasoning_effort = ''
       state.draft.fast_mode = ''

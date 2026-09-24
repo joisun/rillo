@@ -20,6 +20,7 @@ export function createRuntimeEnvironment({
 
     directories.push(
       join(activeHome, '.local', 'bin'),
+      join(activeHome, '.opencode', 'bin'),
       join(activeHome, '.bun', 'bin'),
       join(activeHome, '.volta', 'bin'),
       join(activeHome, '.asdf', 'shims'),

@@ -1,7 +1,8 @@
 const DEFAULT_TIMEOUT_MS = 5_000
+const RUNTIME_TIMEOUT_MS = 65_000
 const SCHEDULE_CREATE_FIELDS = Object.freeze([
   'title', 'prompt', 'workspace', 'cadence', 'sandbox_mode', 'model',
-  'reasoning_effort', 'fast_mode', 'timeout_seconds',
+  'reasoning_effort', 'fast_mode', 'network_access', 'timeout_seconds', 'agent', 'capabilities',
 ])
 const SCHEDULE_PATCH_FIELDS = Object.freeze([...SCHEDULE_CREATE_FIELDS, 'next_run_at'])
 const RUN_STEER_FIELDS = Object.freeze(['expected_turn_revision', 'text'])
@@ -49,9 +50,9 @@ export function createDashboardApi({
 } = {}) {
   if (typeof fetchImpl !== 'function') throw new TypeError('fetchImpl is required')
 
-  async function request(path, { method = 'GET', body } = {}) {
+  async function request(path, { method = 'GET', body, requestTimeoutMs = timeoutMs } = {}) {
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), timeoutMs)
+    const timeout = setTimeout(() => controller.abort(), requestTimeoutMs)
     let response
     try {
       response = await fetchImpl(`${baseUrl}${path}`, {
@@ -101,12 +102,13 @@ export function createDashboardApi({
 
   return {
     meta: () => request('/api/v1/meta'),
-    runtimes: () => request('/api/v1/runtimes'),
+    runtimes: () => request('/api/v1/runtimes', { requestTimeoutMs: RUNTIME_TIMEOUT_MS }),
     refreshRuntimes: () => request('/api/v1/runtimes/refresh', {
-      method: 'POST', body: {},
+      method: 'POST', body: {}, requestTimeoutMs: RUNTIME_TIMEOUT_MS,
     }),
     runtimeModels: (id) => request(
       `/api/v1/runtimes/${encodeURIComponent(id)}/models`,
+      { requestTimeoutMs: RUNTIME_TIMEOUT_MS },
     ),
     createRun: (scheduleId, idempotencyKey) => request('/api/v1/runs', {
       method: 'POST',

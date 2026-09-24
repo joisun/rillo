@@ -44,9 +44,10 @@ export function createDefinitionScheduleService({
     return agent
   }
 
-  async function normalizedInput(input, { patch = false } = {}) {
+  async function normalizedInput(input, { patch = false, existingAgent = 'codex' } = {}) {
     allowOnly(input, JOB_FIELDS, patch ? 'Schedule patch' : 'Schedule')
     const output = { ...input }
+    const openCode = (input.agent ?? existingAgent) === 'opencode'
     if (!patch || own(output, 'title')) output.title = boundedString(output.title, 'title', 200)
     if (!patch || own(output, 'prompt')) output.prompt = boundedString(output.prompt, 'prompt', 20_000)
     if (!patch || own(output, 'workspace')) output.workspace = await canonicalWorkspace(output.workspace)
@@ -60,13 +61,13 @@ export function createDefinitionScheduleService({
       }
     }
     if (!patch || own(output, 'sandbox_mode')) output.sandbox_mode = sandboxMode(output.sandbox_mode)
-    if (!patch || own(output, 'model')) output.model = optionalSelection(output.model, 'model', MODEL, 128)
+    if (!patch || own(output, 'model')) output.model = optionalSelection(output.model, 'model', openCode ? /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9~][A-Za-z0-9._:/~-]*$/ : MODEL, openCode ? 256 : 128)
     if (!patch || own(output, 'reasoning_effort')) {
       output.reasoning_effort = optionalSelection(
         output.reasoning_effort,
         'reasoning_effort',
-        REASONING,
-        16,
+        openCode ? /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/ : REASONING,
+        openCode ? 64 : 16,
       )
     }
     if (output.fast_mode != null && typeof output.fast_mode !== 'boolean') {
@@ -113,11 +114,11 @@ export function createDefinitionScheduleService({
 
   async function updateJob(id, etag, patch) {
     const scheduleId = scheduleIdValue(id)
-    await definitions.get(scheduleId)
+    const existing = await definitions.get(scheduleId)
     return { job: await view(await definitions.update(
       scheduleId,
       expectedEtag(etag),
-      await normalizedInput(patch, { patch: true }),
+      await normalizedInput(patch, { patch: true, existingAgent: existing.agent }),
     )) }
   }
 

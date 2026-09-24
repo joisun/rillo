@@ -1,5 +1,5 @@
 import { AlertTriangle, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Modal, ModalOverlay } from 'react-aria-components/Modal'
 
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,7 @@ import { Switch } from '@/components/ui/switch'
 import { DashboardApiError, type DashboardApi } from '@/lib/api/dashboard-api'
 import type { RuntimeStatus, ScheduleRecord } from '@/lib/api/types'
 import {
+  changeDraftAgent,
   defaultScheduleDraft,
   draftToScheduleInput,
   normalizeModelCatalog,
@@ -62,6 +63,7 @@ export function ScheduleEditorDialog({
   onOpenChange: (open: boolean) => void
   onSaved: () => Promise<void>
 }) {
+  const catalogRequest = useRef(0)
   const [draft, setDraft] = useState<ScheduleDraft>(defaultScheduleDraft)
   const [phase, setPhase] = useState<EditorPhase>('ready')
   const [error, setError] = useState('')
@@ -76,6 +78,7 @@ export function ScheduleEditorDialog({
   useEffect(() => {
     if (!open) return undefined
     let canceled = false
+    const request = ++catalogRequest.current
     setPhase(schedule ? 'loading' : 'ready')
     setDraft(defaultScheduleDraft())
     setEtag(null)
@@ -99,7 +102,7 @@ export function ScheduleEditorDialog({
           if (!/^[0-9a-f]{64}$/.test(scheduleResponse.job.etag)) throw new TypeError('Schedule etag 无效')
           if (!canceled) setEtag(scheduleResponse.job.etag)
         } else if (!nextRuntimes.some(({ id }) => id === nextDraft.agent)) {
-          nextDraft.agent = nextRuntimes[0].id
+          nextDraft = changeDraftAgent(nextDraft, nextRuntimes[0].id)
         }
       } catch (caught) {
         if (canceled) return
@@ -124,16 +127,16 @@ export function ScheduleEditorDialog({
       setPhase('ready')
       try {
         const response = await api.runtimeModels(nextDraft.agent)
-        const models = normalizeModelCatalog(response.models)
-        if (!canceled) {
+        const models = normalizeModelCatalog(response.models, nextDraft.agent)
+        if (!canceled && request === catalogRequest.current) {
           setCatalog(models)
           setCatalogState('ready')
         }
       } catch {
-        if (!canceled) setCatalogState('error')
+        if (!canceled && request === catalogRequest.current) setCatalogState('error')
       }
     })()
-    return () => { canceled = true }
+    return () => { canceled = true; catalogRequest.current += 1 }
   }, [api, open, schedule?.id])
 
   const reasoningLevels = useMemo(() => {
@@ -155,15 +158,19 @@ export function ScheduleEditorDialog({
   }
 
   async function changeAgent(agent: string) {
-    update('agent', agent)
-    setDraft((current) => ({ ...current, agent, model: '', reasoning_effort: '', fast_mode: '', network_access: '' }))
+    const request = ++catalogRequest.current
+    setError('')
+    setDeleteArmed(false)
+    setDraft((current) => changeDraftAgent(current, agent))
     setCatalog([])
     setCatalogState('loading')
     try {
       const response = await api.runtimeModels(agent)
-      setCatalog(normalizeModelCatalog(response.models))
+      if (request !== catalogRequest.current) return
+      setCatalog(normalizeModelCatalog(response.models, agent))
       setCatalogState('ready')
     } catch {
+      if (request !== catalogRequest.current) return
       setCatalogState('error')
     }
   }
@@ -298,9 +305,9 @@ export function ScheduleEditorDialog({
                   <h3>Runtime</h3>
                   <div className="schedule-editor__grid">
                     <div className="schedule-editor__field"><FieldLabel>Agent</FieldLabel><Select aria-label="Agent" isDisabled={busy} selectedKey={draft.agent} onSelectionChange={(key) => void changeAgent(String(key))}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent>{runtimes.map((runtime) => <SelectItem id={runtime.id} key={runtime.id}>{runtime.display_name}</SelectItem>)}</SelectContent></Select></div>
-                    <div className="schedule-editor__field"><FieldLabel>Sandbox</FieldLabel><Select aria-label="Sandbox" isDisabled={busy} selectedKey={draft.sandbox_mode} onSelectionChange={(key) => update('sandbox_mode', String(key) as ScheduleRecord['sandbox_mode'])}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem id="read-only">read-only</SelectItem><SelectItem id="workspace-write">workspace-write</SelectItem><SelectItem id="danger-full-access">danger-full-access</SelectItem></SelectContent></Select></div>
+                    <div className="schedule-editor__field"><FieldLabel>Sandbox</FieldLabel><Select aria-label="Sandbox" isDisabled={busy} selectedKey={draft.sandbox_mode} onSelectionChange={(key) => update('sandbox_mode', String(key) as ScheduleRecord['sandbox_mode'])}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent>{draft.agent !== 'opencode' && <SelectItem id="read-only">read-only</SelectItem>}{draft.agent !== 'opencode' && <SelectItem id="workspace-write">workspace-write</SelectItem>}<SelectItem id="danger-full-access">danger-full-access</SelectItem></SelectContent></Select></div>
                     <div className="schedule-editor__field"><FieldLabel>Model</FieldLabel><Select aria-label="Model" isDisabled={busy || catalogState !== 'ready'} selectedKey={draft.model || 'default'} onSelectionChange={(key) => { const model = String(key) === 'default' ? '' : String(key); const selected = catalog.find(({ slug }) => slug === model); setDraft((current) => ({ ...current, model, reasoning_effort: selected && current.reasoning_effort && !selected.reasoningLevels.includes(current.reasoning_effort) ? '' : current.reasoning_effort })); setError('') }}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem id="default">Runtime default</SelectItem>{catalog.map((model) => <SelectItem id={model.slug} key={model.slug}>{model.displayName} · {model.slug}</SelectItem>)}</SelectContent></Select></div>
-                    <div className="schedule-editor__field"><FieldLabel>Reasoning</FieldLabel><Select aria-label="Reasoning" isDisabled={busy || catalogState !== 'ready'} selectedKey={draft.reasoning_effort || 'default'} onSelectionChange={(key) => update('reasoning_effort', String(key) === 'default' ? '' : String(key))}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem id="default">Runtime default</SelectItem>{reasoningLevels.map((level) => <SelectItem id={level} key={level}>{level}</SelectItem>)}</SelectContent></Select></div>
+                    <div className="schedule-editor__field"><FieldLabel>{draft.agent === 'opencode' ? 'Variant' : 'Reasoning'}</FieldLabel><Select aria-label={draft.agent === 'opencode' ? 'Variant' : 'Reasoning'} isDisabled={busy || catalogState !== 'ready'} selectedKey={draft.reasoning_effort || 'default'} onSelectionChange={(key) => update('reasoning_effort', String(key) === 'default' ? '' : String(key))}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem id="default">Runtime default</SelectItem>{reasoningLevels.map((level) => <SelectItem id={level} key={level}>{level}</SelectItem>)}</SelectContent></Select></div>
                     {draft.agent === 'codex' && <div className="schedule-editor__field"><FieldLabel>Fast mode</FieldLabel><Select aria-label="Fast mode" isDisabled={busy} selectedKey={draft.fast_mode || 'inherit'} onSelectionChange={(key) => update('fast_mode', String(key) === 'inherit' ? '' : String(key) as 'on' | 'off')}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem id="inherit">跟随 Codex 默认</SelectItem><SelectItem id="on">开启</SelectItem><SelectItem id="off">关闭（普通速度）</SelectItem></SelectContent></Select></div>}
                     {draft.agent === 'codex' && <div className="schedule-editor__field"><FieldLabel>沙箱网络访问</FieldLabel><Select aria-label="沙箱网络访问" isDisabled={busy} selectedKey={draft.network_access || 'inherit'} onSelectionChange={(key) => update('network_access', String(key) === 'inherit' ? '' : String(key) as 'on' | 'off')}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem id="inherit">跟随 Codex 默认</SelectItem><SelectItem id="on">允许</SelectItem><SelectItem id="off">禁止</SelectItem></SelectContent></Select></div>}
                     {draft.agent === 'codex' && <p className="schedule-editor__hint">workspace-write 只代表允许写入工作区。联网采集需要允许网络访问；后台运行不会弹出授权。网络开关适用于 workspace-write。</p>}
@@ -314,21 +321,21 @@ export function ScheduleEditorDialog({
                     </div>
                     <Switch
                       aria-label="Load Skills"
-                      isDisabled={busy || isolation?.skills !== true}
+                      isDisabled={busy || draft.agent === 'opencode' || isolation?.skills !== true}
                       isSelected={draft.loadSkills}
                       onChange={(selected) => update('loadSkills', selected)}
                     >
-                      <span><strong>Load Skills</strong><small>允许 Codex 发现并按需读取 Skills</small></span>
+                      <span><strong>Load Skills</strong><small>允许 Agent 发现并按需读取 Skills</small></span>
                     </Switch>
                     <Switch
                       aria-label="Load integrations"
-                      isDisabled={busy || isolation?.integrations !== true}
+                      isDisabled={busy || draft.agent === 'opencode' || isolation?.integrations !== true}
                       isSelected={draft.loadIntegrations}
                       onChange={(selected) => update('loadIntegrations', selected)}
                     >
                       <span><strong>Load integrations</strong><small>MCP、Apps 和 plugin tools</small></span>
                     </Switch>
-                    <p>Web Search 和 Codex 内置工具不受影响；文件与网络权限仍由 Sandbox 控制。</p>
+                    {draft.agent === 'opencode' ? <p>OpenCode 当前继承本机 Skills 和 MCP 配置，暂不支持单独禁用；执行没有操作系统沙箱，文件和网络访问不受隔离。</p> : <p>Web Search 和 Codex 内置工具不受影响；文件与网络权限仍由 Sandbox 控制。</p>}
                   </div>
                   {draft.sandbox_mode === 'workspace-write' ? <p className="schedule-editor__warning"><AlertTriangle aria-hidden="true" />Agent 可以修改 Workspace 内的文件。</p> : null}
                   {draft.sandbox_mode === 'danger-full-access' ? <label className="schedule-editor__danger"><input checked={draft.dangerConfirmed} disabled={busy} type="checkbox" onChange={(event) => update('dangerConfirmed', event.currentTarget.checked)} /><span>我理解 Agent 将不受文件系统 sandbox 限制。</span></label> : null}

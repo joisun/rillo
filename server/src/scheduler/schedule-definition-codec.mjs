@@ -18,6 +18,8 @@ const FIELDS = new Set([
   'sandbox', 'model', 'reasoning', 'fast_mode', 'network_access', 'timeout',
 ])
 const SANDBOXES = new Set(['read-only', 'workspace-write', 'danger-full-access'])
+const OPENCODE_MODEL = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9~][A-Za-z0-9._:/~-]*$/
+const OPENCODE_VARIANT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 const CAPABILITY_MODES = new Set(['inherit', 'disabled'])
 const WEEKDAYS = new Map([
   ['mon', 1], ['tue', 2], ['wed', 3], ['thu', 4], ['fri', 5], ['sat', 6], ['sun', 7],
@@ -50,7 +52,7 @@ function string(value, field, max) {
   return normalized
 }
 
-function optionalCodexSelection(value, field, validator, maximum) {
+function optionalSelection(value, field, validator, maximum) {
   if (value === undefined || value === null || value === '') return null
   const normalized = string(value, field, maximum)
   if (!validator(normalized)) fail('SCHEDULE_DEFINITION_INVALID', `${field} is invalid`, { field })
@@ -201,6 +203,7 @@ export function parseScheduleDefinition(source, {
   }
   const sandbox = frontMatter.sandbox ?? 'read-only'
   if (!SANDBOXES.has(sandbox)) fail('SCHEDULE_DEFINITION_INVALID', 'sandbox is not supported', { field: 'sandbox' })
+  validateOpenCodeSettings(agentId(frontMatter.agent), sandbox, capabilities(frontMatter.capabilities))
   const prompt = match[2].trim()
   if (prompt.length === 0 || prompt.length > 20000) {
     fail('SCHEDULE_DEFINITION_INVALID', 'Markdown body Prompt must contain 1 to 20000 characters', { field: 'prompt' })
@@ -214,8 +217,8 @@ export function parseScheduleDefinition(source, {
     agent: agentId(frontMatter.agent),
     cadence: cadence(frontMatter.schedule, clock, { allowPastOnce: true }),
     sandbox_mode: sandbox,
-    model: optionalCodexSelection(frontMatter.model, 'model', isCodexModelSlug, 128),
-    reasoning_effort: optionalCodexSelection(frontMatter.reasoning, 'reasoning', isCodexReasoningLevel, 16),
+    model: modelSelection(frontMatter.model, agentId(frontMatter.agent)),
+    reasoning_effort: reasoningSelection(frontMatter.reasoning, agentId(frontMatter.agent)),
     ...(frontMatter.network_access != null ? { network_access: frontMatter.network_access } : {}),
     ...(frontMatter.fast_mode != null ? { fast_mode: frontMatter.fast_mode } : {}),
     timeout_seconds: timeoutSeconds(frontMatter.timeout),
@@ -246,10 +249,10 @@ export function serializeScheduleDefinition(job, { clock = () => new Date() } = 
   if (!ID.test(frontMatter.id)) fail('SCHEDULE_DEFINITION_INVALID', 'id must be a UUID', { field: 'id' })
   if (!SANDBOXES.has(frontMatter.sandbox)) fail('SCHEDULE_DEFINITION_INVALID', 'sandbox is not supported', { field: 'sandbox' })
   if (value.model !== undefined && value.model !== null) {
-    frontMatter.model = optionalCodexSelection(value.model, 'model', isCodexModelSlug, 128)
+    frontMatter.model = modelSelection(value.model, frontMatter.agent)
   }
   if (value.reasoning_effort !== undefined && value.reasoning_effort !== null) {
-    frontMatter.reasoning = optionalCodexSelection(value.reasoning_effort, 'reasoning', isCodexReasoningLevel, 16)
+    frontMatter.reasoning = reasoningSelection(value.reasoning_effort, frontMatter.agent)
   }
   if (value.network_access != null) {
     if (typeof value.network_access !== 'boolean' || frontMatter.agent !== 'codex') {
@@ -263,7 +266,30 @@ export function serializeScheduleDefinition(job, { clock = () => new Date() } = 
     }
     frontMatter.fast_mode = value.fast_mode
   }
+  validateOpenCodeSettings(frontMatter.agent, frontMatter.sandbox, frontMatter.capabilities)
   frontMatter.timeout = duration(timeoutSeconds(value.timeout_seconds))
   const prompt = string(value.prompt, 'prompt', 20000)
   return `---\n${stringify(frontMatter, { lineWidth: 0 }).trimEnd()}\n---\n\n${prompt}\n`
+}
+
+function modelSelection(value, agent) {
+  return agent === 'opencode'
+    ? optionalSelection(value, 'model', (text) => OPENCODE_MODEL.test(text), 256)
+    : optionalSelection(value, 'model', isCodexModelSlug, 128)
+}
+
+function reasoningSelection(value, agent) {
+  return agent === 'opencode'
+    ? optionalSelection(value, 'reasoning', (text) => OPENCODE_VARIANT.test(text), 64)
+    : optionalSelection(value, 'reasoning', isCodexReasoningLevel, 16)
+}
+
+function validateOpenCodeSettings(agent, sandbox, policy) {
+  if (agent !== 'opencode') return
+  if (sandbox !== 'danger-full-access') {
+    fail('SCHEDULE_DEFINITION_INVALID', 'OpenCode requires danger-full-access; it does not provide an OS sandbox', { field: 'sandbox' })
+  }
+  if (policy.skills !== 'inherit' || policy.integrations !== 'inherit') {
+    fail('SCHEDULE_DEFINITION_INVALID', 'OpenCode currently requires inherited skills and integrations', { field: 'capabilities' })
+  }
 }

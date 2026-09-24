@@ -25,6 +25,7 @@ import type {
 } from './types'
 
 const DEFAULT_TIMEOUT_MS = 5_000
+const RUNTIME_TIMEOUT_MS = 65_000
 
 export class DashboardApiError extends Error {
   readonly status: number
@@ -133,12 +134,13 @@ export function createDashboardApi({
 } = {}): DashboardApi {
   if (typeof fetchImpl !== 'function') throw new TypeError('fetchImpl is required')
 
-  async function request<T>(path: string, { method = 'GET', body }: {
+  async function request<T>(path: string, { method = 'GET', body, requestTimeoutMs = timeoutMs }: {
     method?: string
     body?: unknown
+    requestTimeoutMs?: number
   } = {}): Promise<T> {
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), timeoutMs)
+    const timeout = setTimeout(() => controller.abort(), requestTimeoutMs)
     let response: Response
     try {
       response = await fetchImpl(`${baseUrl}${path}`, {
@@ -226,8 +228,8 @@ export function createDashboardApi({
         body: { project_id: projectId, expected_project_id: expectedProjectId },
       },
     ),
-    runtimes: () => request('/api/v1/runtimes'),
-    runtimeModels: (id) => request(`/api/v1/runtimes/${encodeURIComponent(id)}/models`),
+    runtimes: () => request('/api/v1/runtimes', { requestTimeoutMs: RUNTIME_TIMEOUT_MS }),
+    runtimeModels: (id) => request(`/api/v1/runtimes/${encodeURIComponent(id)}/models`, { requestTimeoutMs: RUNTIME_TIMEOUT_MS }),
     schedules: () => request('/api/v1/schedules'),
     schedule: (id) => request(`/api/v1/schedules/${encodeURIComponent(id)}`),
     createSchedule: (input) => request('/api/v1/schedules', { method: 'POST', body: input }),
@@ -258,6 +260,7 @@ export function createDashboardApi({
     ),
     scheduledRunConversation: (id) => request(
       `/api/v1/runs/${encodeURIComponent(id)}/conversation`,
+      { requestTimeoutMs: RUNTIME_TIMEOUT_MS },
     ),
     markScheduledRunReviewed: (id) => request(
       `/api/v1/scheduled-runs/${encodeURIComponent(id)}/review`,

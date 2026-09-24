@@ -9,6 +9,8 @@ const CADENCE_KINDS = new Set(['once', 'hourly', 'daily', 'weekly', 'monthly'])
 const SANDBOX_MODES = new Set(['read-only', 'workspace-write', 'danger-full-access'])
 const MODEL_SLUG = /^[a-z0-9][a-z0-9._-]{0,127}$/
 const REASONING_LEVEL = /^[a-z][a-z0-9_-]{0,15}$/
+const OPENCODE_MODEL = /^(?=.{1,256}$)[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9~][A-Za-z0-9._:/~-]*$/
+const OPENCODE_VARIANT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 const AGENT_ID = /^[a-z][a-z0-9-]{0,63}$/
 
 export type CadenceKind = ScheduleCadence['kind']
@@ -54,14 +56,14 @@ function boundedText(value: unknown, name: string, limit: number) {
   return normalized
 }
 
-function safeModelSlug(value: unknown) {
+function safeModelSlug(value: unknown, agent = 'codex') {
   const normalized = text(value)
-  return MODEL_SLUG.test(normalized) ? normalized : ''
+  return (agent === 'opencode' ? OPENCODE_MODEL : MODEL_SLUG).test(normalized) ? normalized : ''
 }
 
-function safeReasoningLevel(value: unknown) {
+function safeReasoningLevel(value: unknown, agent = 'codex') {
   const normalized = text(value)
-  return REASONING_LEVEL.test(normalized) ? normalized : ''
+  return (agent === 'opencode' ? OPENCODE_VARIANT : REASONING_LEVEL).test(normalized) ? normalized : ''
 }
 
 function integer(value: unknown, name: string, minimum: number, maximum: number) {
@@ -104,6 +106,16 @@ export function defaultScheduleDraft(): ScheduleDraft {
   }
 }
 
+export function changeDraftAgent(draft: ScheduleDraft, agent: string): ScheduleDraft {
+  return {
+    ...draft, agent, model: '', reasoning_effort: '', fast_mode: '', network_access: '',
+    sandbox_mode: agent === 'opencode' ? 'danger-full-access' : 'read-only',
+    dangerConfirmed: false,
+    loadSkills: agent === 'opencode',
+    loadIntegrations: agent === 'opencode',
+  }
+}
+
 export function scheduleToDraft(source: Partial<ScheduleRecord> = {}): ScheduleDraft {
   const cadence = source.cadence ?? { kind: 'daily', hour: 9, minute: 0 }
   const cadenceKind = CADENCE_KINDS.has(cadence.kind) ? cadence.kind : 'daily'
@@ -126,8 +138,8 @@ export function scheduleToDraft(source: Partial<ScheduleRecord> = {}): ScheduleD
     sandbox_mode: SANDBOX_MODES.has(source.sandbox_mode ?? '')
       ? source.sandbox_mode as ScheduleRecord['sandbox_mode']
       : 'read-only',
-    model: safeModelSlug(source.model),
-    reasoning_effort: safeReasoningLevel(source.reasoning_effort),
+    model: safeModelSlug(source.model, source.agent),
+    reasoning_effort: safeReasoningLevel(source.reasoning_effort, source.agent),
     network_access: source.network_access == null ? '' : source.network_access ? 'on' : 'off',
     fast_mode: source.fast_mode == null ? '' : source.fast_mode ? 'on' : 'off',
     timeout_seconds: String(Number.isSafeInteger(source.timeout_seconds)
@@ -138,11 +150,11 @@ export function scheduleToDraft(source: Partial<ScheduleRecord> = {}): ScheduleD
   }
 }
 
-export function normalizeModelCatalog(value: RuntimeModel[]): ModelOption[] {
-  if (!Array.isArray(value) || value.length > 100) throw new TypeError('Runtime model catalog 响应无效')
+export function normalizeModelCatalog(value: RuntimeModel[], agent = 'codex'): ModelOption[] {
+  if (!Array.isArray(value) || value.length > (agent === 'opencode' ? 2000 : 100)) throw new TypeError('Runtime model catalog 响应无效')
   const seen = new Set<string>()
   return value.map((item) => {
-    const slug = safeModelSlug(item.id ?? item.slug)
+    const slug = safeModelSlug(item.id ?? item.slug, agent)
     const displayName = text(item.displayName ?? item.display_name ?? slug)
     const description = text(item.description)
     const sourceLevels = item.reasoningLevels ?? item.supported_reasoning_levels ?? []
@@ -151,12 +163,12 @@ export function normalizeModelCatalog(value: RuntimeModel[]): ModelOption[] {
       throw new TypeError('Runtime model catalog 响应无效')
     }
     seen.add(slug)
-    const reasoningLevels = sourceLevels.map(safeReasoningLevel)
+    const reasoningLevels = sourceLevels.map((level) => safeReasoningLevel(level, agent))
     if (reasoningLevels.some((level) => !level) || new Set(reasoningLevels).size !== reasoningLevels.length) {
       throw new TypeError('Runtime model catalog 响应无效')
     }
     const defaultReasoning = safeReasoningLevel(
-      item.defaultReasoningLevel ?? item.default_reasoning_level,
+      item.defaultReasoningLevel ?? item.default_reasoning_level, agent,
     )
     if (defaultReasoning && !reasoningLevels.includes(defaultReasoning)) {
       throw new TypeError('Runtime model catalog 响应无效')
@@ -173,6 +185,13 @@ export function draftToScheduleInput(
   if (!SANDBOX_MODES.has(draft.sandbox_mode)) throw new TypeError('Sandbox mode 无效')
   if (draft.sandbox_mode === 'danger-full-access' && !draft.dangerConfirmed) {
     throw new TypeError('使用 danger-full-access 前需要明确确认风险')
+  }
+
+  if (draft.agent === 'opencode' && draft.sandbox_mode !== 'danger-full-access') {
+    throw new TypeError('OpenCode 不提供操作系统沙箱，只支持 danger-full-access')
+  }
+  if (draft.agent === 'opencode' && (!draft.loadSkills || !draft.loadIntegrations)) {
+    throw new TypeError('OpenCode 当前仅支持继承 Skills 和 integrations')
   }
 
   let cadence: ScheduleCadence
@@ -201,8 +220,8 @@ export function draftToScheduleInput(
 
   const model = text(draft.model)
   const reasoningEffort = text(draft.reasoning_effort)
-  if (model && !MODEL_SLUG.test(model)) throw new TypeError('Model 无效')
-  if (reasoningEffort && !REASONING_LEVEL.test(reasoningEffort)) throw new TypeError('Reasoning 无效')
+  if (model && !safeModelSlug(model, draft.agent)) throw new TypeError('Model 无效')
+  if (reasoningEffort && !safeReasoningLevel(reasoningEffort, draft.agent)) throw new TypeError('Reasoning 无效')
   if (modelCatalog.length) {
     const selected = model ? modelCatalog.find((item) => item.slug === model) : null
     if (model && !selected) throw new TypeError('所选 Model 当前不可用')

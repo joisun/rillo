@@ -21,6 +21,7 @@ import { createTerminalLauncher } from './terminal-launcher.mjs'
 import { createRunEventHub } from './runs/run-event-hub.mjs'
 import { createRunService } from './runs/run-service.mjs'
 import { createRunStore } from './runs/run-store.mjs'
+import { createOpenCodeRuntimeDefinition } from './runtime/adapters/opencode.mjs'
 import { createCodexRuntimeDefinition } from './runtime/adapters/codex.mjs'
 import { createExecutableResolver } from './runtime/executable-resolver.mjs'
 import { createProcessSupervisor } from './runtime/process-supervisor.mjs'
@@ -127,6 +128,7 @@ export async function startTaskd({
   createRuntimeResolver = createExecutableResolver,
   createRuntimeRegistry = createRuntimeAgentRegistry,
   createCodexRuntime = createCodexRuntimeDefinition,
+  createOpenCodeRuntime = createOpenCodeRuntimeDefinition,
   createSupervisor = createProcessSupervisor,
   createRunEvents = createRunEventHub,
   createRuns = createRunService,
@@ -345,7 +347,7 @@ export async function startTaskd({
         definitions: [createCodexRuntime({
           execFileImpl: runtimeExecFile,
           runtimeEnvironment,
-        })],
+        }), createOpenCodeRuntime({ runtimeEnvironment })],
         resolver: runtimeResolver,
       })
       runEventHub = createRunEvents({ maximumEventsPerRun: 256 })
@@ -445,6 +447,7 @@ export async function startTaskd({
       settings: dashboardSettings,
       terminalLauncher,
       sessionInventory,
+      runtimeRegistry,
       runService,
     })
     api = createApi({
