@@ -177,3 +177,16 @@ test('terminal launcher rejects missing workspaces and unsafe session identities
     (error) => error.code === 'SESSION_ID_INVALID',
   )
 })
+
+test('terminal launcher safely quotes native OpenCode session IDs with underscores', async () => {
+  const writes = []
+  const launcher = createTerminalLauncher({
+    platform: 'darwin', env: { PATH: '/usr/local/bin' }, homeDirectory: '/Users/me',
+    runtimeDirectory: '/Users/me/.config/tasks-recorder/runtime',
+    accessImpl: async () => {}, statImpl: async () => ({ isDirectory: () => true }),
+    mkdirImpl: async () => {}, writeFileImpl: async (...args) => writes.push(args),
+    execFileImpl: async () => {}, randomId: () => 'opencode-id',
+  })
+  await launcher.launch({ terminal: 'terminal', runtimeId: 'opencode', sessionId: 'ses_abcdef_123456', workspace: '/workspace' })
+  assert.match(writes[0][1], /exec '.*opencode' --session 'ses_abcdef_123456'/)
+})

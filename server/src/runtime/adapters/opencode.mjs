@@ -89,7 +89,7 @@ function textParts(parts) {
   return (parts ?? []).filter(part => part.type === 'text' && typeof part.text === 'string').map(part => part.text).join('\n\n')
 }
 
-function createSession({ launch, run, signal, emit, onSpawn, open, pollMs }) {
+function createSession({ launch, run, signal, emit, onSpawn, open, pollMs, logs }) {
   let client, sessionId, promptId, finalMessage = ''
   let finished = false, finishing = false, revision = 0, polling = false, sending = false
   let timer, pollTimer, reconnectTimer
@@ -97,9 +97,19 @@ function createSession({ launch, run, signal, emit, onSpawn, open, pollMs }) {
   const parts = new Map()
   const textPartIds = new Set()
   const userMessageIds = new Set()
+  let logQueue = Promise.resolve()
   let resolveCompletion
   const completion = new Promise(resolve => { resolveCompletion = resolve })
   const send = (type, payload) => { if (!finished) emit({ type, payload }) }
+  const log = (stream, value) => {
+    const writer = logs?.[stream === 'stderr' ? 'writeStderr' : 'writeStdout']
+    if (typeof writer === 'function') {
+      logQueue = logQueue.then(() => writer(Buffer.from(`${typeof value === 'string' ? value : JSON.stringify(value)}\n`))).catch(() => {})
+    }
+  }
+  const serverOutput = (stream, chunk) => {
+    if (chunk?.length) log(stream, chunk.toString('utf8').slice(-8_000).trimEnd())
+  }
   const fail = error => finish(error?.code === 'RUN_CANCELED' ? 'canceled' : 'failed', error?.code ?? 'RUNTIME_PROTOCOL_ERROR')
   const abort = () => { void finish('canceled', 'RUN_CANCELED') }
 
@@ -117,6 +127,7 @@ function createSession({ launch, run, signal, emit, onSpawn, open, pollMs }) {
     }
     startup.abort()
     client?.close()
+    await logQueue
     finished = true
     resolveCompletion({ status, exit_code: status === 'succeeded' ? 0 : null, error_code: errorCode,
       session_id: sessionId ?? null, final_message: finalMessage || null, usage: null, file_changes: [] })
@@ -128,7 +139,13 @@ function createSession({ launch, run, signal, emit, onSpawn, open, pollMs }) {
     if ((p.sessionID ?? p.part?.sessionID ?? p.info?.sessionID) !== sessionId) return
     if (event.type === 'permission.asked') { void finish('failed', 'RUNTIME_PERMISSION_REQUIRED'); return }
     if (event.type === 'question.asked') { void finish('failed', 'RUNTIME_INPUT_REQUIRED'); return }
-    if (event.type === 'session.error') { void finish('failed', 'RUNTIME_PROCESS_FAILED'); return }
+    if (event.type === 'session.error') {
+      const detail = errorDetail(p.error)
+      finalMessage = detail.message
+      log('stderr', { event: 'session.error', name: detail.name, message: detail.message })
+      void finish('failed', detail.code)
+      return
+    }
     if (event.type === 'message.part.updated') {
       const part = p.part
       if (userMessageIds.has(part.messageID)) return
@@ -142,10 +159,14 @@ function createSession({ launch, run, signal, emit, onSpawn, open, pollMs }) {
       }
       if (part.type === 'tool') {
         const state = part.state?.status
-        if (['running','completed','error'].includes(state)) send(state === 'running' ? 'activity_started' : 'activity_completed', {
-          item_id: part.id, turn_revision: revision, label: String(part.tool ?? 'Tool').slice(0,180),
-          ...(state === 'running' ? {} : { state: state === 'error' ? 'failed' : 'completed' }),
-        })
+        if (['running','completed','error'].includes(state)) {
+          const label = toolLabel(part).slice(0, 500)
+          send(state === 'running' ? 'activity_started' : 'activity_completed', {
+            item_id: part.id, turn_revision: revision, label,
+            ...(state === 'running' ? {} : { state: state === 'error' ? 'failed' : 'completed' }),
+          })
+          log('stdout', { event: 'tool', state, label })
+        }
       }
     }
     if (event.type === 'message.part.delta' && !userMessageIds.has(p.messageID) && textPartIds.has(p.partID) && p.field === 'text' && typeof p.delta === 'string') {
@@ -187,7 +208,12 @@ function createSession({ launch, run, signal, emit, onSpawn, open, pollMs }) {
       if (expectedPrompt !== promptId || sending || finishing) return
       const replies = rows.filter(row => row.info?.role === 'assistant' && row.info.parentID === expectedPrompt)
       const last = replies.at(-1)
-      if (last?.info?.error) return await finish('failed', 'RUNTIME_PROCESS_FAILED')
+      if (last?.info?.error) {
+        const detail = errorDetail(last.info.error)
+        finalMessage = detail.message
+        log('stderr', { event: 'message.error', name: detail.name, message: detail.message })
+        return await finish('failed', detail.code)
+      }
       if (!last?.info?.time?.completed) return
       finalMessage = textParts(last.parts).slice(-8_000)
       // Tool-use steps can also have completed timestamps. Only the final reply ends a Run.
@@ -217,7 +243,8 @@ function createSession({ launch, run, signal, emit, onSpawn, open, pollMs }) {
     timer = setTimeout(() => { void finish('timed_out', 'RUNTIME_TIMEOUT') }, run.timeout_seconds * 1_000)
     try {
       assertSettings(run)
-      client = await open({ executable: launch.executable, cwd: run.workspace, signal: startup.signal, onSpawn })
+      client = await open({ executable: launch.executable, cwd: run.workspace, signal: startup.signal, onSpawn,
+        onStdout: chunk => serverOutput('stdout', chunk), onStderr: chunk => serverOutput('stderr', chunk) })
       if (finished || finishing) { client.close(); return completion }
       const created = await client.request('POST', '/session', { title: run.title })
       if (typeof created?.id !== 'string' || !/^ses[a-zA-Z0-9_-]+$/.test(created.id)) throw runtimeError('RUNTIME_PROTOCOL_INVALID', 'Invalid OpenCode session ID')
@@ -252,6 +279,34 @@ function createSession({ launch, run, signal, emit, onSpawn, open, pollMs }) {
     get turnRevision() { return revision },
     get steerable() { return !finished && !finishing && revision > 0 },
   }
+}
+
+function errorDetail(error) {
+  const source = error && typeof error === 'object' ? error : { message: error }
+  const name = typeof source.name === 'string' ? source.name.slice(0, 120) : ''
+  const message = [source.message, source.data?.message, source.response?.message]
+    .find(value => typeof value === 'string' && value.trim())?.trim().slice(0, 8_000)
+    ?? (name ? `OpenCode returned ${name}` : 'OpenCode could not complete the request')
+  const lower = `${name} ${message}`.toLowerCase()
+  const code = /not available in your country|not available in (your )?region|country.*not supported|region.*not supported|model.*not found|modelnotfound/.test(lower)
+    ? 'RUNTIME_MODEL_UNAVAILABLE'
+    : 'RUNTIME_PROVIDER_ERROR'
+  return { name, message, code }
+}
+
+function toolLabel(part) {
+  const tool = String(part.tool ?? 'Tool')
+  const state = part.state ?? {}
+  const description = state.metadata?.title ?? state.metadata?.description ?? state.title
+  const command = state.input?.command ?? state.input?.cmd
+  const summary = description ?? (tool === 'bash' && typeof command === 'string' ? redactCommand(command) : '')
+  return summary ? `${tool}: ${String(summary).replace(/\s+/g, ' ').trim()}` : tool
+}
+
+function redactCommand(command) {
+  return command
+    .replace(/\b(api[_-]?key|token|password|secret|authorization)\s*([=:])\s*([^\s,;]+)/gi, '$1$2[redacted]')
+    .replace(/\bBearer\s+[^\s'";,]+/gi, 'Bearer [redacted]')
 }
 
 function assertSettings(run) {

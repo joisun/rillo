@@ -84,6 +84,7 @@ export function createRunService({
           run: queued.snapshot,
           signal,
           onSpawn,
+          logs,
           emit(event) {
             sequence = Math.max(sequence, sequences.get(runId) ?? 0)
             const normalized = runtimeEvent({

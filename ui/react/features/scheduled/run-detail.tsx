@@ -171,7 +171,8 @@ export function RunDetail({ api, run }: { api: DashboardApi; run: RunRecord }) {
       {run.error_code ? (
         <section className="run-detail__section">
           <div className="run-detail__section-heading"><h3>错误</h3></div>
-          <code className="run-detail__error">{run.error_code === 'RUNTIME_PROTOCOL_CLOSED' ? `${run.runtime_id === 'opencode' ? 'OpenCode' : 'Codex'} 执行连接已关闭，本次任务已结束。可查看退出码后重新运行。` : run.error_code === 'RUNTIME_PROTOCOL_FRAME_TOO_LARGE' ? '执行器单条消息超过接收上限，本次运行已中断。Session 已保留时可在 Terminal 恢复。' : run.error_code === 'RUNTIME_TIMEOUT' ? '执行超过任务设置的时间上限。请检查超时配置，或从已保存的 Session 继续。' : run.error_code === 'RUNTIME_PERMISSION_REQUIRED' ? 'OpenCode 正在等待工具权限，本次任务已停止。请调整本机 OpenCode 权限后重新运行，或在 Terminal 恢复。' : run.error_code === 'RUNTIME_INPUT_REQUIRED' ? 'OpenCode 需要交互回答，本次任务已停止。可在 Terminal 恢复后继续。' : run.error_code}</code>
+          <code className="run-detail__error">{run.error_code === 'RUNTIME_PROTOCOL_CLOSED' ? `${run.runtime_id === 'opencode' ? 'OpenCode' : 'Codex'} 执行连接已关闭，本次任务已结束。可查看退出码后重新运行。` : run.error_code === 'RUNTIME_PROTOCOL_FRAME_TOO_LARGE' ? '执行器单条消息超过接收上限，本次运行已中断。Session 已保留时可在 Terminal 恢复。' : run.error_code === 'RUNTIME_TIMEOUT' ? '执行超过任务设置的时间上限。请检查超时配置，或从已保存的 Session 继续。' : run.error_code === 'RUNTIME_PERMISSION_REQUIRED' ? 'OpenCode 正在等待工具权限，本次任务已停止。请调整本机 OpenCode 权限后重新运行，或在 Terminal 恢复。' : run.error_code === 'RUNTIME_INPUT_REQUIRED' ? 'OpenCode 需要交互回答，本次任务已停止。可在 Terminal 恢复后继续。' : run.error_code === 'RUNTIME_MODEL_UNAVAILABLE' ? '所选模型在当前地区不可用，请换用可访问的模型。' : run.error_code}</code>
+          {run.runtime_id === 'opencode' && run.final_message ? <p className="run-detail__error-detail">{run.final_message}</p> : null}
         </section>
       ) : null}
 
@@ -212,13 +213,13 @@ export function RunDetail({ api, run }: { api: DashboardApi; run: RunRecord }) {
         <div className="run-detail__section-heading"><h3>Session</h3></div>
         {run.thread_id ? (
           <div className="run-detail__session">
-            <code>{shortSessionId(run.thread_id)}</code>
+            <Button className="run-detail__session-resume" aria-label="恢复此 Session" isPending={resume.isPending} isDisabled={active} size="xs" variant="quiet" onPress={() => resume.mutate()}>
+              <code>{shortSessionId(run.thread_id)}</code>
+            </Button>
             <Button aria-label="复制 Session ID" isIconOnly size="xs" variant="quiet" onPress={() => void copySession()}>
               {copied ? <Check aria-hidden="true" /> : <Clipboard aria-hidden="true" />}
             </Button>
-            <Button size="xs" variant="secondary" isPending={resume.isPending} isDisabled={active} onPress={() => resume.mutate()}>
-              <Terminal aria-hidden="true" />Terminal Resume
-            </Button>
+            <span className="run-detail__resume-hint"><Terminal aria-hidden="true" />点击 Session 继续对话</span>
           </div>
         ) : <p className="run-detail__empty">{active ? '等待 Codex 创建 Session…' : '任务在创建 Session 前结束，无法恢复；可重新运行。'}</p>}
         {active && run.thread_id ? <p className="run-detail__empty">Session 已保存，运行结束后可在 Terminal 恢复。</p> : null}

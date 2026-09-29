@@ -32,7 +32,7 @@ tasks-recorder status
 普通安装不需要 clone repository、`npm install` 或 `npm ci`。更谨慎的固定版本安装方式：
 
 ```bash
-version=v0.8.6
+version=v0.8.7
 curl -fsSLO "https://raw.githubusercontent.com/joisun/tasks-recorder/${version}/install.sh"
 less install.sh
 bash install.sh --version "$version"
@@ -130,9 +130,9 @@ macOS 上可以点击 Run「产出文件」中的文件名，用本机默认应�
 
 Live Session 断线后自动重连，也可点击“重新连接”；连接恢复会补读任务状态，避免错过结束事件。最近 500 条实时消息保留在窗口内，发送期间继续输入的文字不会被清空。Scheduled 列表、执行历史和详情会随服务端事件更新，连接恢复后会同步补读。
 
-Live Session 只干预当前 active Turn，不在 Dashboard 内创建第二轮对话。Run 结束后，页面会重新读取 authoritative terminal Run，并通过 Codex 原生分页接口从本机 Codex-owned session 临时取得 user/assistant messages（旧 CLI 回退为有容量上限的 `thread/read`）；Tasks Recorder 不复制或持久化这份 transcript。需要继续多轮对话时使用 Terminal Resume。Session ID 在创建时立即保存，超时、取消、连接异常或服务重启后仍可恢复已创建的会话；运行结束前不开放 Terminal Resume。历史对话读取失败时可点击“重新读取”。
+Live Session 只干预当前 active Turn，不在 Dashboard 内创建第二轮对话。Run 结束后，页面会重新读取 authoritative terminal Run，并通过 Codex 原生分页接口从本机 Codex-owned session 临时取得 user/assistant messages（旧 CLI 回退为有容量上限的 `thread/read`）；Tasks Recorder 不复制或持久化这份 transcript。已结束 Run 可点击 Session ID 在 Terminal 中恢复并继续对话；Session ID 在创建时立即保存，超时、取消、连接异常或服务重启后仍可恢复已创建的会话。历史对话读取失败时可点击“重新读取”。
 
-实时 message、guidance、reasoning 与 tool payload 不写入 SQLite 或普通日志。历史读取只向 loopback browser 返回可展示的 `userMessage` / `agentMessage`，不返回 reasoning、tool arguments/results 或 command output；本机 Codex session 被删除后，页面明确回退到 Run `final_message`。Run ledger 只保留既有 terminal facts；browser 不接触 runtime `turnId`、executable、argv 或 shell command。Run SSE 是 bounded memory replay，缓冲过期时页面明确 reset，并仍可读取 terminal facts。
+实时 message、guidance、reasoning 与 tool payload 不写入 SQLite 或普通日志。OpenCode Run 的受限 stdout/stderr 会记录服务诊断、工具标题或脱敏命令摘要，不记录工具参数和输出正文。历史读取只向 loopback browser 返回可展示的 `userMessage` / `agentMessage`，不返回 reasoning、tool arguments/results 或 command output；本机 Codex session 被删除后，页面明确回退到 Run `final_message`。Run ledger 只保留既有 terminal facts；browser 不接触 runtime `turnId`、executable、argv 或 shell command。Run SSE 是 bounded memory replay，缓冲过期时页面明确 reset，并仍可读取 terminal facts。
 
 ## Scheduled Tasks
 
@@ -181,7 +181,7 @@ Codex 的 `workspace-write` 只表示文件写入权限，不等于允许联网�
 
 安装并配置本机 OpenCode 后，Editor 可选择 `OpenCode`。可通过 `OPENCODE_BIN` 指定可执行文件；模型使用 `provider/model`（例如 `openai/gpt-5.4`），Variant 对应 OpenCode 模型变体，留空继承本机默认设置。模型目录仅显示已连接 provider 的模型。
 
-OpenCode Run 使用独立、带随机认证密码的 loopback `opencode serve`，通过 HTTP 与 SSE 执行任务和推送文本、工具状态。支持到期执行、Run now、追加指令、停止、超时、历史对话，以及 `opencode --session` 终端恢复。取消时调用原生 session abort，再结束本次 Run 自己启动的服务，不影响已有 OpenCode 服务。
+OpenCode Run 使用独立、带随机认证密码的 loopback `opencode serve`，通过 HTTP 与 SSE 执行任务和推送文本、工具状态。支持到期执行、Run now、追加指令、停止、超时、历史对话，以及 `opencode --session` 终端恢复。OpenCode 服务诊断写入 stderr；工具标题或脱敏命令摘要写入 stdout；模型错误会保留 provider 返回的可读详情。取消时调用原生 session abort，再结束本次 Run 自己启动的服务，不影响已有 OpenCode 服务。
 
 OpenCode 不提供 Codex 的操作系统沙箱，首版必须使用 `sandbox: danger-full-access`，并显式继承 `capabilities: { skills: inherit, integrations: inherit }`。Editor 会展示并要求确认这一权限范围。`fast_mode` 与 `network_access` 不适用于 OpenCode；工具权限仍由本机 OpenCode 配置控制。收到权限询问或交互问题时，任务分别以 `RUNTIME_PERMISSION_REQUIRED` / `RUNTIME_INPUT_REQUIRED` 结束，保留 Session 以便人工继续，不会在后台无限等待。
 
@@ -324,7 +324,7 @@ tail -n 100 ~/.config/tasks-recorder/logs/tasks-recorder.ndjson
 - Dashboard 打不开：检查 `server_port` 是否被占用以及 `taskd.stderr.log`。
 - Runtime 为 `unavailable`：运行对应 CLI 的 `--version` 后重新打开 editor 或调用 `POST /api/v1/runtimes/refresh`；失败结果不会被长期缓存。registry 会自动补充 Homebrew、fnm/nvm/mise 等 GUI-missing toolchain directories，也可显式配置 `CODEX_BIN` / `codex_path`。
 - Model 使用 fallback：手动运行解析到的 `codex debug models`；fallback 不会阻止保存或 Run。
-- Run 失败：在 Run Review 查看 stable error code、退出码与 final result。`RUNTIME_PROTOCOL_CLOSED` 表示 Codex 执行连接已关闭；任务会结束并停止接受消息，已有 session ID 会保留以便读取历史。退出码可辅助诊断，但不能单独证明退出原因；interactive app-server 的原始 stderr 不保存。
+- Run 失败：在 Run Review 查看 stable error code、退出码、provider 错误详情与 stdout/stderr。模型在地区不可用时显示 `RUNTIME_MODEL_UNAVAILABLE` 和 provider 返回的原文；已有 Session ID 可点击后在 Terminal 继续对话。
 - 历史对话不可用：确认对应 `thread_id` 仍存在于本机 Codex session inventory；Tasks Recorder 不保存第二份 transcript，因此 session 被 Codex 清理后只显示 Run `final_message`。
 - Schedule definition 不可用：按页面给出的 source path 修复 YAML、duplicate UUID、unknown field、cadence 或 symlink 问题；watcher 会自动重试。
 - Dashboard 正常但没有自动记录：确认 adapter 已启用，重新打开 agent conversation，并完成 hooks trust / MCP approval。

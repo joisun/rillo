@@ -2415,6 +2415,7 @@
 .run-detail__action-status { color: var(--text-muted); }
 .run-detail__action-error,
 .run-detail__error { color: var(--danger); }
+.run-detail__error-detail { margin: 5px 0 0; color: var(--text-primary); font-size: 10px; white-space: pre-wrap; }
 
 .run-detail__files {
   display: grid;
@@ -2473,14 +2474,25 @@
   gap: 6px;
 }
 
-.run-detail__session > code {
+.run-detail__session-resume {
   min-width: 0;
   flex: 1;
+  overflow: hidden;
+  justify-content: flex-start;
+}
+.run-detail__session-resume code {
   overflow: hidden;
   color: var(--text-muted);
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.run-detail__resume-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 9px;
 }
 
 .run-detail__log-actions {

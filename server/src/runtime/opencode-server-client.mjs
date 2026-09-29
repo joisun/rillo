@@ -67,7 +67,7 @@ export function connectOpenCodeServer({ url, password, cwd, maximumBytes = MAXIM
   return { request, events, close: () => lifetime.abort() }
 }
 
-export async function startOpenCodeServer({ executable, cwd, runtimeEnvironment, signal, onSpawn = () => {} }) {
+export async function startOpenCodeServer({ executable, cwd, runtimeEnvironment, signal, onSpawn = () => {}, onStdout = () => {}, onStderr = () => {} }) {
   signal?.throwIfAborted()
   const port = await availablePort()
   signal?.throwIfAborted()
@@ -77,6 +77,8 @@ export async function startOpenCodeServer({ executable, cwd, runtimeEnvironment,
     cwd, env: runtimeEnvironment?.childEnvironment(overrides) ?? { ...process.env, ...overrides },
     stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32',
   })
+  child.stdout.on('data', onStdout)
+  child.stderr.on('data', onStderr)
   let closed = false
   const client = connectOpenCodeServer({ url: `http://127.0.0.1:${port}`, password, cwd })
   const close = () => {

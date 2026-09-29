@@ -211,4 +211,4 @@ Run SSE 每 15 秒发送 comment 保活，关闭 response 时同时清理 timer 
 
 OpenCode 不支持 OS sandbox 或独立禁用 Skills/MCP。定义与执行边界都拒绝非 `danger-full-access`、禁用扩展能力以及显式 Fast mode/network policy；模型为 provider/model，reasoning 字段保存原生 variant。权限询问和交互问题结束 Run 并保留 Session；不自动扩大工具权限。取消和超时先调用原生 abort，再结束自己创建的进程组。
 
-历史读取使用原生消息接口，最多 100 条、1 MiB 文本；终端恢复先验证 Session，再用已解析的 executable 与 `--session` 参数启动。Session ID、workspace 与 runtime ID 均取自可信 Run，不接受浏览器构造命令。
+历史读取使用原生消息接口，最多 100 条、1 MiB 文本；已结束 Run 的 Session ID 是 Terminal Resume 入口，恢复前验证 Session，再用已解析的 executable 与 `--session` 参数启动。Session ID、workspace 与 runtime ID 均取自可信 Run，不接受浏览器构造命令。服务 stdout/stderr 写入有大小上限的私有 Run 日志；stdout 只追加工具名、OpenCode 给出的标题或脱敏命令摘要，不记录工具参数或结果正文。provider 错误在 Run final message 中保留有上限的可读原因，并使用稳定错误码区分类别。

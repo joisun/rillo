@@ -184,6 +184,47 @@ test('scheduled Run resume rejects a missing or invalid thread before lookup or 
   }
 })
 
+test('scheduled OpenCode Run resume accepts native underscore session IDs', async () => {
+  const sessionId = 'ses_f2e6a1c3_abc123'
+  const launches = []
+  const service = createSessionResumeService({
+    store: { snapshot: () => snapshot },
+    settings: { get: async () => ({ settings: { resume_terminal: 'terminal' } }) },
+    schedulerService: { getRun: async () => ({ run: scheduledRun({ thread_id: sessionId, runtime_id: 'opencode' }) }) },
+    sessionInventory: { has: async (id, runtimeId) => id === sessionId && runtimeId === 'opencode' },
+    runtimeRegistry: {
+      get: () => ({ sessionExists: async ({ sessionId: id }) => id === sessionId }),
+      resolve: async () => ({ executable: '/usr/local/bin/opencode' }),
+    },
+    terminalLauncher: { launch: async (input) => { launches.push(input); return { terminal: 'terminal' } } },
+  })
+
+  await service.resumeScheduledRun(SCHEDULED_RUN_ID)
+  assert.equal(launches[0].sessionId, sessionId)
+})
+
+test('scheduled RunService resume accepts its canonical run_id-shaped resume target', async () => {
+  const launches = []
+  const service = createSessionResumeService({
+    store: { snapshot: () => snapshot },
+    settings: { get: async () => ({ settings: { resume_terminal: 'terminal' } }) },
+    runService: { resumeTarget: () => ({
+      run_id: SCHEDULED_RUN_ID, schedule_id: SCHEDULED_JOB_ID, runtime_id: 'opencode',
+      session_id: 'ses_f1525bbabffeWegAS6bSi3rcC9', workspace: '/workspace', title: 'Scheduled task',
+    }) },
+    runtimeRegistry: {
+      get: () => ({ sessionExists: async () => true }),
+      resolve: async () => ({ executable: '/usr/local/bin/opencode' }),
+    },
+    sessionInventory: { has: async () => false },
+    terminalLauncher: { launch: async input => { launches.push(input); return { terminal: 'terminal' } } },
+  })
+
+  const result = await service.resumeScheduledRun(SCHEDULED_RUN_ID)
+  assert.equal(result.ok, true)
+  assert.equal(launches[0].sessionId, 'ses_f1525bbabffeWegAS6bSi3rcC9')
+})
+
 test('scheduled Run resume rejects a missing local transcript before launch', async () => {
   const service = createSessionResumeService({
     store: { snapshot: () => snapshot },

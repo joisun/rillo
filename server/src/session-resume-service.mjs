@@ -18,15 +18,15 @@ function scheduledRunTarget(run) {
     throw resumeError('SCHEDULE_RUN_NOT_RESUMABLE', 'The Scheduled Run does not have resumable facts.')
   }
   if (
-    typeof run.id !== 'string'
-    || run.id.trim() === ''
+    typeof (run.id ?? run.run_id) !== 'string'
+    || (run.id ?? run.run_id).trim() === ''
     || typeof (run.schedule_id ?? run.job_id) !== 'string'
     || (run.schedule_id ?? run.job_id).trim() === ''
     || typeof (run.session_id ?? run.thread_id) !== 'string'
     || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(run.session_id ?? run.thread_id)
   ) {
     throw resumeError('SCHEDULE_RUN_NOT_RESUMABLE', 'The Scheduled Run does not have a valid runtime session.', {
-      run_id: run.id,
+      run_id: run.id ?? run.run_id,
     })
   }
 
@@ -36,7 +36,7 @@ function scheduledRunTarget(run) {
       spec = JSON.parse(run.spec_json)
     } catch {
       throw resumeError('SCHEDULE_RUN_NOT_RESUMABLE', 'The Scheduled Run does not have a valid immutable spec.', {
-        run_id: run.id,
+        run_id: run.id ?? run.run_id,
       })
     }
   } else {
@@ -44,7 +44,7 @@ function scheduledRunTarget(run) {
   }
   if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
     throw resumeError('SCHEDULE_RUN_NOT_RESUMABLE', 'The Scheduled Run does not have a valid immutable spec.', {
-      run_id: run.id,
+      run_id: run.id ?? run.run_id,
     })
   }
   if (
@@ -57,11 +57,11 @@ function scheduledRunTarget(run) {
     || spec.title.length > 200
   ) {
     throw resumeError('SCHEDULE_RUN_NOT_RESUMABLE', 'The Scheduled Run does not have a valid canonical Workspace and title.', {
-      run_id: run.id,
+      run_id: run.id ?? run.run_id,
     })
   }
   return {
-    run_id: run.id,
+    run_id: run.id ?? run.run_id,
     job_id: run.schedule_id ?? run.job_id,
     runtime_id: run.runtime_id ?? 'codex',
     session_id: run.session_id ?? run.thread_id,

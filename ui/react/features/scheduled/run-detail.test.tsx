@@ -58,3 +58,21 @@ test('closed protocol displays an actionable terminal error and its exit code', 
   expect(screen.getByText('17')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: '停止' })).not.toBeInTheDocument()
 })
+
+test('clicking a completed Session resumes it in the configured terminal', async () => {
+  const api = { ...createDashboardApi(), resumeScheduledRun: vi.fn(async () => ({ ok: true })) }
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  render(<QueryClientProvider client={client}><RunDetail api={api} run={{ ...run, runtime_id: 'opencode', thread_id: 'ses_finished_session' }} /></QueryClientProvider>)
+  await userEvent.click(screen.getByRole('button', { name: '恢复此 Session' }))
+  await waitFor(() => expect(api.resumeScheduledRun).toHaveBeenCalledWith('run-a'))
+})
+
+test('model availability failures show both a specific explanation and provider detail', () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(<QueryClientProvider client={client}><RunDetail api={createDashboardApi()} run={{
+    ...run, runtime_id: 'opencode', status: 'failed', error_code: 'RUNTIME_MODEL_UNAVAILABLE',
+    final_message: 'This model is not available in your country.',
+  }} /></QueryClientProvider>)
+  expect(screen.getByText('所选模型在当前地区不可用，请换用可访问的模型。')).toBeInTheDocument()
+  expect(screen.getByText('This model is not available in your country.')).toBeInTheDocument()
+})
