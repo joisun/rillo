@@ -1,11 +1,16 @@
 import type {
   DashboardMeta,
-  DashboardSnapshot,
-  ExecutionAssignmentPatch,
-  ExecutionAssignmentResponse,
-  ExecutionFilters,
-  ExecutionRecord,
-  ProjectAssignmentResponse,
+  DashboardSettingsResponse,
+  SessionFilters,
+  SessionActivityPage,
+  SessionMessagesPage,
+  SessionPage,
+  SessionProvider,
+  SessionRef,
+  BrowserSession,
+  SessionRelation,
+  SessionTimeline,
+  SessionWorkspacePage,
   RunControlResponse,
   RunConversationResponse,
   RunLogResponse,
@@ -17,11 +22,6 @@ import type {
   ScheduleMutationInput,
   ScheduleResponse,
   ScheduleRunsResponse,
-  TaskDetailResponse,
-  TaskEventRecord,
-  TaskMutationResponse,
-  TaskPatch,
-  TaskResumeResponse,
 } from './types'
 
 const DEFAULT_TIMEOUT_MS = 5_000
@@ -58,21 +58,21 @@ interface ServerErrorPayload {
 }
 
 export interface DashboardApi {
+  sessionActivity(provider: string): Promise<SessionActivityPage>
+  sessionProviders(): Promise<{ providers: SessionProvider[] }>
+  sessionWorkspaces(provider: string, filters: SessionFilters): Promise<SessionWorkspacePage>
+  sessions(provider: string, filters: SessionFilters): Promise<SessionPage>
+  readSession(session: SessionRef, signal?: AbortSignal): Promise<{ session: BrowserSession }>
+  sessionChildren(session: SessionRef, filters: SessionFilters, signal?: AbortSignal): Promise<SessionPage>
+  sessionTimeline(session: SessionRef, filters: SessionFilters, signal?: AbortSignal): Promise<SessionTimeline>
+  sessionRelations(session: SessionRef): Promise<{ relations: SessionRelation[] }>
+  linkSessions(input: { parent: SessionRef; child: SessionRef; source?: string }): Promise<{ relation: SessionRelation; created: boolean }>
+  unlinkSessions(input: { parent: SessionRef; child: SessionRef }): Promise<{ removed: boolean }>
+  sessionMessages(session: SessionRef, filters: SessionFilters, signal?: AbortSignal): Promise<SessionMessagesPage>
+  resumeSession(session: SessionRef): Promise<{ ok: boolean; terminal_label: string }>
   meta(): Promise<DashboardMeta>
-  snapshot(): Promise<DashboardSnapshot>
-  task(id: string): Promise<TaskDetailResponse>
-  events(id: string): Promise<TaskEventRecord[]>
-  executions(filters?: ExecutionFilters): Promise<ExecutionRecord[]>
-  updateTask(id: string, expectedRevision: number, patch: TaskPatch): Promise<TaskMutationResponse>
-  resumeTask(id: string): Promise<TaskResumeResponse>
-  archiveTask(id: string, expectedRevision: number): Promise<TaskMutationResponse>
-  restoreTask(id: string, expectedRevision: number): Promise<TaskMutationResponse>
-  updateExecutionAssignments(input: ExecutionAssignmentPatch): Promise<ExecutionAssignmentResponse>
-  assignSourceSessionProject(
-    sourceSessionId: string,
-    projectId: string,
-    expectedProjectId?: string | null,
-  ): Promise<ProjectAssignmentResponse>
+  settings(): Promise<DashboardSettingsResponse>
+  updateSettings(input: { resume_terminal: string }): Promise<DashboardSettingsResponse>
   runtimes(): Promise<RuntimeListResponse>
   runtimeModels(id: string): Promise<RuntimeModelCatalogResponse>
   schedules(): Promise<ScheduleListResponse>
@@ -134,10 +134,11 @@ export function createDashboardApi({
 } = {}): DashboardApi {
   if (typeof fetchImpl !== 'function') throw new TypeError('fetchImpl is required')
 
-  async function request<T>(path: string, { method = 'GET', body, requestTimeoutMs = timeoutMs }: {
+  async function request<T>(path: string, { method = 'GET', body, requestTimeoutMs = timeoutMs, signal }: {
     method?: string
     body?: unknown
     requestTimeoutMs?: number
+    signal?: AbortSignal
   } = {}): Promise<T> {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), requestTimeoutMs)
@@ -150,10 +151,11 @@ export function createDashboardApi({
           ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        signal: controller.signal,
+        signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
         ...(method === 'GET' ? { cache: 'no-store' } : {}),
       })
     } catch (error) {
+      if (signal?.aborted) throw error
       const timedOut = error instanceof DOMException
         ? error.name === 'AbortError'
         : (error as { name?: string } | null)?.name === 'AbortError'
@@ -189,45 +191,43 @@ export function createDashboardApi({
     return payload as T
   }
 
-  const revisionAction = (id: string, action: 'archive' | 'restore', expectedRevision: number) => (
-    request<TaskMutationResponse>(`/api/v1/tasks/${encodeURIComponent(id)}/${action}`, {
-      method: 'POST',
-      body: { expected_revision: expectedRevision, actor: 'user' },
-    })
-  )
-
   return {
+    sessionActivity: (provider) => request(`/api/v1/session-browser/${encodeURIComponent(provider)}/activity`),
+    sessionProviders: () => request('/api/v1/session-browser/providers'),
+    sessionWorkspaces: (provider, filters) => request(
+      `/api/v1/session-browser/${encodeURIComponent(provider)}/workspaces${queryString(filters)}`,
+      { requestTimeoutMs: RUNTIME_TIMEOUT_MS },
+    ),
+    sessions: (provider, filters) => request(
+      `/api/v1/session-browser/${encodeURIComponent(provider)}/sessions${queryString(filters)}`,
+      { requestTimeoutMs: RUNTIME_TIMEOUT_MS },
+    ),
+    readSession: (session, signal) => request(
+      `/api/v1/session-browser/${encodeURIComponent(session.provider)}/sessions/${encodeURIComponent(session.session_id)}/read${queryString({ store_id: session.store_id })}`,
+      { requestTimeoutMs: RUNTIME_TIMEOUT_MS, signal },
+    ),
+    sessionChildren: (session, filters, signal) => request(
+      `/api/v1/session-browser/${encodeURIComponent(session.provider)}/sessions/${encodeURIComponent(session.session_id)}/children${queryString({ ...filters, store_id: session.store_id })}`,
+      { requestTimeoutMs: RUNTIME_TIMEOUT_MS, signal },
+    ),
+    sessionTimeline: (session, filters, signal) => request(
+      `/api/v1/session-browser/${encodeURIComponent(session.provider)}/sessions/${encodeURIComponent(session.session_id)}/timeline${queryString({ ...filters, store_id: session.store_id })}`,
+      { requestTimeoutMs: RUNTIME_TIMEOUT_MS, signal },
+    ),
+    sessionRelations: (session) => request(`/api/v1/session-browser/relations${queryString({ provider: session.provider, store_id: session.store_id, session_id: session.session_id })}`, { requestTimeoutMs: RUNTIME_TIMEOUT_MS }),
+    linkSessions: (input) => request('/api/v1/session-browser/links', { method: 'POST', body: input, requestTimeoutMs: RUNTIME_TIMEOUT_MS }),
+    unlinkSessions: (input) => request('/api/v1/session-browser/links', { method: 'DELETE', body: input }),
+    sessionMessages: (session, filters, signal) => request(
+      `/api/v1/session-browser/${encodeURIComponent(session.provider)}/sessions/${encodeURIComponent(session.session_id)}/messages${queryString({ ...filters, store_id: session.store_id })}`,
+      { requestTimeoutMs: RUNTIME_TIMEOUT_MS, signal },
+    ),
+    resumeSession: (session) => request(
+      `/api/v1/session-browser/${encodeURIComponent(session.provider)}/sessions/${encodeURIComponent(session.session_id)}/resume`,
+      { method: 'POST', body: { store_id: session.store_id }, requestTimeoutMs: RUNTIME_TIMEOUT_MS },
+    ),
     meta: () => request('/api/v1/meta'),
-    snapshot: () => request('/api/v1/snapshot'),
-    task: (id) => request(`/api/v1/tasks/${encodeURIComponent(id)}`),
-    events: async (id) => (
-      await request<{ events: TaskEventRecord[] }>(`/api/v1/tasks/${encodeURIComponent(id)}/events`)
-    ).events ?? [],
-    executions: async (filters = {}) => (
-      await request<{ executions: ExecutionRecord[] }>(`/api/v1/executions${queryString(filters)}`)
-    ).executions ?? [],
-    updateTask: (id, expectedRevision, patch) => request(
-      `/api/v1/tasks/${encodeURIComponent(id)}`,
-      {
-        method: 'PATCH',
-        body: { expected_revision: expectedRevision, patch, actor: 'user' },
-      },
-    ),
-    resumeTask: (id) => request(`/api/v1/tasks/${encodeURIComponent(id)}/resume`, {
-      method: 'POST', body: {},
-    }),
-    archiveTask: (id, expectedRevision) => revisionAction(id, 'archive', expectedRevision),
-    restoreTask: (id, expectedRevision) => revisionAction(id, 'restore', expectedRevision),
-    updateExecutionAssignments: (input) => request('/api/v1/executions/tasks', {
-      method: 'PATCH', body: input,
-    }),
-    assignSourceSessionProject: (sourceSessionId, projectId, expectedProjectId = null) => request(
-      `/api/v1/source-sessions/${encodeURIComponent(sourceSessionId)}/project`,
-      {
-        method: 'PATCH',
-        body: { project_id: projectId, expected_project_id: expectedProjectId },
-      },
-    ),
+    settings: () => request('/api/v1/settings'),
+    updateSettings: (input) => request('/api/v1/settings', { method: 'PATCH', body: input }),
     runtimes: () => request('/api/v1/runtimes', { requestTimeoutMs: RUNTIME_TIMEOUT_MS }),
     runtimeModels: (id) => request(`/api/v1/runtimes/${encodeURIComponent(id)}/models`, { requestTimeoutMs: RUNTIME_TIMEOUT_MS }),
     schedules: () => request('/api/v1/schedules'),

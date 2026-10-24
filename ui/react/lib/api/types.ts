@@ -1,106 +1,106 @@
-export type TaskStatus = 'planned' | 'active' | 'waiting' | 'blocked' | 'done' | 'canceled'
-export type TaskLifecycle = 'planned' | 'in_progress' | 'waiting' | 'blocked' | 'done' | 'canceled'
-export type TaskEntityType = 'project' | 'main_task' | 'subtask'
-export type LiveState = 'running' | 'idle' | 'stale' | 'ended' | 'none'
-
-export interface TimeRange {
-  start: string
-  end: string
-}
-
-export interface ActualSegment extends TimeRange {
-  id: string
-  kind: 'segment' | 'envelope'
-}
-
-export interface TaskProgress {
-  remaining: number
-  total: number
-  completed: number
-  ratio: number
-}
-
-export interface TaskRecord {
-  id: string
-  parent_id: string | null
-  project_id: string | null
-  entity_type: TaskEntityType
-  title: string
-  description: string | null
-  lifecycle: TaskLifecycle
-  status: TaskStatus
-  rollup_state: TaskLifecycle
-  sort_order: number
-  revision: number
-  archived_at: string | null
-  progress: TaskProgress | null
-  agent: string
-  next_action: string | null
-  planned: TimeRange | null
-  actual: TimeRange | null
-  actual_segments: ActualSegment[]
-  actual_segment_count: number
-  start: string | null
-  end: string | null
-  last_activity: string | null
-  updated_at: string
-  session_id: string | null
-  session_source: string | null
-  resume_available: boolean
-  workspace: string | null
-  workfolder: string | null
-  worktree: string | null
-  branch: string | null
-  execution_count: number
-  active_execution_count: number
-  running_execution_count: number
-  idle_execution_count: number
-  stale_execution_count: number
-  active_agent_count: number
-  live_state: LiveState
-  blocked_count: number
-}
-
-export interface ProjectSummary {
+export interface SessionProvider {
   id: string
   name: string
-  description?: string | null
-  revision?: number
-  archived_at?: string | null
-  updated_at?: string
+  store_id: string
+  capabilities: { full_text_search: boolean; search_experimental: boolean; message_location: boolean; resume: boolean; live_presence?: boolean }
 }
 
-export interface ProjectInboxRecord {
-  id: string
-  source: string
-  external_session_id: string
-  root_external_session_id: string
-  first_seen_at: string
-  last_seen_at: string
-  agent: string
-  workfolder: string | null
-  worktree: string | null
+export interface SessionActivityPage {
+  active_workspaces?: string[]
+  store_id: string
+  available: boolean
+  open_session_ids: string[]
+  checked_at: string
+}
+
+export interface SessionRef {
+  provider: string
+  store_id: string
+  session_id: string
+}
+
+export interface BrowserSession extends SessionRef {
+  title: string
+  preview: string
+  snippet?: string | null
+  workspace: string | null
   branch: string | null
+  created_at: string | null
+  updated_at: string | null
+  last_active_at: string | null
+  state: string
+  native_parent: SessionRef | null
+  forked_from: SessionRef | null
 }
 
-export interface DashboardWarning {
-  code: string
-  task_id?: string
+export interface SessionRelation {
+  id: string
+  kind: 'delegation' | 'subagent' | 'fork'
+  origin: 'registered' | 'native'
+  parent: SessionRef
+  child: SessionRef
+  created_at: string | null
+  source: string
 }
 
-export interface DashboardSnapshot {
-  server_instance_id: string
-  revision: number
-  schema_version: number
-  generated_at: string
-  home_directory: string
-  tasks: TaskRecord[]
-  projects: ProjectSummary[]
-  warnings: DashboardWarning[]
-  project_inbox: ProjectInboxRecord[]
-  project_inbox_count: number
-  attribution_inbox_count: number
-  unassigned_execution_count: number
+export interface SessionTimeline {
+  session: BrowserSession
+  segments: { turn_id: string; start: string; end: string | null; status: string }[]
+  anchors: { turn_id: string; at: string; cursor: string | null }[]
+  next_cursor: string | null
+  coverage: 'partial' | 'complete' | 'unsupported'
+  from: string | null
+  to: string | null
+  scope?: 'session' | 'window'
+  bounds?: { start_at: string | null; end_at: string | null; end_state: 'known' | 'unknown' | 'pending' | 'empty'; indexed_from: string | null }
+  unplaced_turns: number
+  points?: { item_id: string; turn_id: string; at: string; role: 'user' | 'assistant' }[]
+  points_coverage?: 'partial' | 'complete' | 'unsupported'
+  untimed_messages?: number
+}
+
+export interface SessionFilters {
+  item_id?: string
+  workspace?: string
+  query?: string
+  archived?: boolean
+  cursor?: string | null
+  limit?: number
+  store_id?: string
+  at?: string
+  from?: string
+  to?: string
+}
+
+export interface SessionPage {
+  sessions: BrowserSession[]
+  next_cursor: string | null
+  search_scope: 'messages' | null
+  scanned_count: number
+  relations: SessionRelation[]
+}
+
+export interface SessionWorkspacePage {
+  workspaces: { path: string; observed_count: number; last_active_at: string | null }[]
+  next_cursor: string | null
+}
+
+export interface SessionMessagesPage {
+  session: BrowserSession
+  messages: { id: string; turn_id: string; role: 'user' | 'assistant'; text: string; truncated: boolean; at: string | null; time_precision: 'message' | 'turn' | 'unknown' }[]
+  seek?: { at: string; precision: 'message' | 'turn' | 'unknown'; turn_id: string | null; item_id: string | null; state?: string } | null
+  match: { item_id: string; turn_id: string; snippet: string; range: { start: number; end: number } } | null
+  next_cursor: string | null
+  truncated: boolean
+}
+
+export interface DashboardSettingsResponse {
+  settings: {
+    resume_terminal: string
+    schedule_definitions_dir: string
+  }
+  terminal_options: { id: string; label: string; available: boolean }[]
+  restart_required: boolean
 }
 
 export interface DashboardMeta {
@@ -112,92 +112,6 @@ export interface DashboardMeta {
     unified_runs: boolean
     internal_scheduler: boolean
   }
-}
-
-export interface TaskDetailResponse {
-  task: TaskRecord
-  children?: TaskRecord[]
-  parent?: TaskRecord | null
-}
-
-export interface ExecutionRecord {
-  id: string
-  task_id?: string | null
-  classification?: 'unknown' | 'work' | 'non_work'
-  root_session_id?: string
-  session_id?: string
-  status?: string
-  agent?: string | null
-  agent_type?: string | null
-  agent_path?: string | null
-  workfolder?: string | null
-  worktree?: string | null
-  branch?: string | null
-  started_at?: string | null
-  ended_at?: string | null
-  last_seen_at?: string | null
-  [key: string]: unknown
-}
-
-export interface ExecutionFilters {
-  task_id?: string
-  root_session_id?: string
-  session_id?: string
-  status?: string
-  unassigned?: boolean
-}
-
-export interface TaskEventRecord {
-  id: string
-  task_id?: string
-  event_type: string
-  before_json?: string | null
-  after_json?: string | null
-  actor?: string | null
-  created_at: string
-}
-
-export interface TaskPatch {
-  title?: string
-  description?: string | null
-  status?: TaskStatus
-  next_action?: string | null
-  due_date?: string | null
-  parent_id?: string | null
-  sort_order?: number
-}
-
-export interface TaskMutationResponse {
-  task: TaskRecord
-  changed?: boolean
-  revision?: number
-}
-
-export interface TaskResumeResponse {
-  ok?: boolean
-  terminal?: string
-  session_id?: string
-}
-
-export interface ExecutionAssignmentPatch {
-  actor: 'user'
-  changes: Array<{
-    id: string
-    task_id: string | null
-    expected_task_id: string | null
-    classification: 'work' | 'non_work'
-    expected_classification: 'unknown' | 'work' | 'non_work'
-  }>
-}
-
-export interface ExecutionAssignmentResponse {
-  executions: ExecutionRecord[]
-  changed?: boolean
-}
-
-export interface ProjectAssignmentResponse {
-  source_session: ProjectInboxRecord
-  changed?: boolean
 }
 
 export type ScheduleCadence =

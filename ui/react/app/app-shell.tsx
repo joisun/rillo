@@ -5,6 +5,7 @@ import type { DashboardConnectionState } from '@/lib/events/dashboard-event-sour
 import type { DashboardView } from '@/lib/preferences/dashboard-preferences'
 import { ConnectionStatus } from './connection-status'
 import { Navigation } from './navigation'
+import { SettingsDialog } from './settings-dialog'
 
 export function AppShell({
   children,
@@ -40,6 +41,7 @@ export function AppShell({
             {countLabel}
           </span>
           <ConnectionStatus state={connectionState} />
+          <SettingsDialog />
         </div>
       </header>
       <main className="app-shell__main">{children}</main>

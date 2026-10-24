@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Clipboard, FileText, RefreshCw, Square, Terminal } from 'lucide-react'
+import { Check, Clipboard, FileText, RefreshCw, Square } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -219,7 +219,6 @@ export function RunDetail({ api, run }: { api: DashboardApi; run: RunRecord }) {
             <Button aria-label="复制 Session ID" isIconOnly size="xs" variant="quiet" onPress={() => void copySession()}>
               {copied ? <Check aria-hidden="true" /> : <Clipboard aria-hidden="true" />}
             </Button>
-            <span className="run-detail__resume-hint"><Terminal aria-hidden="true" />点击 Session 继续对话</span>
           </div>
         ) : <p className="run-detail__empty">{active ? '等待 Codex 创建 Session…' : '任务在创建 Session 前结束，无法恢复；可重新运行。'}</p>}
         {active && run.thread_id ? <p className="run-detail__empty">Session 已保存，运行结束后可在 Terminal 恢复。</p> : null}

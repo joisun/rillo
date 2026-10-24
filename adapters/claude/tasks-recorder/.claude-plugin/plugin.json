@@ -1,8 +1,8 @@
 {
   "name": "tasks-recorder",
   "displayName": "Tasks Recorder",
-  "version": "0.8.7",
-  "description": "Record Claude Code work in a local task service with a real-time dashboard.",
+  "version": "0.8.8",
+  "description": "Browse native sessions and register explicit session delegation relations.",
   "author": {
     "name": "Joi Sun",
     "url": "https://github.com/joisun"
@@ -11,9 +11,8 @@
   "repository": "https://github.com/joisun/tasks-recorder",
   "license": "GPL-2.0-only",
   "keywords": [
-    "tasks",
-    "claude-code",
-    "hooks",
+    "sessions",
+    "claude",
     "mcp",
     "dashboard"
   ],

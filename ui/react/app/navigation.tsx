@@ -1,4 +1,4 @@
-import { CalendarClock, ListTree } from 'lucide-react'
+import { CalendarClock, MessagesSquare } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import type { DashboardView } from '@/lib/preferences/dashboard-preferences'
@@ -14,14 +14,14 @@ export function Navigation({
     <nav className="app-navigation" aria-label="Dashboard views">
       <Button
         type="button"
-        className={`app-navigation__item${view === 'tasks' ? ' is-active' : ''}`}
-        aria-current={view === 'tasks' ? 'page' : undefined}
+        className={`app-navigation__item${view === 'sessions' ? ' is-active' : ''}`}
+        aria-current={view === 'sessions' ? 'page' : undefined}
         size="xs"
-        variant={view === 'tasks' ? 'secondary' : 'quiet'}
-        onPress={() => onViewChange('tasks')}
+        variant={view === 'sessions' ? 'secondary' : 'quiet'}
+        onPress={() => onViewChange('sessions')}
       >
-        <ListTree aria-hidden="true" />
-        Tasks
+        <MessagesSquare aria-hidden="true" />
+        Sessions
       </Button>
       <Button
         type="button"

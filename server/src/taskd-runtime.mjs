@@ -1,28 +1,21 @@
-import { createJournalDashboardSnapshot } from '../../mcp/src/dashboard-data.mjs'
 import { execFile } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { constants } from 'node:fs'
 import { access, realpath, stat } from 'node:fs/promises'
-import { discoverGitContext } from '../../mcp/src/git-context.mjs'
-import { createJournalDiagnostics } from '../../mcp/src/journal-diagnostics.mjs'
-import { createJournalService } from '../../mcp/src/journal-service.mjs'
-import { createJournalStore } from '../../mcp/src/journal-store.mjs'
-import { renderProjections } from '../../mcp/src/renderer.mjs'
-import { createV3CompatibilityService } from '../../mcp/src/v3-compatibility-service.mjs'
-import { createEventSpool } from '../../hooks/src/event-spool.mjs'
 import { createApiServer } from './api-server.mjs'
 import { createDashboardSettings } from './dashboard-settings.mjs'
 import { createCodexSessionInventory } from './codex/session-inventory.mjs'
-import { prepareJournalStartup } from './journal-startup.mjs'
 import { createRevisionHub } from './revision-hub.mjs'
 import { createSessionResumeService } from './session-resume-service.mjs'
-import { createStructuredLogger } from './structured-logger.mjs'
+import { createSessionBrowser } from './session-browser.mjs'
+import { createSessionLinkStore } from './session-link-store.mjs'
 import { createTerminalLauncher } from './terminal-launcher.mjs'
 import { createRunEventHub } from './runs/run-event-hub.mjs'
 import { createRunService } from './runs/run-service.mjs'
 import { createRunStore } from './runs/run-store.mjs'
 import { createOpenCodeRuntimeDefinition } from './runtime/adapters/opencode.mjs'
 import { createCodexRuntimeDefinition } from './runtime/adapters/codex.mjs'
+import { createCodexSessionAdapter } from './runtime/adapters/codex-sessions.mjs'
 import { createExecutableResolver } from './runtime/executable-resolver.mjs'
 import { createProcessSupervisor } from './runtime/process-supervisor.mjs'
 import { createRuntimeAgentRegistry } from './runtime/runtime-agent-registry.mjs'
@@ -38,8 +31,6 @@ import { migrateSchedulerV1, migrateSchedulerV4 } from './scheduler/scheduler-mi
 import { createDefinitionScheduleService } from './scheduler/scheduler-service.mjs'
 import { createSchedulerClock } from './scheduler/scheduler-clock.mjs'
 
-export const AUTO_ARCHIVE_AFTER_MS = 5 * 24 * 60 * 60 * 1000
-export const AUTO_ARCHIVE_SWEEP_MS = 60 * 60 * 1000
 
 const MAX_SCHEDULER_STATUS_COUNT = 1_000_000
 
@@ -105,16 +96,12 @@ function boundedSchedulerCount(value) {
 
 export async function startTaskd({
   config,
-  dashboardPath,
   dashboardHtml,
-  createStore = createJournalStore,
-  createJournal = createJournalService,
-  createCompatibility = createV3CompatibilityService,
-  createSpool = createEventSpool,
-  createLogger = createStructuredLogger,
-  createDiagnostics = createJournalDiagnostics,
   createSettings = createDashboardSettings,
   createSessionInventory = createCodexSessionInventory,
+  createLinks = createSessionLinkStore,
+  createBrowser = createSessionBrowser,
+  createSessionAdapter = createCodexSessionAdapter,
   createResumeService = createSessionResumeService,
   createLauncher = createTerminalLauncher,
   createApi = createApiServer,
@@ -135,22 +122,13 @@ export async function startTaskd({
   createRunLogs = createRunLogStore,
   createClockScheduler = createSchedulerClock,
   runtimeExecFile = execFile,
+  clock = () => new Date(),
   createDefinitionScheduleService: createScheduleService = createDefinitionScheduleService,
   createScheduledRunLogs: createScheduleLogs = createScheduledRunLogs,
-  prepareStartup = prepareJournalStartup,
-  detectInactiveSessions = async () => [],
-  gitResolver = discoverGitContext,
-  renderer = renderProjections,
-  dashboardAdapter = createJournalDashboardSnapshot,
-  clock = () => new Date(),
-  autoArchiveAfterMs = AUTO_ARCHIVE_AFTER_MS,
-  autoArchiveSweepMs = AUTO_ARCHIVE_SWEEP_MS,
-  scheduleInterval = setInterval,
-  clearScheduledInterval = clearInterval,
 }) {
-  const store = createStore({ databasePath: config.databasePath })
   const hub = createRevisionHub()
-  const dataDirectory = dirname(config.databasePath)
+  const dataDirectory = config.dataDirectory ?? dirname(config.configPath ?? config.databasePath)
+  let links = null
   const schedulePaths = schedulerPaths(config, dataDirectory)
   let schedulerState = {
     capability: null,
@@ -166,6 +144,8 @@ export async function startTaskd({
   let schedulerService = null
   let schedulerClock = null
   let runtimeRegistry = null
+  let runtimeEnvironment = null
+  let sessionBrowser = null
   let runService = null
   let runEventHub = null
   let scheduledRunLogs = null
@@ -230,61 +210,7 @@ export async function startTaskd({
       throw error
     }
   }
-  const spool = createSpool({
-    directory: config.spoolDirectory ?? join(dataDirectory, 'spool'),
-    maxBytes: config.spoolMaxBytes ?? 4 * 1024 * 1024,
-    maxFiles: config.spoolMaxFiles ?? 512,
-    maxAgeMs: config.spoolMaxAgeMs ?? 7 * 24 * 60 * 60 * 1000,
-  })
-  const logger = createLogger({
-    directory: config.logsDirectory ?? join(dataDirectory, 'logs'),
-    maxFileBytes: config.logMaxFileBytes ?? 1024 * 1024,
-    maxFiles: config.logMaxFiles ?? 5,
-    maxAgeMs: config.logMaxAgeMs ?? 14 * 24 * 60 * 60 * 1000,
-  })
-  const diagnostics = createDiagnostics({
-    store,
-    spool,
-    logger,
-    scheduler: async () => {
-      let count = schedulerState.count
-      if (schedulerDefinitions?.list && runService?.list) {
-        try { count = (await schedulerDefinitions.list()).length + runService.list({ limit: 1_000 }).length } catch {}
-      }
-      return { ...schedulerState, count }
-    },
-  })
-  const terminalLauncher = createLauncher({
-    runtimeDirectory: join(dataDirectory, 'runtime'),
-  })
-  const dashboardSettings = createSettings({
-    configPath: config.configPath ?? join(dataDirectory, 'config.json'),
-    terminalLauncher,
-    relocateDefinitionsDirectory,
-  })
-  const sessionInventory = createSessionInventory()
-  const resumableDashboardAdapter = async (snapshot) => dashboardAdapter(snapshot, {
-    resumableSessionIds: await sessionInventory.ids(),
-  })
-  const journalService = createJournal({
-    store,
-    logger,
-    diagnostics,
-    onChange: (change) => hub.publish(change),
-  })
-  const service = createCompatibility({
-    store,
-    journalService,
-    gitResolver,
-    renderer,
-    outputDir: config.outputDir,
-    dashboardPath,
-    dashboardAdapter: resumableDashboardAdapter,
-    onChange: () => hub.publish(),
-  })
   let closed = false
-  let autoArchiveTimer = null
-  let autoArchivePending = null
   let api = null
   async function closeScheduler() {
     if (schedulerClosed) return
@@ -300,7 +226,6 @@ export async function startTaskd({
       schedulerDefinitions = null
       scheduledRunLogs = null
       runService = null
-      runtimeRegistry = null
       runEventHub?.close()
       runEventHub = null
       try { schedulerStore?.close() } finally { schedulerStore = null }
@@ -328,27 +253,6 @@ export async function startTaskd({
       schedulerStore = createRunLedger({
         databasePath: schedulePaths.databasePath,
         clock,
-      })
-      const resolverEnvironment = { ...process.env }
-      if (typeof config.codexPath === 'string' && config.codexPath.length > 0) {
-        resolverEnvironment.CODEX_BIN = config.codexPath
-      }
-      const runtimeEnvironment = createRuntimeEnvironment({ env: resolverEnvironment })
-      const runtimeResolver = createRuntimeResolver({
-        env: resolverEnvironment,
-        runtimeEnvironment,
-        canonicalize: canonicalRuntimeExecutable,
-        probe: (executable, probe) => probeRuntimeExecutable(executable, probe, {
-          cwd: dataDirectory,
-          execFileImpl: runtimeExecFile,
-        }),
-      })
-      runtimeRegistry = createRuntimeRegistry({
-        definitions: [createCodexRuntime({
-          execFileImpl: runtimeExecFile,
-          runtimeEnvironment,
-        }), createOpenCodeRuntime({ runtimeEnvironment })],
-        resolver: runtimeResolver,
       })
       runEventHub = createRunEvents({ maximumEventsPerRun: 256 })
       const runLogStore = createRunLogs({
@@ -414,53 +318,88 @@ export async function startTaskd({
     }
   }
 
-  function archiveCompletedRoots() {
-    if (autoArchivePending) return autoArchivePending
-    autoArchivePending = (async () => {
-      const now = clock()
-      const timestamp = now instanceof Date ? now : new Date(now)
-      if (Number.isNaN(timestamp.valueOf())) throw new TypeError('clock must return a valid date')
-      const completedBefore = new Date(timestamp.valueOf() - autoArchiveAfterMs).toISOString()
-      return journalService.archiveCompletedRoots({ completed_before: completedBefore })
-    })().catch(async (error) => {
-      await logger.write('maintenance.failed', {
-        operation: 'task.auto_archive',
-        error_code: error?.code ?? 'AUTO_ARCHIVE_FAILED',
-      }).catch(() => undefined)
-      return { ok: false, persisted: false, error_code: error?.code ?? 'AUTO_ARCHIVE_FAILED' }
-    }).finally(() => {
-      autoArchivePending = null
-    })
-    return autoArchivePending
+  async function serviceStatus() {
+    const check = await sessionBrowser.check()
+    const ready = check.integrityCheck === 'ok'
+      && (check.foreignKeyViolations?.length ?? 0) === 0
+      && (check.invariantViolations?.length ?? 0) === 0
+    const scheduler = { ...schedulerState }
+    if (schedulerDefinitions && runService) {
+      try {
+        scheduler.count = boundedSchedulerCount((await schedulerDefinitions.list()).length + runService.list({ limit: 1_000 }).length)
+      } catch (error) {
+        scheduler.ready = false
+        scheduler.degraded = true
+        scheduler.error_code = schedulerErrorCode(error, 'SCHEDULER_STATUS_UNAVAILABLE')
+      }
+    }
+    return {
+      ok: ready,
+      service: 'tasks-recorder',
+      api_version: 5,
+      live: true,
+      ready,
+      degraded: !ready || scheduler.degraded,
+      check,
+      scheduler,
+    }
   }
 
   try {
-    await prepareStartup({
-      service: journalService,
-      spool,
-      detectInactiveSessions,
+    links = createLinks({ databasePath: join(dataDirectory, 'session-links.sqlite') })
+    const terminalLauncher = createLauncher({
+      runtimeDirectory: join(dataDirectory, 'runtime'),
     })
-    await archiveCompletedRoots()
+    const dashboardSettings = createSettings({
+      configPath: config.configPath ?? join(dataDirectory, 'config.json'),
+      terminalLauncher,
+      relocateDefinitionsDirectory,
+    })
+    const sessionInventory = createSessionInventory()
+    const resolverEnvironment = { ...process.env }
+    if (typeof config.codexPath === 'string' && config.codexPath.length > 0) {
+      resolverEnvironment.CODEX_BIN = config.codexPath
+    }
+    runtimeEnvironment = createRuntimeEnvironment({ env: resolverEnvironment })
+    const runtimeResolver = createRuntimeResolver({
+      env: resolverEnvironment,
+      runtimeEnvironment,
+      canonicalize: canonicalRuntimeExecutable,
+      probe: (executable, probe) => probeRuntimeExecutable(executable, probe, {
+        cwd: dataDirectory,
+        execFileImpl: runtimeExecFile,
+      }),
+    })
+    runtimeRegistry = createRuntimeRegistry({
+      definitions: [createCodexRuntime({
+        execFileImpl: runtimeExecFile,
+        runtimeEnvironment,
+      }), createOpenCodeRuntime({ runtimeEnvironment })],
+      resolver: runtimeResolver,
+    })
     await startScheduler()
     const sessionResume = createResumeService({
-      store,
       settings: dashboardSettings,
       terminalLauncher,
       sessionInventory,
       runtimeRegistry,
       runService,
     })
+    sessionBrowser = createBrowser({
+      adapters: [createSessionAdapter({ resolveLaunch: () => runtimeRegistry.resolve('codex') })],
+      settings: dashboardSettings,
+      terminalLauncher,
+      links,
+    })
     api = createApi({
-      service,
-      journalService,
-      journalDiagnostics: diagnostics,
-      store,
+      serviceStatus,
       hub,
       host: config.serverHost,
       port: config.serverPort,
       dashboardHtml,
       dashboardSettings,
       sessionResume,
+      sessionBrowser,
       schedulerService,
       scheduledRunLogs,
       runtimeRegistry,
@@ -469,30 +408,27 @@ export async function startTaskd({
       packageVersion: config.packageVersion ?? 'source',
     })
     const address = await api.listen()
-    autoArchiveTimer = scheduleInterval(() => archiveCompletedRoots(), autoArchiveSweepMs)
-    autoArchiveTimer.unref?.()
     return {
       address,
-      startup: { schema_version: store.check().schemaVersion },
+      startup: { api_version: 5 },
       scheduler: { ...schedulerState },
       async close() {
         if (closed) return
         closed = true
-        if (autoArchiveTimer) clearScheduledInterval(autoArchiveTimer)
-        await autoArchivePending
+        sessionBrowser?.close?.()
         hub.close()
         try {
           await api?.close()
         } finally {
-          try { await closeScheduler() } finally { store.close() }
+          try { await closeScheduler() } finally { links?.close() }
         }
       },
     }
   } catch (error) {
-    if (autoArchiveTimer) clearScheduledInterval(autoArchiveTimer)
+    sessionBrowser?.close?.()
     hub.close()
     try { await api?.close() } catch {}
-    try { await closeScheduler() } finally { store.close() }
+    try { await closeScheduler() } finally { links?.close() }
     throw error
   }
 }

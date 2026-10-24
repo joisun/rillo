@@ -1,6 +1,6 @@
 {
   "name": "tasks-recorder",
-  "version": "0.8.7",
+  "version": "0.8.8",
   "private": true,
   "type": "module",
   "bin": {
@@ -60,7 +60,7 @@
     "typescript": "7.0.2",
     "vitest": "4.1.11"
   },
-  "description": "Local task control plane and real-time dashboard for coding agents",
+  "description": "Local session browser and scheduled automation dashboard for coding agents",
   "license": "GPL-2.0-only",
   "repository": {
     "type": "git",

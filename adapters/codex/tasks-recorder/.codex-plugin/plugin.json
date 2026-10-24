@@ -1,7 +1,7 @@
 {
   "name": "tasks-recorder",
-  "version": "0.8.7",
-  "description": "Record Codex work in a local task service with a real-time dashboard.",
+  "version": "0.8.8",
+  "description": "Browse native sessions and register explicit session delegation relations.",
   "author": {
     "name": "Joi Sun",
     "url": "https://github.com/joisun"
@@ -10,9 +10,8 @@
   "repository": "https://github.com/joisun/tasks-recorder",
   "license": "GPL-2.0-only",
   "keywords": [
-    "tasks",
+    "sessions",
     "codex",
-    "hooks",
     "mcp",
     "dashboard"
   ],
@@ -20,8 +19,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Tasks Recorder",
-    "shortDescription": "Record Codex tasks locally",
-    "longDescription": "Connect Codex hooks and MCP tools to the local Tasks Recorder service and its real-time task dashboard.",
+    "shortDescription": "Browse native agent sessions",
+    "longDescription": "Browse native agent sessions and register explicit session relations in the local Sessions dashboard.",
     "developerName": "Joi Sun",
     "category": "Developer Tools",
     "capabilities": [
@@ -30,8 +29,8 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Show my active agent tasks.",
-      "Resume the matching task for this worktree."
+      "List session providers and their store IDs.",
+      "Link a delegated child session to its parent."
     ],
     "websiteURL": "https://github.com/joisun/tasks-recorder"
   }

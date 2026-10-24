@@ -1,0 +1,79 @@
+# 验证结果
+
+## 当前：旧会话时间、平滑阅读与位置三角
+
+2026-10-25最新task-10：Node578/578、React72/72、check/build通过，日志为/tmp/tasks-recorder-reader-{node,ui,check,build}.log。接口返回空时间的30条ai-news样本中，原先14条末条未知，恢复原日志对应时间后全部有结束时间；仍有1条单独消息不能可靠匹配，保留未知。
+
+List｜Tree位于中栏右上角；浏览器从3500滚至0记录59个中间位置，手动滚动后底部三角更新；真实旧会话末条时间、正文和三角相同。减少动态效果立即定位。1600/1200/1024/390/812宽度无全局溢出；源码43129与构建43130更新，HTTP/磁盘哈希一致。匿名前后截图与报告：/tmp/.vdr-log/2026-10-25-session-reading-sync/report.html。历史阶段数字保留在下方。
+
+## 阶段记录：独立范围、每秒热力格与自动交互
+
+2026-10-25最新要求以task-09及本节为准，下方早期全局窗口、折线、手动继续和恢复按钮记录均为阶段历史。
+
+- 完整Node574/574、UI69/69；最终局部改动后Sessions28/28、check/build再次通过。日志：/tmp/tasks-recorder-auto-heat-{node,ui,check,build}.log及final-{ui,check,build}.log；后端最后覆盖判断改动另跑message-density11/11。
+- 真实Codex：列表30条，scope=session，start_at等于创建时间，end_at等于末条消息且不同于updated_at；精确ID与正文时间相同。只输出计数和比较值。presence返回10个活跃会话、8个活跃目录。
+- 浏览器实际滚动自动加载3页目录、2页会话和更早正文；手动阅读后重新悬停恢复定位。8秒格包含5条消息，tooltip和定位ID正确；重复时间可用键盘逐条选择。无手动加载/恢复按钮，目录绿点6px、正文12px、桌面侧栏350px。
+- 模拟503只出现一个整页错误，恢复接口后自动恢复内容；旧连接迟到失败不关闭新连接由回归测试覆盖。1200px时间挤压和绿点拉长经目视发现并修复。
+- 1600×1000、1200×800、1024×768、390×844、812×375均检查，无全局横向溢出。列表/时间轴保持当前选择、搜索浮层位于输入下方、键盘和折叠重开通过；没有真实触屏硬件验收。
+- 14条截图覆盖、4项已修复发现，报告生成及校验通过：/tmp/.vdr-log/2026-10-25-session-second-heat/report.html。截图仅合成或匿名数据。源码43129和构建43130已更新，HTTP HTML与磁盘构建SHA-256一致；未提交、发布或替换43127。
+
+限制：长会话多个逻辑秒会共用物理像素，缩略条以最高每秒密度绘制；索引有界、冷读性能不作承诺。旧MCP服务仍不可用，不绕过数据库同步。
+
+2026-10-24：全部P0通过，实施完成。
+
+| 检查 | 结果 | 证据 |
+| --- | --- | --- |
+| 完整Node suite | 560/560 | /tmp/tasks-recorder-session-centric-node.log |
+| 完整React suite | 14文件，60/60 | /tmp/tasks-recorder-session-centric-ui.log |
+| 语法与类型 | 141源文件及tsc通过；最后UI修正后tsc再次通过 | /tmp/tasks-recorder-session-centric-check.log |
+| 构建 | build、build:adapters通过 | /tmp/tasks-recorder-session-centric-build.log |
+| 独立打包运行 | 4/4 | /tmp/tasks-recorder-session-centric-package.log |
+| 文档/差异 | 文档树扫描并更新README、architecture、Session skills及插件元数据；两个仓库范围内diff --check通过 | 当前工作树与dotfiles canonical source |
+| 真实Codex | CLI 0.163.0，只读providers/list/children/timeline/at通过；partial和Turn级时间真实存在 | 仅输出计数、状态及精度，未保存对话 |
+| 生产构建预览 | 43130加载最终dist，HTTP与磁盘SHA-256相同；pointer capture拖出行仍锁定主会话、消息跟随 | /tmp/.vdr-log/2026-10-24-session-centric-console |
+| Otty | pane inventory实际字段与文档一致，canonical runtime入口解析正确；skill frontmatter及引用通过 | dotfiles范围检查；未创建真实模型会话 |
+
+浏览器检查覆盖1600×1000和390×844：hover不选择、拖动锁行、键盘、暂停/恢复跟随、搜索下浮层、视图切换保留选择、fork来源只读跳转、部分索引自动3页后显式继续、窄屏详情与返回、设置弹窗和Scheduled空态导航。2个视觉发现（来源标签排列、窄屏详情被挤压）已修复；共9条截图覆盖记录，Markdown/HTML报告及校验通过。触屏事件、过期请求取消和登记来源选择由React交互测试覆盖；未连接真实触屏硬件。
+
+## 保留边界
+
+- 当前原生Sessions adapter为Codex；Claude Code插件能调用通用关系工具，但未实现Claude原生数据读取。
+- 原生消息缺独立时间时显示Turn级定位；无时间/部分历史不伪装为零或完整。长正文仍有单页/消息容量上限。
+- 旧Task数据库、生成文件和spool未迁移、删除或打开；Scheduled保持独立。
+- 本次未提交、发布、替换43127服务或执行真实模型Turn。43129为源码预览，43130为隔离构建预览；需要使用新MCP工具时需加载本次插件构建。
+
+## 追加视觉重构验收
+
+用户追加授权后，采用上游UI/UX Pro Max的Web/React指导与visual-driven-review。重构Sessions样式、主区域分配、消息字号、热图图例/未知状态、移动阅读及一次拖动的坐标锁定。未修改后端数据源、REST/MCP或Scheduled代码。
+
+- 完整React 61/61，新增父子片段隔离/未知标记用例，原pointer测试覆盖中途缩窄边界；check与build通过。README元数据4项检查通过，diff --check通过。
+- 1600×1000、1024×768、768×1024、375×812与812×375已截图检查；无全局横向溢出。375竖屏以Chrome真实Touch事件模拟，85%位置保持0.850000，消息与时间轴同屏，展开阅读保持定位。低高度横屏以点选后阅读验证。
+- 桌面首次打开预览后拖到80%，最终值保持0.800000；最终构建版复验通过。搜索浮层、切换保留选择、关闭恢复空间、暂停/恢复、键盘及reduced-motion检查通过。
+- 正文14px，状态11px；实测正文对比度15.05:1，次要状态6.59:1。原生数据时间精度保持原样。
+- 22条视觉覆盖记录，7个原始发现/7个分组问题均已修复，报告校验通过。报告：/tmp/.vdr-log/2026-10-24-session-ux-refinement/report.html（含前后截图），report.md及atlas/index.html。
+- 43130已重启到最新构建，HTTP HTML与磁盘dist SHA-256一致；43129源码热更新。未提交、发布或替换43127。
+
+## 紧凑阅读与消息密度最终验收
+
+2026-10-24用户追加7项体验要求后再次实现并验收，以本节为当前行为。此前“hover不选择、执行区间热图”的记录保留为阶段历史，已被悬停消息曲线替代。
+
+- 完整Node566/566、React63/63，check与build通过。新增原生消息时间、分页继续定位、媒体/工具页处理、metadata更新失效、hover等待与取消、空树和缓存重开覆盖。证据为/tmp/tasks-recorder-density-{node,ui,check,build}.log。
+- 真实Codex只读返回11个消息point、partial覆盖、0条未知；seek精度message，目标ID与正文ID一致、时间精确相同。仅输出计数和比较结果。
+- 1600×1000正文859×800px、header65.75px。行内终端mock成功不切换预览；关系浮层不改变正文高度；折叠重开三次无额外请求，空叶与503重试通过。搜索浮层在输入下方，键盘逐条定位与消息时间一致。
+- 1024×768、768×1024、375×812、812×375均无全局横向溢出。375通过Chrome Touch事件定位，正文218px、一键展开558px；物理触屏未测试。低高度横屏采用单栏阅读。
+- 16条视觉覆盖记录、7条原始发现/7个问题全部修复；Markdown/HTML报告与证据校验通过：/tmp/.vdr-log/2026-10-24-session-density-polish/report.html。对照截图使用上轮合成fixture，未混入原生正文。
+- README与architecture已同步真实消息索引、悬停曲线、行内resume与缓存展开契约。源码43129可用，43130已重启且served HTML与磁盘dist哈希相同；未提交、发布或替换43127。
+
+## 用户反馈后的真实使用返工
+
+上一轮仅凭规整fixture、尺寸和功能测试给出的体验结论不充分；用户反馈效果很差后重新实际操作，当前以本节及task-08为准。
+
+- 真实30条会话检查：3条长标题、最长63字符；首屏仅7条timeline读取，滚动后14条。截图匿名化文字，另以未替换的原文验证阅读，不保存正文。
+- 桌面时间轴固定分栏，首次显示最近会话；清空/重开/连续hover时曲线宽度430.078125px不变，树scrollTop不变。两行标题、独立workspace宽度、紧凑项目汇总与行内加载已检查。
+- 最近7天及“最近消息”聚焦小时；真实原生高亮消息时间与slider选中时间相同，且处于当前范围。“最近消息”能恢复暂停，不再仅修改刻度。
+- 真实原文再次发现短页补读的遗漏，改为DOM消息锚点后：5条到14条消息，原消息偏移-0.5px。初始内容755px、视口728px，scrollTop27，确实在末尾。历史Markdown使用static模式。
+- 最终React67/67、check、build、diff检查通过。后端未修改，不重复Node suite。证据为/tmp/tasks-recorder-ux-rework-{ui,check,build}.log。
+- 最新构建实际操作：清空、18次鼠标移动、暂停/最近消息、子会话、空叶和搜索浮层；375 Touch模拟、1024平板宽度、812低高度模式通过，无全局横向溢出。375不自动进入阅读。
+- 10条截图覆盖、7条发现/7个已修复问题，报告校验通过：/tmp/.vdr-log/2026-10-24-session-usability-rework/report.html。源码43129返回200，43130 ready200且HTTP HTML与磁盘SHA-256一致。未提交、发布、真实启动终端或替换43127。
+
+限制：一次原生冷读取约8.5秒，尚无系统性能承诺；部分历史仍需补读。匿名截图不能证明真实正文的阅读位置，因此位置结论来自额外原文检查。没有把测试通过当作用户对视觉结果的认可。

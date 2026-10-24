@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 
-import { queryKeys } from '../query/keys'
+import { isSessionMetadataQuery, queryKeys } from '../query/keys'
 
 export type DashboardConnectionState = 'connecting' | 'open' | 'closed'
 
@@ -85,9 +85,7 @@ export class DashboardEventSource {
     if (!this.#source) return
     this.#refreshTimer = null
     this.#lastRefreshAt = Date.now()
-    void this.#queryClient.invalidateQueries({ queryKey: queryKeys.snapshot })
-    void this.#queryClient.invalidateQueries({ queryKey: queryKeys.tasks })
-    void this.#queryClient.invalidateQueries({ queryKey: queryKeys.executions })
+    void this.#queryClient.invalidateQueries({ queryKey: queryKeys.sessionBrowser, predicate: (query) => isSessionMetadataQuery(query.queryKey) })
     void this.#queryClient.invalidateQueries({ queryKey: queryKeys.schedules })
     void this.#queryClient.invalidateQueries({
       queryKey: queryKeys.allRuns,

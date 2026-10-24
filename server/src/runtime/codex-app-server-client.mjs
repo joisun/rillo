@@ -255,7 +255,7 @@ function protocolError(code) {
 function protocolFailureCode(value) {
   if (value?.code === -32601 || (value?.code === -32600
     && typeof value.message === 'string'
-    && value.message.startsWith('Invalid request: unknown variant `thread/items/list`'))) {
+    && /^Invalid request: unknown variant `thread\/(?:items\/list|turns\/list|search|searchOccurrences)`/.test(value.message))) {
     return 'RUNTIME_PROTOCOL_METHOD_UNAVAILABLE'
   }
   let serialized = ''

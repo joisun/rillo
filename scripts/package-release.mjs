@@ -62,7 +62,7 @@ export async function packageRelease({
       'mcp/src/schema-migration.mjs',
       'mcp/src/schema-v3.mjs',
       'mcp/src/task-execution-store.mjs',
-      'mcp/src/task-client.mjs',
+      'mcp/src/session-client.mjs',
       'mcp/src/task-service.mjs',
       'mcp/src/task-schema.mjs',
       'mcp/src/task-store.mjs',
@@ -89,7 +89,7 @@ export async function packageRelease({
       await copyEntries(sourceRoot, adapterRoot, [
         host === 'codex' ? '.codex-plugin' : '.claude-plugin',
         '.mcp.json',
-        'hooks',
+        'hooks/hooks.json',
         'skills',
         'dist/mcp-server.mjs',
         'THIRD_PARTY_NOTICES.md',

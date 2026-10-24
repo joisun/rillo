@@ -1695,6 +1695,27 @@
   color: var(--danger);
 }
 
+.settings-overlay {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  padding: 16px;
+  place-items: center;
+  background: color-mix(in oklab, black 68%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.settings-modal {
+  width: min(440px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  border: 1px solid var(--control-border);
+  border-radius: 12px;
+  background: var(--surface-1);
+  box-shadow: 0 28px 80px rgb(0 0 0 / .48);
+}
+
 .schedule-editor-overlay {
   position: fixed;
   z-index: 80;
@@ -2486,13 +2507,6 @@
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.run-detail__resume-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--text-muted);
-  font-size: 9px;
 }
 
 .run-detail__log-actions {

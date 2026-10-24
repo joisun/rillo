@@ -85,17 +85,18 @@ function normalizeWindowTitle(title, runtimeId) {
   return normalized === '' ? fallback : normalized.slice(0, 160)
 }
 
-function launcherScript({ scriptPath, runtimePath, runtimeId, sessionId, workspace }) {
+function launcherScript({ scriptPath, runtimePath, runtimeId, sessionId, workspace, codexHome }) {
   return `#!/bin/zsh
 rm -f -- ${shellQuote(scriptPath)}
 cd -- ${shellQuote(workspace)}
-exec ${resumeShellCommand({ runtimePath, runtimeId, sessionId })}
+exec ${resumeShellCommand({ runtimePath, runtimeId, sessionId, codexHome })}
 `
 }
 
-function resumeShellCommand({ runtimePath, runtimeId, sessionId }) {
+function resumeShellCommand({ runtimePath, runtimeId, sessionId, codexHome }) {
   const option = runtimeId === 'opencode' ? '--session' : 'resume'
-  return `${shellQuote(runtimePath)} ${option} ${shellQuote(sessionId)}`
+  const prefix = codexHome === undefined ? '' : `/usr/bin/env ${shellQuote('CODEX_HOME=' + codexHome)} `
+  return `${prefix}${shellQuote(runtimePath)} ${option} ${shellQuote(sessionId)}`
 }
 
 function parseOttyInventory(result, entity) {
@@ -171,7 +172,7 @@ export function createTerminalLauncher({
     ))
   }
 
-  async function launchOtty({ executable, runtimePath, runtimeId, sessionId, workspace, title }) {
+  async function launchOtty({ executable, runtimePath, runtimeId, sessionId, workspace, title, codexHome }) {
     let existingWindows = []
     try {
       existingWindows = await listOttyWindows(executable)
@@ -211,7 +212,7 @@ export function createTerminalLauncher({
     if (panes.length !== 1) throw new Error('The resumed Otty window does not have one target pane')
     await execFileImpl(executable, [
       'pane', 'send-keys', '--pane', panes[0].id,
-      resumeShellCommand({ runtimePath, runtimeId, sessionId }),
+      resumeShellCommand({ runtimePath, runtimeId, sessionId, codexHome }),
       'key:Enter', '--json',
     ], { timeout: 5_000 })
     await execFileImpl(executable, [
@@ -229,9 +230,13 @@ export function createTerminalLauncher({
     return launch
   }
 
-  async function launch({ terminal = DEFAULT_RESUME_TERMINAL, runtimeId = 'codex', sessionId, workspace, title }) {
+  async function launch({ terminal = DEFAULT_RESUME_TERMINAL, runtimeId = 'codex', sessionId, workspace, title, codexHome }) {
     if (!['codex', 'opencode'].includes(runtimeId)) {
       throw taskError('RUNTIME_RESUME_UNSUPPORTED', 'This runtime cannot currently be resumed.', { runtime_id: runtimeId })
+    }
+    if (codexHome !== undefined && (runtimeId !== 'codex' || typeof codexHome !== 'string'
+      || !isAbsolute(codexHome) || codexHome.includes('\0') || codexHome.length > 4096)) {
+      throw taskError('SESSION_DATA_ROOT_INVALID', 'Session data root must be an absolute Codex path.')
     }
     if (platform !== 'darwin') {
       throw taskError('PLATFORM_UNSUPPORTED', 'Session resume currently requires macOS.')
@@ -272,6 +277,7 @@ export function createTerminalLauncher({
           runtimeId,
           sessionId: normalizedSessionId,
           workspace,
+          codexHome,
           title: normalizeWindowTitle(title, runtimeId),
         }))
       } else {
@@ -283,6 +289,7 @@ export function createTerminalLauncher({
           runtimeId,
           sessionId: normalizedSessionId,
           workspace,
+          codexHome,
         }), { encoding: 'utf8', mode: 0o700 })
         if (terminal === 'ghostty') {
           await execFileImpl('/usr/bin/open', [
