@@ -15,7 +15,7 @@ const FRONT_MATTER = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)([\s\S]*
 const MARKER = /^type:\s*["']?tasks-recorder\/schedule["']?\s*(?:#.*)?$/m
 const FIELDS = new Set([
   'type', 'id', 'title', 'enabled', 'workspace', 'agent', 'schedule', 'capabilities',
-  'sandbox', 'model', 'reasoning', 'fast_mode', 'network_access', 'timeout',
+  'sandbox', 'model', 'reasoning', 'fast_mode', 'network_access', 'timeout', 'session_id',
 ])
 const SANDBOXES = new Set(['read-only', 'workspace-write', 'danger-full-access'])
 const OPENCODE_MODEL = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9~][A-Za-z0-9._:/~-]*$/
@@ -221,6 +221,7 @@ export function parseScheduleDefinition(source, {
     reasoning_effort: reasoningSelection(frontMatter.reasoning, agentId(frontMatter.agent)),
     ...(frontMatter.network_access != null ? { network_access: frontMatter.network_access } : {}),
     ...(frontMatter.fast_mode != null ? { fast_mode: frontMatter.fast_mode } : {}),
+    ...(frontMatter.session_id != null ? { session_id: string(frontMatter.session_id, 'session_id', 128) } : {}),
     timeout_seconds: timeoutSeconds(frontMatter.timeout),
     capabilities: capabilities(frontMatter.capabilities),
     thread_mode: 'new',
@@ -268,6 +269,7 @@ export function serializeScheduleDefinition(job, { clock = () => new Date() } = 
   }
   validateOpenCodeSettings(frontMatter.agent, frontMatter.sandbox, frontMatter.capabilities)
   frontMatter.timeout = duration(timeoutSeconds(value.timeout_seconds))
+  if (value.session_id != null) frontMatter.session_id = string(value.session_id, 'session_id', 128)
   const prompt = string(value.prompt, 'prompt', 20000)
   return `---\n${stringify(frontMatter, { lineWidth: 0 }).trimEnd()}\n---\n\n${prompt}\n`
 }

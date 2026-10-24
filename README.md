@@ -172,6 +172,8 @@ Dashboard 新建的 Codex Schedule 默认使用 `disabled / disabled`，以获�
 
 支持 `once`、`hourly`、`daily`、`weekly` 与 `monthly` cadence。Dashboard 的 Create/Edit/Pause/Resume 会 atomic rewrite Markdown，并用 SHA-256 `etag` 做 compare-and-set；Delete 把 definition 移到 `.trash/`。行级一次性 Run action 在执行期间会切换为 Stop；它与只控制周期调度的 Schedule pause/resume 是两套独立操作。
 
+Front matter 可选填 `session_id`，作为关联会话的元数据。值会去除首尾空白，须为 1–128 字符的字符串；省略或填 `null` 表示未设置。编辑、暂停或恢复计划时会保留该字段。每次 Run 仍创建新会话，实际运行产生的 Session ID 由 runtime 返回。
+
 Codex Schedule 支持 `fast_mode: true`（开启 Fast mode）、`false`（明确使用普通速度）；省略或 `null` 表示跟随 Codex 默认配置。Dashboard 的 Fast mode 选项与此对应。配置随 Run 快照保存，修改 Schedule 不会改变已创建的 Run。该选项仅适用于 Codex，实际可用性及用量规则由所选模型和账号决定。
 
 Codex 的 `workspace-write` 只表示文件写入权限，不等于允许联网。联网采集任务可显式设置 `network_access: true`；`false` 禁止网络，省略/null 继承 Codex 默认。该字段只控制 workspace-write 下的 shell 网络访问，独立于 Fast mode、Web Search 和 MCP 设置；后台审批策略为 `never`，不会弹出额外授权。Dashboard 的“沙箱网络访问”与此对应，选择随 Run 快照保存，不修改全局 Codex 配置。完整采集、编稿、构建与浏览器检查应设置足够的 `timeout`（例如 `2h`），超时仍会终止运行。
