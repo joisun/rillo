@@ -13,6 +13,7 @@ export function SessionDensity({ title, intervals, points, from, to, selectedAt,
   const [hoverAt, setHoverAt] = useState<number | null>(null)
   const [hoverItemId, setHoverItemId] = useState<string | undefined>()
   const [focused, setFocused] = useState(false)
+  const [previewing, setPreviewing] = useState(false)
   const captured = useRef<number | null>(null)
   const bounds = useRef<{ left: number; width: number } | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -23,10 +24,11 @@ export function SessionDensity({ title, intervals, points, from, to, selectedAt,
   const events = useMemo(() => visiblePoints ?? intervals.map(interval => ({ at: new Date(interval.start).toISOString() })), [visiblePoints, intervals])
   const cells = useMemo(() => secondHeatCells(events, from, to), [events, from, to])
   const selected = selectedItemId ? points?.find(point => point.item_id === selectedItemId) : null
-  const cursor = hoverAt ?? (selected ? Date.parse(selected.at) : selectedAt ? Date.parse(selectedAt) : null)
+  const selectedTime = selected ? Date.parse(selected.at) : selectedAt ? Date.parse(selectedAt) : null
+  const readingTime = readingAt ? Date.parse(readingAt) : null
+  const cursor = previewing ? hoverAt ?? readingTime ?? selectedTime : readingTime ?? selectedTime ?? hoverAt
   const instant = to - from <= 1
   const position = instant ? 50 : cursor === null ? 0 : (cursor - from) / (to - from) * 100
-  const readingTime = readingAt ? Date.parse(readingAt) : null
   const readingPosition = instant ? 50 : readingTime === null ? 0 : Math.max(0, Math.min(100, (readingTime - from) / (to - from) * 100))
   const cell = cursor === null ? null : cells.find(entry => entry.start === Math.floor(cursor / 1000) * 1000)
   const countLabel = complete ? `${cell?.count ?? 0} 条消息` : cell?.count ? `${cell.count}+ 条消息` : ''
@@ -94,7 +96,7 @@ export function SessionDensity({ title, intervals, points, from, to, selectedAt,
     const box = bounds.current ?? event.currentTarget.getBoundingClientRect()
     return timeAtPosition(event.clientX, box.left, box.width, from, to)
   }
-  function leave() { if (captured.current === null) { pendingHover.current = false; if (timer.current) clearTimeout(timer.current); bounds.current = null; setHoverAt(null); setHoverItemId(undefined) } }
+  function leave() { if (captured.current === null) { pendingHover.current = false; if (timer.current) clearTimeout(timer.current); bounds.current = null; setPreviewing(false); setHoverAt(null); setHoverItemId(undefined) } }
 
   return <div className="session-density" data-pending={pending || undefined} data-second-cells={cells.length}
     role={onSeek ? 'slider' : 'img'} aria-label={onSeek ? `定位 ${title} 的消息` : `${title}，${events.length} 条消息`}
@@ -105,21 +107,23 @@ export function SessionDensity({ title, intervals, points, from, to, selectedAt,
     onFocus={() => setFocused(true)} onBlur={() => { setFocused(false); leave() }}
     onPointerMove={event => {
       if (!onSeek) return
-      if (captured.current === event.pointerId) seek(pointerAt(event))
-      else if (event.pointerType !== 'touch') { pendingHover.current = true; setHoverAt(pointerAt(event)); setHoverItemId(undefined) }
+      if (captured.current === event.pointerId) { setPreviewing(true); seek(pointerAt(event)) }
+      else if (event.pointerType !== 'touch') { setPreviewing(true); pendingHover.current = true; setHoverAt(pointerAt(event)); setHoverItemId(undefined) }
     }} onPointerLeave={leave}
     onPointerDown={event => {
       if (!onSeek || disabled || event.button !== 0) return
       event.preventDefault(); captured.current = event.pointerId
+      setPreviewing(true)
       bounds.current = event.currentTarget.getBoundingClientRect()
       event.currentTarget.setPointerCapture(event.pointerId); event.currentTarget.focus(); seek(pointerAt(event))
     }} onPointerUp={event => {
       if (captured.current !== event.pointerId) return
-      seek(pointerAt(event)); captured.current = null; event.currentTarget.releasePointerCapture(event.pointerId)
-    }} onPointerCancel={() => { captured.current = null; leave() }} onLostPointerCapture={() => { captured.current = null }}
+      seek(pointerAt(event)); captured.current = null; setPreviewing(false); event.currentTarget.releasePointerCapture(event.pointerId)
+    }} onPointerCancel={() => { captured.current = null; leave() }} onLostPointerCapture={() => { captured.current = null; setPreviewing(false) }}
     onKeyDown={event => {
       if (!onSeek || disabled || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
       event.preventDefault()
+      setPreviewing(false)
       const ordered = visiblePoints?.toSorted((a, b) => a.at.localeCompare(b.at))
       if (ordered?.length) {
         const identity = hoverItemId ?? selectedItemId

@@ -1,6 +1,10 @@
 # 验证结果
 
-## 当前：旧会话时间、平滑阅读与位置三角
+## 当前：正文滚动的游标同步修复
+
+修复前底部三角会更新，但竖线、aria-valuenow和时间提示仍停留旧选择。修复后非悬停时统一使用正文readingAt；键盘焦点不再锁住旧游标，离开预览恢复实际阅读位置。Sessions32/32、check/build通过，日志：/tmp/tasks-recorder-cursor-sync-{ui,check,build}.log。浏览器已复验聚焦、滚动、预览和离开，三角与竖线百分比、提示时间均一致；截图见/tmp/tasks-recorder-cursor-sync/。本轮没有后端变更，未重复Node suite；以下完整suite数字为历史验证。
+
+## 阶段记录：旧会话时间、平滑阅读与位置三角
 
 2026-10-25最新task-10：Node578/578、React72/72、check/build通过，日志为/tmp/tasks-recorder-reader-{node,ui,check,build}.log。接口返回空时间的30条ai-news样本中，原先14条末条未知，恢复原日志对应时间后全部有结束时间；仍有1条单独消息不能可靠匹配，保留未知。
 

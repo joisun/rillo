@@ -185,7 +185,7 @@ Sessions样式由feature自身的sessions.css维护。宽屏侧栏350px，固定
 
 悬停使用100ms延迟，定位到实际消息ID；精确ID避免同时间消息互相覆盖。尚未读取的秒只显示时间，不显示虚假的0条或阴影说明；可见会话继续自动补页，读到悬停区域后自动定位。pointer capture支持触屏/拖出行，方向键切相邻消息、Home/End跳首尾。正文seek节流160ms，过期响应不能覆盖新位置；手动滚动暂停内部跟随，下一次热力条操作发出followRequest自动恢复，不提供恢复按钮。
 
-桌面热力条位置保持稳定，hover不滚动树行；最近消息重新请求原生head。正文定位仅对conversation容器调用scrollTo({behavior:'smooth'})，减少动态效果时使用instant；手动阅读立即停止自动滚动。正文scroll事件经requestAnimationFrame读取视口中线对应消息，回传原生消息ID和时间，仅更新热力条底部三角，不能发起seek或重读请求，避免双向循环。普通阅读首次滚到最近消息，向前分页仍用原可见消息DOM位置校正。历史Markdown为static，Scheduled行为不变。窄屏保留上下预览，低高度横屏为单栏。
+桌面热力条位置保持稳定，hover不滚动树行；最近消息重新请求原生head。正文定位仅对conversation容器调用scrollTo({behavior:'smooth'})，减少动态效果时使用instant；手动阅读立即停止自动滚动。正文scroll事件经requestAnimationFrame读取视口中线对应消息，回传原生消息ID和时间。非悬停时，竖线、时间提示与三角统一使用readingAt，键盘焦点和旧selectedAt不能覆盖正文位置；悬停/拖动临时显示预览位置，离开或结束后恢复实际阅读位置。回传不能发起seek或重读请求，避免双向循环。普通阅读首次滚到最近消息，向前分页仍用原可见消息DOM位置校正。历史Markdown为static，Scheduled行为不变。窄屏保留上下预览，低高度横屏为单栏。
 
 UI验收需覆盖真实会话数量、标题长度和时间分布；截图可匿名化文字，但不能只靠少量规整fixture判断产品效果。首次悬停、清空后重开、连续浏览、加载更早历史须检查鼠标下方布局与阅读位置是否保持稳定。
 
