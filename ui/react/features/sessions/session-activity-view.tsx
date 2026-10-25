@@ -29,13 +29,15 @@ function useNearViewport() {
   return { anchor, seen }
 }
 
-function ChildrenSource({ api, session, onData, expanded, loaded }: { api: DashboardApi; session: BrowserSession; expanded: boolean; loaded: boolean; onData: (key: string, pages: SessionPage[]) => void }) {
+function ChildrenSource({ api, session, onData, expanded }: { api: DashboardApi; session: BrowserSession; expanded: boolean; onData: (key: string, pages: SessionPage[]) => void }) {
+  const client = useQueryClient()
   const { anchor, seen } = useNearViewport()
   const children = useInfiniteQuery({
     queryKey: queryKeys.sessionChildren(session), initialPageParam: null as string | null,
-    queryFn: ({ pageParam, signal }) => timelineRequests.run(() => api.sessionChildren(session, { cursor: pageParam }, signal), signal),
-    getNextPageParam: (page) => page.next_cursor ?? undefined, retry: false, enabled: seen || expanded || loaded, staleTime: 60_000, gcTime: 300_000, refetchOnWindowFocus: false,
+    queryFn: ({ pageParam, signal }) => timelineRequests.run(() => api.sessionChildren(session, { cursor: pageParam }, signal), signal, expanded ? 'foreground' : 'background'),
+    getNextPageParam: (page) => page.next_cursor ?? undefined, retry: false, enabled: seen || expanded, staleTime: 60_000, gcTime: 300_000, refetchOnWindowFocus: false,
   })
+  useEffect(() => { if (!seen && !expanded) void client.cancelQueries({ queryKey: queryKeys.sessionChildren(session), exact: true }) }, [seen, expanded, client, session])
   useLayoutEffect(() => { if (children.data) onData(sessionKey(session), children.data.pages) }, [children.data, session, onData])
   useEffect(() => { if ((seen || expanded) && children.hasNextPage && !children.isFetching && !children.isError) void children.fetchNextPage() }, [seen, expanded, children.hasNextPage, children.isFetching, children.isError, children.fetchNextPage])
   return <span ref={anchor} className="session-tree__loading" aria-busy={children.isFetching || undefined} />
@@ -52,9 +54,10 @@ function TimelineSource({ api, session, onData, continueSequence = 0, eager = fa
   const { anchor, seen } = useNearViewport()
   const timeline = useInfiniteQuery({
     queryKey: queryKeys.sessionTimeline(session, 'session', session.updated_at ?? ''), initialPageParam: null as string | null,
-    queryFn: ({ pageParam, signal }) => timelineRequests.run(() => api.sessionTimeline(session, { cursor: pageParam }, signal), signal),
+    queryFn: ({ pageParam, signal }) => timelineRequests.run(() => api.sessionTimeline(session, { cursor: pageParam }, signal), signal, eager ? 'foreground' : 'background'),
     getNextPageParam: (page) => page.next_cursor ?? undefined, enabled: seen || eager, retry: false, staleTime: 60_000, gcTime: 300_000, refetchOnWindowFocus: false,
   })
+  useEffect(() => { if (!seen && !eager) void client.cancelQueries({ queryKey: queryKeys.sessionTimeline(session, 'session', session.updated_at ?? ''), exact: true }) }, [seen, eager, client, session])
   useLayoutEffect(() => { if (timeline.data) onData(sessionKey(session), timeline.data.pages) }, [timeline.data, session, onData])
   useEffect(() => {
     if (timeline.isFetching) return
@@ -137,7 +140,6 @@ export function SessionActivityView({ api, sessions, relations, openIds, presenc
     visibleKeys.add(node.key)
     const session = node.session
     const isExpanded = expanded.has(node.key)
-    const loaded = childPages[node.key]
     const hasChildren = node.children.length > 0
     const pages = timelinePages[node.key] ?? []
     const last = pages.at(-1)
@@ -167,7 +169,7 @@ export function SessionActivityView({ api, sessions, relations, openIds, presenc
               {node.conflict ? <span className="session-error">关系冲突，未推断父级</span> : null}
               {fork ? <button type="button" className="session-tree__fork" aria-label="查看 fork 来源" onClick={() => onReadSession(fork)}><GitFork />fork 来源</button> : null}
               {session && session.state !== 'unavailable' ? <>
-                <ChildrenSource api={api} session={session} expanded={isExpanded} loaded={Boolean(loaded)} onData={rememberChildren} />
+                <ChildrenSource api={api} session={session} expanded={isExpanded} onData={rememberChildren} />
                 <TimelineSource api={api} session={session} onData={rememberTimeline} eager={Boolean(timelineRequest && sessionKey(timelineRequest.session) === node.key)} continueSequence={timelineRequest && sessionKey(timelineRequest.session) === node.key ? timelineRequest.sequence : 0} />
               </> : null}
             </div>

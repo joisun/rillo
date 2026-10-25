@@ -16,7 +16,8 @@ export function SessionDensity({ title, intervals, points, from, to, selectedAt,
   const [previewing, setPreviewing] = useState(false)
   const captured = useRef<number | null>(null)
   const bounds = useRef<{ left: number; width: number } | null>(null)
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const frame = useRef<number | null>(null)
+  const lastSeek = useRef('')
   const pendingHover = useRef(false)
   const callback = useRef(onSeek)
   callback.current = onSeek
@@ -34,9 +35,9 @@ export function SessionDensity({ title, intervals, points, from, to, selectedAt,
   const countLabel = complete ? `${cell?.count ?? 0} 条消息` : cell?.count ? `${cell.count}+ 条消息` : ''
   const timeLabel = cursor === null ? '' : new Date(cursor).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
   const disabled = pending || (points !== undefined && events.length === 0)
-  const hoverPoint = hoverItemId ? visiblePoints?.find(entry => entry.item_id === hoverItemId) : hoverAt !== null && visiblePoints ? nearestMessage(visiblePoints, hoverAt) : null
-  const hoverPointAt = hoverPoint?.at
-  const hoverPointId = hoverPoint?.item_id
+  const hoverTarget = useRef<number | null>(null)
+  const hoverOptions = useRef({ visiblePoints, disabled, indexedFrom })
+  hoverOptions.current = { visiblePoints, disabled, indexedFrom }
 
   useEffect(() => {
     const element = canvas.current
@@ -74,13 +75,26 @@ export function SessionDensity({ title, intervals, points, from, to, selectedAt,
   }, [cells, from, to, instant])
 
   useEffect(() => {
-    if (!pendingHover.current || hoverAt === null || disabled || (indexedFrom !== null && hoverAt < indexedFrom)) return
-    timer.current = setTimeout(() => {
-      if (hoverPointAt) callback.current?.(hoverPointAt, hoverPointId)
-      else callback.current?.(new Date(hoverAt).toISOString())
-    }, 100)
-    return () => { if (timer.current) clearTimeout(timer.current) }
-  }, [hoverAt, hoverPointAt, hoverPointId, indexedFrom, disabled])
+    if (pendingHover.current && hoverTarget.current !== null) queueHover(hoverTarget.current)
+  }, [visiblePoints, indexedFrom, disabled])
+  useEffect(() => () => { if (frame.current !== null) { cancelAnimationFrame(frame.current); frame.current = null } }, [])
+
+  function queueHover(value: number) {
+    hoverTarget.current = value
+    if (frame.current !== null) return
+    frame.current = requestAnimationFrame(() => {
+      frame.current = null
+      const target = hoverTarget.current
+      const options = hoverOptions.current
+      if (!pendingHover.current || target === null || options.disabled || options.indexedFrom !== null && target < options.indexedFrom) return
+      const point = options.visiblePoints ? nearestMessage(options.visiblePoints, target) : null
+      const at = point?.at ?? new Date(target).toISOString()
+      const key = `${at}:${point?.item_id ?? ''}`
+      if (lastSeek.current === key) return
+      lastSeek.current = key
+      callback.current?.(at, point?.item_id)
+    })
+  }
 
   function seek(value: number, exact?: MessagePoint) {
     pendingHover.current = false
@@ -88,7 +102,8 @@ export function SessionDensity({ title, intervals, points, from, to, selectedAt,
     const point = exact ?? (visiblePoints ? nearestMessage(visiblePoints, value) : null)
     setHoverItemId(point?.item_id)
     if (disabled || (indexedFrom !== null && value < indexedFrom)) return
-    if (timer.current) clearTimeout(timer.current)
+    if (frame.current !== null) { cancelAnimationFrame(frame.current); frame.current = null }
+    lastSeek.current = `${point?.at ?? new Date(value).toISOString()}:${point?.item_id ?? ''}`
     if (point) callback.current?.(point.at, point.item_id)
     else callback.current?.(new Date(value).toISOString())
   }
@@ -96,7 +111,7 @@ export function SessionDensity({ title, intervals, points, from, to, selectedAt,
     const box = bounds.current ?? event.currentTarget.getBoundingClientRect()
     return timeAtPosition(event.clientX, box.left, box.width, from, to)
   }
-  function leave() { if (captured.current === null) { pendingHover.current = false; if (timer.current) clearTimeout(timer.current); bounds.current = null; setPreviewing(false); setHoverAt(null); setHoverItemId(undefined) } }
+  function leave() { if (captured.current === null) { pendingHover.current = false; if (frame.current !== null) { cancelAnimationFrame(frame.current); frame.current = null }; lastSeek.current = ''; hoverTarget.current = null; bounds.current = null; setPreviewing(false); setHoverAt(null); setHoverItemId(undefined) } }
 
   return <div className="session-density" data-pending={pending || undefined} data-second-cells={cells.length}
     role={onSeek ? 'slider' : 'img'} aria-label={onSeek ? `定位 ${title} 的消息` : `${title}，${events.length} 条消息`}
@@ -108,7 +123,7 @@ export function SessionDensity({ title, intervals, points, from, to, selectedAt,
     onPointerMove={event => {
       if (!onSeek) return
       if (captured.current === event.pointerId) { setPreviewing(true); seek(pointerAt(event)) }
-      else if (event.pointerType !== 'touch') { setPreviewing(true); pendingHover.current = true; setHoverAt(pointerAt(event)); setHoverItemId(undefined) }
+      else if (event.pointerType !== 'touch') { const value = pointerAt(event); setPreviewing(true); pendingHover.current = true; setHoverAt(value); setHoverItemId(undefined); queueHover(value) }
     }} onPointerLeave={leave}
     onPointerDown={event => {
       if (!onSeek || disabled || event.button !== 0) return

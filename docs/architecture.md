@@ -143,6 +143,10 @@ Adapter 提供 `id/name/runtimeId/storeId/capabilities`、可信 `resumeOptions`
 
 当前 Codex adapter 经现有 executable resolver 启动共享、空闲 45 秒关闭的只读 app-server 连接。初始化开启 experimentalApi。每个 native RPC 20 秒超时、协议帧最多 8 MiB；列表每页最多 100 条。主来源为 cli/vscode/appServer/exec，归档单独查询，默认不聚合 subagents。列表使用 `thread/list` 的 cwd 与 recency_at；正文查询使用实验 `thread/search`，不使用仅标题搜索的 searchTerm 列表过滤。原生搜索无 cwd 参数，因此 adapter 每次最多扫描 3 页后返回 continuation cursor，即使本页过滤后为空也不能报全局无结果。
 
+列表及原生children使用useStateDbOnly=true，避免前台重复扫描rollout修复索引。`adapters/codex-sessions/metadata.mjs`按adapter实例隔离数据源，对规范化参数合并并发请求，最多缓存64页元数据；3秒内直接复用，3–30秒先返回缓存再刷新，过期等待新结果。正文、搜索及命中片段不进入该缓存。UI根列表与目录使用相同100条原生页，不截断数据或重写native cursor。正常核验在首次读取3秒后由独立app-server执行，单数据源合并，最多每5分钟扫描一次非归档与归档页，完成后失效缓存；失败不关闭交互连接。初始根列表为空时必须等待核验，失败不能当作空列表。后台连接完成即关闭，adapter.close释放连接、watcher和timer。
+
+原生通知、sessions/archived_sessions下的jsonl变更及session_index.jsonl触发失效，1秒合并发布SSE。root watcher只监听上述入口，不递归插件或其他配置；日志watch失败时由页面可见期间15秒元数据补查与按需后台核验兜底。目录、无搜索的列表、children和relations接受修订；正文搜索不被事件轮询。旧代请求不能覆盖新代缓存。
+
 命中预览使用 `thread/searchOccurrences` 返回的 turnCursor，再调用 `thread/turns/list`；只展示 userMessage 文本和 agentMessage，忽略工具与 reasoning。每次最多 5 个 turn、256 KiB 字符，单消息最多 16 KiB 字符，截断时显式告知；命中消息预留空间。旧版本缺少搜索/分页方法时返回 typed unsupported，不使用 preview 替代正文搜索。当前只定位首处命中，允许切回最近对话与加载更早页。
 
 HTTP 入口为 `/api/v1/session-browser/providers`、`/:provider/workspaces`、`/:provider/sessions`、`/:provider/activity`、`/:provider/sessions/:id/read|children|timeline|messages|resume` 以及 `/relations`、`/links`（均在 session-browser 前缀下）。读取支持有界 query/workspace/archived/cursor/limit；具体会话接口校验 store_id。relations 必须指定完整引用。恢复 POST body 仅允许 store_id；服务重新读取原生 metadata、检查目录和已知 active 状态，再使用持久化终端设置调用现有 launcher。Codex status 仅代表该 app-server 已知状态，不提供跨进程的全局运行锁。
@@ -151,7 +155,7 @@ HTTP 入口为 `/api/v1/session-browser/providers`、`/:provider/workspaces`、`
 
 Codex timeline的from/to均省略时，scope=session，主读thread/items/list，每HTTP请求最多3页、每页100 item；显式时间窗兼容Turn segments组合分页。bounds返回创建时间start_at、最后一条所属用户/助手消息end_at、end_state及indexed_from。消息时间优先completedAtMs，再用startedAtMs；旧数据缺失时由codex-rollout-timing补读原始记录时间。points不计fork创建前历史、工具或reasoning；无法可靠恢复的末条时间仍保留unknown。
 
-时间缓存仅含item/Turn ID、时间、角色和原生分页锚点，不留正文。消息索引最多50会话、每会话50,000 point/1024 native page、滑动5分钟TTL。updated_at改变时清除覆盖及分页缓存，保留有界精确ID锚点；旧锚点不能证明新版本时间覆盖。按时间定位接受可选item_id，以区分同一时间的消息；原生页移动时用thread/items/read按turnId和itemIds验证目标，不静默替换为相邻消息。未覆盖目标返回SESSION_TIMELINE_INCOMPLETE，前端自动补读时间元数据后重试。coverage区分partial/complete/unsupported；旧CLI的正文定位可回退Turn级，但热力条不伪造消息时间。正文容量限制和媒体占位保持不变。
+时间缓存仅含item/Turn ID、时间、角色和原生分页锚点，不留正文。消息索引最多50会话、每会话50,000 point/1024 native page、滑动5分钟TTL。updated_at改变后先清除新版本覆盖证明，保留有界精确ID锚点。对已从头读到末尾的完整索引，codex-rollout-history通过可信原生日志路径、同一文件身份与完整旧前缀SHA256验证历史未变，再确认旧末条消息的ID、时间、轮次和角色仍出现在新头部；满足才复用旧时间点。文件最多64MiB，读取时变化、截断、重写或无法证明均重新读取，撤回导致旧末消息消失时也重读；不缓存日志字节。复用结果以可失效的opaque snapshot cursor每次最多300点分页，不将旧native cursor误当成新页位置。按时间定位接受可选item_id，以区分同一时间的消息；原生页移动时用thread/items/read按turnId和itemIds验证目标，不静默替换为相邻消息。未覆盖目标返回SESSION_TIMELINE_INCOMPLETE，前端自动补读时间元数据后重试。coverage区分partial/complete/unsupported；旧CLI的正文定位可回退Turn级，但热力条不伪造消息时间。正文容量限制和媒体占位保持不变。
 
 API v5 的 MCP 仅公开 session_sources、session_link 与 session_unlink。Task lifecycle、attribution、checkpoint、summary、projection、spool 不再进入运行链路。旧 Task 路由统一 410 TASKS_RETIRED，正常请求还校验客户端 API version；旧插件不能静默继续写入。
 
@@ -160,6 +164,8 @@ codex-rollout-timing仅在可展示消息缺少原生时间时启用。路径来
 可选activity()与live_presence返回store_id、available、open_session_ids、active_workspaces及checked_at。macOS通过有2秒超时、4MiB输出上限的lsof识别canonical数据根内可写rollout，排除只读、已删除和其他数据根。对匹配文件仅解析有512KiB读取上限的首行session_meta.cwd，缓存目录5分钟/128项；不保留正文或进程环境。活跃目录包含尚未进入列表的会话。探测缓存3秒、合并并发；失败撤下旧证据。绿点表示仍打开，不等于生成中，也不是恢复操作的全局锁。
 
 React Sessions列表与树共用目录、搜索、选择和预览。目录、会话、搜索结果和更早消息通过IntersectionObserver在滚动边缘自动翻页；过滤后的空搜索页也自动继续。目录计数仅为已观测数量。正文搜索debounce 300ms，在ComboBox/Popover/ListBox浮层展示，选择后按该query定位。活跃状态独立每5秒刷新，不轮询正文搜索。请求错误若影响连接或根列表/目录，在Sessions整个区域统一显示，并每3秒重试空闲的失败查询，不反复中断慢请求。共享Codex连接按实例处理关闭，旧连接延迟失败不能关闭新连接。内容仅在查询内存中；REST仍沿用loopback、Origin、JSON与脱敏边界。
+
+热力/children队列最多4个在途请求，后台任务最多占3个，为显式定位或展开保留位置；排队时用户请求先执行，离屏通过AbortSignal取消等待和HTTP读取并停止继续翻页。HTTP取消不宣称能够中止已经发出的原生RPC。自动分页每次加载后重新验证IntersectionObserver，不沿用插入新内容前的旧可见状态。
 
 ## Run output files
 
@@ -183,9 +189,9 @@ Sessions样式由feature自身的sessions.css维护。宽屏侧栏350px，固定
 
 每条热力条使用独立会话起止范围，不再使用全局7天或日/时/分切换，不聚合项目曲线。secondHeatCells按真实UTC秒计数，空秒稀疏表示；Canvas绘制矩形，以每秒消息数的对数映射颜色深度。物理像素容不下所有秒格时保留该像素内最高每秒计数，不能叠加alpha伪造密度。TimelineSource在行进入屏幕120px附近时持续分页，离屏暂停补页，原生并发最多4。子树缓存60秒、gcTime5分钟，只为确有子节点的行提供展开按钮；useLayoutEffect在paint前同步子节点。无时间、unavailable或unsupported不持续伪造索引。
 
-悬停使用100ms延迟，定位到实际消息ID；精确ID避免同时间消息互相覆盖。尚未读取的秒只显示时间，不显示虚假的0条或阴影说明；可见会话继续自动补页，读到悬停区域后自动定位。pointer capture支持触屏/拖出行，方向键切相邻消息、Home/End跳首尾。正文seek节流160ms，过期响应不能覆盖新位置；手动滚动暂停内部跟随，下一次热力条操作发出followRequest自动恢复，不提供恢复按钮。
+悬停从pointer事件直接安排requestAnimationFrame，连续移动时每帧取最新目标，同一消息ID/时间不重复定位；精确ID避免同时间消息互相覆盖。尚未读取的秒只显示时间，不显示虚假的0条或阴影说明；可见会话继续自动补页，读到悬停区域后自动定位。pointer capture支持触屏/拖出行，方向键切相邻消息、Home/End跳首尾。正文按当前已加载消息的ID与时间直接定位，不改变查询键；只有目标不在当前页时才读取。慢读取期间保留最新目标，完成后先检查返回页能否满足新目标，再决定是否继续查询，不因每次鼠标移动取消在途读取，也不把旧请求的匹配标记用到新位置。不增加跨窗口正文缓存，gcTime仍为0。滚动使用约100ms的可转向缓出动画；手动输入及更早分页锚点维护取消动画，reduced-motion直接定位。手动滚动暂停内部跟随，下一次热力条操作发出followRequest自动恢复，不提供恢复按钮。
 
-桌面热力条位置保持稳定，hover不滚动树行；最近消息重新请求原生head。正文定位仅对conversation容器调用scrollTo({behavior:'smooth'})，减少动态效果时使用instant；手动阅读立即停止自动滚动。正文scroll事件经requestAnimationFrame读取视口中线对应消息，回传原生消息ID和时间。非悬停时，竖线、时间提示与三角统一使用readingAt，键盘焦点和旧selectedAt不能覆盖正文位置；悬停/拖动临时显示预览位置，离开或结束后恢复实际阅读位置。回传不能发起seek或重读请求，避免双向循环。普通阅读首次滚到最近消息，向前分页仍用原可见消息DOM位置校正。历史Markdown为static，Scheduled行为不变。窄屏保留上下预览，低高度横屏为单栏。
+桌面热力条位置保持稳定，hover不滚动树行；最近消息重新请求原生head。正文定位仅在conversation容器中用动画帧插值更新scrollTop，原生scrollTo使用instant避免叠加浏览器动画；减少动态效果时直接到目标，手动阅读立即停止自动滚动。正文scroll事件经requestAnimationFrame读取视口中线对应消息，回传原生消息ID和时间。非悬停时，竖线、时间提示与三角统一使用readingAt，键盘焦点和旧selectedAt不能覆盖正文位置；悬停/拖动临时显示预览位置，离开或结束后恢复实际阅读位置。回传不能发起seek或重读请求，避免双向循环。普通阅读首次滚到最近消息，向前分页仍用原可见消息DOM位置校正。历史Markdown为static，Scheduled行为不变。窄屏保留上下预览，低高度横屏为单栏。
 
 UI验收需覆盖真实会话数量、标题长度和时间分布；截图可匿名化文字，但不能只靠少量规整fixture判断产品效果。首次悬停、清空后重开、连续浏览、加载更早历史须检查鼠标下方布局与阅读位置是否保持稳定。
 

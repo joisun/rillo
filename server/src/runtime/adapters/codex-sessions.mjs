@@ -8,6 +8,8 @@ import { createCodexSessionPresence } from '../codex-session-presence.mjs'
 import { codexTimestamp, createCodexSessionTimeline } from '../codex-session-timeline.mjs'
 import { messageTimestamp } from '../codex-message-timing.mjs'
 import { createCodexRolloutTiming } from '../codex-rollout-timing.mjs'
+import { createSessionMetadata } from './codex-sessions/metadata.mjs'
+import { createCodexRolloutHistory } from '../codex-rollout-history.mjs'
 
 const SOURCES = ['cli', 'vscode', 'appServer', 'exec']
 const MESSAGE_LIMIT = 16 * 1024
@@ -36,6 +38,9 @@ export function createCodexSessionAdapter({
   resolveLaunch,
   createClient = createCodexAppServerClient,
   dataRoot = process.env.CODEX_HOME ?? join(homedir(), '.codex'),
+  onChange,
+  clock,
+  watchImpl,
 } = {}) {
   const root = resolve(dataRoot)
   const storeId = createHash('sha256').update(root).digest('hex').slice(0, 20)
@@ -44,9 +49,12 @@ export function createCodexSessionAdapter({
   let idleTimer = null
   let activeRequests = 0
   let closed = false
+  let repairClient = null
+  const metadataPages = createSessionMetadata({ load: listPage, reconcile, dataRoot: root, onChange, clock, watchImpl })
   const rolloutPaths = new WeakMap()
   const rolloutTiming = createCodexRolloutTiming({ dataRoot: root, resolvePath: metadata => rolloutPaths.get(metadata) })
-  const timeIndex = createCodexSessionTimeline({ request, readSession, hydrateEntries: rolloutTiming.hydrate })
+  const historyRevision = createCodexRolloutHistory({ dataRoot: root, resolvePath: metadata => rolloutPaths.get(metadata) })
+  const timeIndex = createCodexSessionTimeline({ request, readSession, hydrateEntries: rolloutTiming.hydrate, historyRevision })
 
   function closeConnection(expected = connection) {
     if (connection !== expected) return
@@ -76,6 +84,9 @@ export function createCodexSessionAdapter({
             capabilities: { experimentalApi: true },
           })
           client.notify('initialized')
+          client.onNotification?.(({ method }) => {
+            if (/^(thread\/(?:started|archived|unarchived|name\/updated|status\/changed)|turn\/completed)$/.test(method)) metadataPages.changed()
+          })
           return client
         } catch (error) {
           client.close()
@@ -84,6 +95,33 @@ export function createCodexSessionAdapter({
       })()
     }
     return connection
+  }
+
+  async function reconcile() {
+    const launch = await resolveLaunch()
+    if (closed) return
+    // Log repair is slow and must not serialize interactive reads behind it.
+    const client = createClient({ executable: launch.executable, cwd: homedir(), env: { CODEX_HOME: root }, requestTimeoutMs: 20_000, maximumLineBytes: 8 * 1024 * 1024 })
+    repairClient = client
+    try {
+      await client.started
+      await client.request('initialize', { clientInfo: { name: 'tasks-recorder-session-repair', version: '0.1.0' }, capabilities: { experimentalApi: true } })
+      client.notify('initialized')
+      for (const archived of [false, true]) nativePage(await client.request('thread/list', {
+        cursor: null, limit: 100, archived, sortKey: 'recency_at', sortDirection: 'desc', useStateDbOnly: false,
+      }))
+    } catch {
+      throw sessionBrowserError('SESSION_BROWSER_UNAVAILABLE', 'Codex 历史索引核验失败，请稍后重试。', 503)
+    } finally {
+      client.close()
+      if (repairClient === client) repairClient = null
+    }
+  }
+
+  async function listPage(params) {
+    const result = nativePage(await request('thread/list', { ...params, useStateDbOnly: true }))
+    if (result.cursor !== null && result.cursor === params.cursor) throw sessionBrowserError('SESSION_BROWSER_READ_FAILED', 'Codex returned a repeated cursor', 502)
+    return { sessions: result.data.map(row => ({ ...session(row), snippet: null })).filter(row => !params.cwd || row.workspace === params.cwd), next_cursor: result.cursor, scanned_count: result.data.length, search_scope: null }
   }
 
   async function request(method, params) {
@@ -149,6 +187,10 @@ export function createCodexSessionAdapter({
   }
 
   async function list({ workspace, query, archived, cursor, limit }) {
+    if (!query) return metadataPages.list({
+      cursor, limit, archived, sortKey: 'recency_at', sortDirection: 'desc', sourceKinds: SOURCES,
+      ...(workspace ? { cwd: workspace } : {}),
+    })
     let next = cursor
     let scanned = 0
     let data = []
@@ -191,11 +233,11 @@ export function createCodexSessionAdapter({
   }
 
   async function children(sessionId, { cursor, limit }) {
-    const result = nativePage(await request('thread/list', {
+    const result = await metadataPages.list({
       parentThreadId: sessionId, cursor, limit, archived: false, sortKey: 'recency_at', sortDirection: 'desc',
       sourceKinds: ['subAgent', 'subAgentReview', 'subAgentCompact', 'subAgentThreadSpawn', 'subAgentOther'],
-    }))
-    return { sessions: result.data.map(session).filter((row) => row.native_parent?.session_id === sessionId), next_cursor: result.cursor, scanned_count: result.data.length, search_scope: null }
+    })
+    return { ...result, sessions: result.sessions.filter((row) => row.native_parent?.session_id === sessionId) }
   }
 
   async function messages(sessionId, { cursor, query = '', limit = 5, at = null, item_id = null }) {
@@ -313,6 +355,6 @@ export function createCodexSessionAdapter({
     timeline: timeIndex.timeline,
     readSession,
     messages,
-    close() { closed = true; closeConnection(); timeIndex.clear(); rolloutTiming.clear() },
+    close() { closed = true; metadataPages.close(); repairClient?.close(); closeConnection(); timeIndex.clear(); rolloutTiming.clear() },
   }
 }

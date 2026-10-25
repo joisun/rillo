@@ -12,16 +12,7 @@ import { AutoPager } from './session-auto-pager'
 import { isSessionConnectionError } from './session-health'
 import { SessionRelations } from './session-relations'
 
-function useThrottledPosition(at: string | null, itemId?: string) {
-  const [value, setValue] = useState({ at, itemId })
-  const lastUpdate = useRef(0)
-  useEffect(() => {
-    if (at === null) { setValue({ at, itemId }); return }
-    const timer = window.setTimeout(() => { lastUpdate.current = Date.now(); setValue({ at, itemId }) }, Math.max(0, 160 - (Date.now() - lastUpdate.current)))
-    return () => window.clearTimeout(timer)
-  }, [at, itemId])
-  return value
-}
+const SEEK_SCROLL_MS = 100
 
 export function SessionDetail({ api, session, query, onBack, isOpen, at = null, itemId, followRequest = 0, onReadingPosition, onReadSession, onLoadTimeline, onExpand }: {
   api: DashboardApi
@@ -45,6 +36,7 @@ export function SessionDetail({ api, session, query, onBack, isOpen, at = null, 
   const matchedMessage = useRef<HTMLDivElement>(null)
   const conversation = useRef<HTMLDivElement>(null)
   const scrollFrame = useRef<number | null>(null)
+  const seekFrame = useRef<number | null>(null)
   const readingCallback = useRef(onReadingPosition)
   readingCallback.current = onReadingPosition
   const openedRecent = useRef(false)
@@ -52,15 +44,17 @@ export function SessionDetail({ api, session, query, onBack, isOpen, at = null, 
   const [following, setFollowing] = useState(true)
   const pausedAt = useRef<string | null>(null)
   const pausedItem = useRef<string | undefined>(undefined)
-  const position = useThrottledPosition(at, itemId)
-  const seekAt = at ? (following ? position.at : pausedAt.current) : null
-  const seekItem = at ? (following ? position.itemId : pausedItem.current) : undefined
+  const [position, setPosition] = useState({ at, itemId })
+  const seekAt = at ? (following ? at : pausedAt.current) : null
+  const seekItem = at ? (following ? itemId : pausedItem.current) : undefined
+  const requestAt = at ? position.at : null
+  const requestItem = at ? position.itemId : undefined
   const search = !at && locateMatch ? query : ''
   useEffect(() => { setLocateMatch(Boolean(query)); setFollowing(true) }, [query, followRequest])
   const history = useInfiniteQuery({
-    queryKey: queryKeys.sessionMessages(session.provider, session.store_id, session.session_id, search, seekAt ?? '', seekItem ?? ''),
+    queryKey: queryKeys.sessionMessages(session.provider, session.store_id, session.session_id, search, requestAt ?? '', requestItem ?? ''),
     initialPageParam: null as string | null,
-    queryFn: ({ pageParam, signal }) => api.sessionMessages(session, { cursor: pageParam, query: search, ...(seekAt ? { at: seekAt, ...(seekItem ? { item_id: seekItem } : {}) } : {}), limit: 5 }, signal),
+    queryFn: ({ pageParam, signal }) => api.sessionMessages(session, { cursor: pageParam, query: search, ...(requestAt ? { at: requestAt, ...(requestItem ? { item_id: requestItem } : {}) } : {}), limit: 5 }, signal),
     getNextPageParam: (page: SessionMessagesPage) => page.next_cursor ?? undefined,
     gcTime: 0,
     retry: false,
@@ -70,23 +64,32 @@ export function SessionDetail({ api, session, query, onBack, isOpen, at = null, 
   const current = pages[0]?.session ?? session
   const match = pages[0]?.match
   const seek = pages[0]?.seek
-  const located = seekAt ? seek : match
   useEffect(() => {
-    if (!(history.error instanceof DashboardApiError) || history.error.code !== 'SESSION_TIMELINE_INCOMPLETE') return
+    if (requestAt !== seekAt || requestItem !== seekItem || !(history.error instanceof DashboardApiError) || history.error.code !== 'SESSION_TIMELINE_INCOMPLETE') return
     const key = `${seekAt}:${seekItem}`
     if (repairedPosition.current === key) return
     repairedPosition.current = key
     onLoadTimeline()
-  }, [history.error, seekAt, seekItem, onLoadTimeline])
+  }, [history.error, seekAt, seekItem, requestAt, requestItem, onLoadTimeline])
   useEffect(() => {
-    if (!following || history.isPlaceholderData || !seekItem || seek?.item_id !== seekItem || !seek.at || seek.at === seekAt) return
+    if (!following || requestAt !== seekAt || history.isPlaceholderData || !seekItem || seek?.item_id !== seekItem || !seek.at || seek.at === seekAt) return
     const value = seekItem + ':' + seek.at
     if (syncedTime.current === value) return
     syncedTime.current = value
     void client.invalidateQueries({ queryKey: ['dashboard', 'session-browser', session.provider, session.store_id, session.session_id, 'timeline'] })
-  }, [client, following, history.isPlaceholderData, seekItem, seek?.item_id, seek?.at, seekAt, session.provider, session.store_id, session.session_id])
+  }, [client, following, requestAt, history.isPlaceholderData, seekItem, seek?.item_id, seek?.at, seekAt, session.provider, session.store_id, session.session_id])
   const messages = [...new Map(pages.toReversed().flatMap((page) => page.messages)
     .map((message) => [`${message.turn_id}:${message.id}`, message])).values()]
+  const localTarget = seekAt ? messages.find(message => message.at === seekAt && (!seekItem || message.id === seekItem)) : null
+  const requestedTarget = requestAt === seekAt && requestItem === seekItem && !history.isPlaceholderData ? seek : null
+  const localMatch = localTarget ? { item_id: localTarget.id, turn_id: localTarget.turn_id } : null
+  const located = seekAt ? localMatch ?? requestedTarget : match
+  useEffect(() => {
+    if (!following || !seekAt || localTarget || history.isFetching || requestAt === seekAt && requestItem === seekItem) return
+    // Finish the current page, then read the latest missing target. Moving the
+    // pointer must not repeatedly cancel a page before it can become useful.
+    setPosition({ at: seekAt, itemId: seekItem })
+  }, [following, seekAt, seekItem, Boolean(localTarget), history.isFetching, requestAt, requestItem])
 
   const reportReadingPosition = useCallback(() => {
     scrollFrame.current = null
@@ -112,12 +115,25 @@ export function SessionDetail({ api, session, query, onBack, isOpen, at = null, 
 
   useLayoutEffect(() => {
     const body = conversation.current, message = matchedMessage.current
-    if (!located || !following || history.isPlaceholderData || !body || !message) return
+    if (!located || !following || history.isPlaceholderData && !localTarget || !body || !message) return
     const rect = message.getBoundingClientRect()
     const offset = body.scrollTop + rect.top - body.getBoundingClientRect().top - (body.clientHeight - Math.min(rect.height, body.clientHeight)) / 2
     const top = Math.max(0, Math.min(body.scrollHeight - body.clientHeight, offset))
-    body.scrollTo({ top, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })
-  }, [located?.item_id, located?.turn_id, seekAt, following, history.isPlaceholderData])
+    if (Math.abs(body.scrollTop - top) < 1 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      body.scrollTo({ top, behavior: 'instant' })
+      reportReadingPosition()
+      return
+    }
+    const origin = body.scrollTop, started = performance.now()
+    const step = (now: number) => {
+      const progress = Math.min(1, (now - started) / SEEK_SCROLL_MS)
+      body.scrollTo({ top: origin + (top - origin) * (1 - (1 - progress) ** 3), behavior: 'instant' })
+      if (progress < 1) seekFrame.current = requestAnimationFrame(step)
+      else { seekFrame.current = null; reportReadingPosition() }
+    }
+    seekFrame.current = requestAnimationFrame(step)
+    return () => { if (seekFrame.current !== null) { cancelAnimationFrame(seekFrame.current); seekFrame.current = null } }
+  }, [located?.item_id, located?.turn_id, seekAt, following, history.isPlaceholderData, followRequest])
 
   useLayoutEffect(() => {
     const body = conversation.current
@@ -134,6 +150,7 @@ export function SessionDetail({ api, session, query, onBack, isOpen, at = null, 
   }, [history.data, history.isFetchingNextPage, history.isPlaceholderData, at, search, messages.length])
 
   function loadOlder() {
+    if (seekFrame.current !== null) { cancelAnimationFrame(seekFrame.current); seekFrame.current = null }
     const body = conversation.current
     if (body) {
       const top = body.getBoundingClientRect().top
@@ -144,6 +161,7 @@ export function SessionDetail({ api, session, query, onBack, isOpen, at = null, 
   }
 
   function pauseFollowing() {
+    if (seekFrame.current !== null) { cancelAnimationFrame(seekFrame.current); seekFrame.current = null }
     if (!at || !following) return
     pausedAt.current = seekAt
     pausedItem.current = seekItem

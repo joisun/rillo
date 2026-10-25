@@ -9,16 +9,19 @@ export function AutoPager({ enabled, loading, onMore, observeLastWithin }: {
   const callback = useRef(onMore)
   callback.current = onMore
   const [visible, setVisible] = useState(false)
+  const visibility = useRef(false)
   useEffect(() => {
     if (!anchor.current || typeof IntersectionObserver === 'undefined') return
     const options = observeLastWithin?.current?.querySelectorAll('[role="option"]')
     const target = options?.length ? options[options.length - 1] : anchor.current
-    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { rootMargin: '160px' })
+    visibility.current = false
+    setVisible(false)
+    const observer = new IntersectionObserver(([entry]) => { visibility.current = entry.isIntersecting; setVisible(entry.isIntersecting) }, { rootMargin: '160px' })
     observer.observe(target)
     return () => observer.disconnect()
   }, [enabled, loading, observeLastWithin])
   useEffect(() => {
-    if (!visible || !enabled || loading || busy) return
+    if (!visible || !visibility.current || !enabled || loading || busy) return
     setBusy(true)
     Promise.resolve().then(() => callback.current()).catch(() => {}).finally(() => setBusy(false))
   }, [visible, enabled, loading, busy])

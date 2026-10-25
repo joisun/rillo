@@ -386,7 +386,7 @@ export async function startTaskd({
       runService,
     })
     sessionBrowser = createBrowser({
-      adapters: [createSessionAdapter({ resolveLaunch: () => runtimeRegistry.resolve('codex') })],
+      adapters: [createSessionAdapter({ resolveLaunch: () => runtimeRegistry.resolve('codex'), onChange: () => hub.publish() })],
       settings: dashboardSettings,
       terminalLauncher,
       links,

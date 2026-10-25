@@ -6,14 +6,17 @@ const PAGE_BUDGET = 3
 
 function visible(entry) { return ['userMessage', 'agentMessage'].includes(entry.item?.type) }
 function owned(metadata, point) { return !metadata.forked_from || !metadata.created_at || point.at >= metadata.created_at }
+function reusable(value) { return value?.complete && value.scanCursor === null && value.indexedFrom && value.headDone }
 
-export function createCodexMessageIndex({ request, clock = Date.now, hydrateEntries = async (_metadata, entries) => entries }) {
+export function createCodexMessageIndex({ request, clock = Date.now, hydrateEntries = async (_metadata, entries) => entries, historyRevision = async () => null }) {
   const indexes = new Map()
+  let snapshotSequence = 0
   function index(metadata) {
     let value = indexes.get(metadata.session_id)
     if (!value || value.expires < clock() || value.updated !== metadata.updated_at) {
-      const anchors = value && value.expires >= clock() ? value.anchors : new Map()
-      value = { updated: metadata.updated_at, expires: clock() + 300_000, pages: new Map(), points: new Map(), anchors, untimed: new Set(), complete: false, headCursor: null, headDone: false, latest: null, scanCursor: null, indexedFrom: null }
+      const previous = value && value.expires >= clock() ? value : null
+      const anchors = previous?.anchors ?? new Map()
+      value = { updated: metadata.updated_at, expires: clock() + 300_000, pages: new Map(), points: new Map(), anchors, untimed: new Set(), complete: false, headCursor: null, headDone: false, latest: null, scanCursor: null, indexedFrom: null, previous: reusable(previous) ? previous : null, revision: null, snapshot: null }
       indexes.set(metadata.session_id, value)
       if (indexes.size > 50) indexes.delete(indexes.keys().next().value)
     }
@@ -53,10 +56,10 @@ export function createCodexMessageIndex({ request, clock = Date.now, hydrateEntr
       const at = messageTimestamp(entry)
       if (at && (!earliest || at < earliest)) earliest = at
       if (!visible(entry) || typeof entry.item.id !== 'string' || typeof entry.turnId !== 'string') continue
-      if (!at) { current.untimed.add(entry.item.id); firstMessage ??= { at: null }; continue }
+      if (!at) { current.untimed.add(entry.item.id); firstMessage ??= { at: null, item_id: entry.item.id }; continue }
       const point = { item_id: entry.item.id, turn_id: entry.turnId, role: entry.item.type === 'userMessage' ? 'user' : 'assistant', at, cursor }
       if (!owned(metadata, point)) continue
-      firstMessage ??= { at }
+      firstMessage ??= { at, item_id: entry.item.id }
       current.untimed.delete(point.item_id)
       current.points.set(point.item_id, point)
       current.anchors.set(point.item_id, point)
@@ -74,6 +77,15 @@ export function createCodexMessageIndex({ request, clock = Date.now, hydrateEntr
 
   async function timeline(metadata, { from, to, cursor = null }) {
     const current = index(metadata)
+    if (cursor?.startsWith('cached:')) return snapshotPage(current, from, to, cursor)
+    const previous = cursor === null ? current.previous ?? (reusable(current) ? { ...current, points: new Map(current.points), untimed: new Set(current.untimed) } : null) : null
+    let revision = null
+    if (previous?.revision) revision = await historyRevision(metadata, previous.revision)
+    if (previous) {
+      current.previous = null
+      current.points.clear(); current.pages.clear(); current.untimed.clear()
+      current.complete = false; current.indexedFrom = null; current.scanCursor = null; current.snapshot = null
+    }
     const points = []
     let next = cursor
     let indexedFrom = null
@@ -87,13 +99,39 @@ export function createCodexMessageIndex({ request, clock = Date.now, hydrateEntr
         }
         points.push(...batch.points.filter((point) => point.at >= from && point.at < to).map(({ cursor: _, ...point }) => point))
         next = batch.next
+        const oldLatest = previous?.latest?.item_id ? previous.points.get(previous.latest.item_id) : null
+        const overlap = oldLatest ? current.points.get(oldLatest.item_id) : null
+        if (revision?.preserves && oldLatest && overlap && !previous.untimed.size && overlap.at === oldLatest.at && overlap.turn_id === oldLatest.turn_id && overlap.role === oldLatest.role) {
+          current.points = new Map([...previous.points, ...current.points])
+          if (current.points.size > 50_000) throw sessionBrowserError('SESSION_TIMELINE_LIMIT', '本次会话消息索引超过上限', 409)
+          current.complete = true
+          current.scanCursor = null
+          current.indexedFrom = previous.indexedFrom
+          current.revision = revision
+          current.snapshot = { token: String(++snapshotSequence), points: [...current.points.values()].sort((a, b) => b.at.localeCompare(a.at) || a.item_id.localeCompare(b.item_id)) }
+          return snapshotPage(current, from, to)
+        }
         if (next === null || (batch.earliest && batch.earliest < from)) { next = null; break }
       }
     } catch (error) {
       if (error.code !== 'SESSION_BROWSER_UNSUPPORTED') throw error
       return { points: [], next_cursor: null, points_coverage: 'unsupported', untimed_messages: 0 }
     }
+    if (reusable(current)) current.revision = revision ?? await historyRevision(metadata)
     return { points: [...new Map(points.map((point) => [point.item_id, point])).values()], next_cursor: next, points_coverage: next ? 'partial' : 'complete', untimed_messages: current.untimed.size, indexed_from: indexedFrom }
+  }
+
+  function snapshotPage(current, from, to, cursor = null) {
+    const parts = cursor?.split(':')
+    const offset = parts ? Number(parts[2]) : 0
+    if (!current.snapshot || parts && (parts[1] !== current.snapshot.token || parts.length !== 3 || !Number.isSafeInteger(offset) || offset < 0)) {
+      throw sessionBrowserError('SESSION_TIMELINE_INCOMPLETE', '会话时间线已更新，请重新读取', 409)
+    }
+    const all = current.snapshot.points.filter(point => point.at >= from && point.at < to)
+    const points = all.slice(offset, offset + PAGE_SIZE * PAGE_BUDGET).map(({ cursor: _, ...point }) => point)
+    const next = offset + points.length
+    return { points, next_cursor: next < all.length ? `cached:${current.snapshot.token}:${next}` : null,
+      points_coverage: next < all.length ? 'partial' : 'complete', untimed_messages: current.untimed.size, indexed_from: points.at(-1)?.at ?? null }
   }
 
   async function locate(metadata, at, itemId) {

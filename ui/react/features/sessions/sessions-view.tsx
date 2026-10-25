@@ -66,15 +66,17 @@ export function SessionsView({ api }: { api: DashboardApi }) {
     getNextPageParam: (page: SessionWorkspacePage) => page.next_cursor ?? undefined,
     enabled: Boolean(provider),
     retry: false,
+    staleTime: 3000, refetchInterval: 15_000, refetchOnWindowFocus: true,
   })
   const results = useInfiniteQuery({
     queryKey: queryKeys.sessionList(providerId, workspace, '', false),
     initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) => api.sessions(providerId, { workspace, cursor: pageParam }),
+    queryFn: ({ pageParam }) => api.sessions(providerId, { workspace, cursor: pageParam, limit: 100 }),
     getNextPageParam: (page: SessionPage) => page.next_cursor ?? undefined,
     enabled: Boolean(provider),
     retry: false,
     gcTime: 60_000,
+    staleTime: 3000, refetchInterval: 15_000, refetchOnWindowFocus: true,
   })
   const sessions = useMemo(() => [...new Map((results.data?.pages ?? []).flatMap((page) => page.sessions)
     .map((session) => [sessionKey(session), session])).values()], [results.data])

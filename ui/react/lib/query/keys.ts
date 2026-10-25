@@ -3,6 +3,7 @@ import type { SessionRef } from '../api/types'
 export function isSessionMetadataQuery(key: readonly unknown[]) {
   if (key[0] !== 'dashboard' || key[1] !== 'session-browser') return false
   if (key[3] === 'list') return key[5] === ''
+  if (key[3] === 'workspaces') return true
   return key.at(-1) === 'children' || key.at(-1) === 'relations'
 }
 

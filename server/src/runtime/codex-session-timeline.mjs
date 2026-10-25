@@ -17,9 +17,9 @@ function turnTime(turn) {
   return { start, end }
 }
 
-export function createCodexSessionTimeline({ request, readSession, clock = Date.now, hydrateEntries }) {
+export function createCodexSessionTimeline({ request, readSession, clock = Date.now, hydrateEntries, historyRevision }) {
   const indexes = new Map()
-  const messageIndex = createCodexMessageIndex({ request, clock, hydrateEntries })
+  const messageIndex = createCodexMessageIndex({ request, clock, hydrateEntries, historyRevision })
   function index(metadata) {
     let current = indexes.get(metadata.session_id)
     if (!current || current.expires < clock()) {
