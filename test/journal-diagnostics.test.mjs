@@ -93,39 +93,24 @@ test('diagnostics distinguishes ready from degraded and exposes bounded operatio
   }
 })
 
-test('GET status exposes diagnostics without weakening local transport guards', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-diagnostics-api-'))
-  const store = createJournalStore({ databasePath: join(directory, 'tasks.sqlite') })
-  const spool = createEventSpool({ directory: join(directory, 'spool') })
-  const diagnostics = createJournalDiagnostics({ store, spool })
+test('GET v5 status exposes service health without Journal dependencies and preserves local guards', async () => {
   const hub = createRevisionHub({ keepaliveMs: 60_000 })
-  const api = createApiServer({
-    service: {},
-    journalDiagnostics: diagnostics,
-    store,
-    hub,
-    host: '127.0.0.1',
-    port: 0,
-    dashboardHtml: '<!doctype html>',
+  const api = createApiServer({ hub, port: 0, dashboardHtml: '<!doctype html>',
+    journalDiagnostics: { status: () => assert.fail('retired diagnostics must not run') },
+    serviceStatus: async () => ({ ready: true, service: 'tasks-recorder', api_version: 5 }),
   })
-  const address = await api.listen()
   try {
+    const address = await api.listen()
     const response = await fetch(`${address.url}/api/v1/status`)
     assert.equal(response.status, 200)
     const status = await response.json()
     assert.equal(status.ready, true)
     assert.equal(status.service, 'tasks-recorder')
-
-    const rejected = await fetch(`${address.url}/api/v1/status`, {
-      headers: { Origin: 'https://attacker.example' },
-    })
+    assert.equal(status.api_version, 5)
+    assert.equal('spool' in status, false)
+    const rejected = await fetch(`${address.url}/api/v1/status`, { headers: { Origin: 'https://attacker.example' } })
     assert.equal(rejected.status, 403)
-  } finally {
-    await api.close()
-    hub.close()
-    store.close()
-    await rm(directory, { recursive: true, force: true })
-  }
+  } finally { hub.close(); await api.close() }
 })
 
 test('scheduler diagnostics are a privacy-bounded degraded sibling and do not make Journal unready', async () => {

@@ -102,7 +102,7 @@ async function fixture(overrides = {}) {
   })
   const address = await api.listen()
   return {
-    url: address.url, calls,
+    url: address.url, calls, hub,
     async close() { await api.close(); hub.close() },
   }
 }
@@ -252,8 +252,7 @@ test('Schedule mutations map exact typed bodies and publish one revision each', 
       ['run', JOB_ID, { idempotency_key: '33333333-3333-4333-8333-333333333333' }],
       ['delete', JOB_ID, ETAG],
     ])
-    const snapshot = await json(current.url, '/api/v1/snapshot')
-    assert.equal(snapshot.body.revision, 6)
+    assert.equal(current.hub.current().revision, 6)
   } finally {
     await current.close()
   }
@@ -347,8 +346,7 @@ test('idempotent Schedule and review no-ops do not publish synthetic revisions',
       method: 'POST', body: { idempotency_key: '33333333-3333-4333-8333-333333333333' },
     })
     await json(current.url, `/api/v1/scheduled-runs/${RUN_ID}/review`, { method: 'POST', body: {} })
-    const snapshot = await json(current.url, '/api/v1/snapshot')
-    assert.equal(snapshot.body.revision, 0)
+    assert.equal(current.hub.current().revision, 0)
   } finally {
     await current.close()
   }
@@ -368,8 +366,7 @@ test('retrying a pending manual dispatch publishes its new attempt state', async
   })
   try {
     await json(current.url, `/api/v1/schedules/${JOB_ID}/run`, { method: 'POST', body: {} })
-    const snapshot = await json(current.url, '/api/v1/snapshot')
-    assert.equal(snapshot.body.revision, 1)
+    assert.equal(current.hub.current().revision, 1)
   } finally {
     await current.close()
   }
@@ -402,8 +399,7 @@ test('Scheduler reconcile accepts only {}, continues after a typed failure, and 
       ],
     })
     assert.doesNotMatch(JSON.stringify(result.body), /private|nonce|secret/)
-    const snapshot = await json(current.url, '/api/v1/snapshot')
-    assert.equal(snapshot.body.revision, 1)
+    assert.equal(current.hub.current().revision, 1)
 
     const rejected = await json(current.url, '/api/v1/scheduler/reconcile', {
       method: 'POST', body: { prompt: 'not accepted' },

@@ -4,13 +4,9 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { createDashboardApi, type DashboardApi } from '@/lib/api/dashboard-api'
-import type { DashboardMeta, DashboardSnapshot, RunRecord, ScheduleRecord, TaskRecord } from '@/lib/api/types'
+import type { DashboardMeta, RunRecord, ScheduleRecord } from '@/lib/api/types'
 import { AppProviders } from './app-providers'
 import { DashboardApp } from './dashboard-app'
-
-vi.mock('@/features/tasks/task-gantt', () => ({
-  TaskGantt: () => <div data-testid="task-gantt" />,
-}))
 
 const meta: DashboardMeta = {
   service: 'tasks-recorder',
@@ -21,62 +17,6 @@ const meta: DashboardMeta = {
     unified_runs: true,
     internal_scheduler: true,
   },
-}
-
-const task = {
-  id: 'task-a',
-  parent_id: 'project:recorder',
-  project_id: 'recorder',
-  entity_type: 'main_task',
-  title: 'Task A',
-  description: null,
-  lifecycle: 'in_progress',
-  status: 'active',
-  rollup_state: 'in_progress',
-  sort_order: 0,
-  revision: 1,
-  archived_at: null,
-  progress: null,
-  agent: 'Codex',
-  next_action: null,
-  planned: null,
-  actual: null,
-  actual_segments: [],
-  actual_segment_count: 0,
-  start: null,
-  end: null,
-  last_activity: '2026-08-28T04:00:00.000Z',
-  updated_at: '2026-08-28T04:00:00.000Z',
-  session_id: null,
-  session_source: null,
-  resume_available: false,
-  workspace: '/Users/me/project',
-  workfolder: '/Users/me/project',
-  worktree: '/Users/me/project',
-  branch: 'main',
-  execution_count: 0,
-  active_execution_count: 0,
-  running_execution_count: 0,
-  idle_execution_count: 0,
-  stale_execution_count: 0,
-  active_agent_count: 0,
-  live_state: 'none',
-  blocked_count: 0,
-} satisfies TaskRecord
-
-const snapshot: DashboardSnapshot = {
-  server_instance_id: 'server-a',
-  revision: 7,
-  schema_version: 3,
-  generated_at: '2026-08-28T04:00:00.000Z',
-  home_directory: '/Users/me',
-  tasks: [task, { ...task, id: 'task-b', title: 'Task B' }],
-  projects: [],
-  warnings: [],
-  project_inbox: [],
-  project_inbox_count: 0,
-  attribution_inbox_count: 0,
-  unassigned_execution_count: 0,
 }
 
 const schedule: ScheduleRecord = {
@@ -137,16 +77,8 @@ function dashboardApi(runRecord: RunRecord = run): DashboardApi {
       })),
     }),
     meta: vi.fn(async () => meta),
-    snapshot: vi.fn(async () => snapshot),
-    task: vi.fn(),
-    events: vi.fn(async () => []),
-    executions: vi.fn(async () => []),
-    updateTask: vi.fn(),
-    resumeTask: vi.fn(),
-    archiveTask: vi.fn(),
-    restoreTask: vi.fn(),
-    updateExecutionAssignments: vi.fn(),
-    assignSourceSessionProject: vi.fn(),
+    sessionProviders: vi.fn(async () => ({ providers: [] })),
+    settings: vi.fn(async () => ({ settings: { resume_terminal: 'otty', schedule_definitions_dir: '/schedules' }, terminal_options: [{ id: 'otty', label: 'Otty', available: true }], restart_required: false })),
     runtimes: vi.fn(async () => ({
       runtimes: [{ id: 'codex', display_name: 'Codex', state: 'ready' }],
     })),
@@ -200,77 +132,19 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals())
 
-test('renders the real app identity, task count, and concise connection state', async () => {
-  renderApp()
-
+test('only Sessions and Scheduled remain and old Tasks URLs open activity', async () => {
+  window.history.replaceState(null, '', '/?view=tasks')
+  const api = dashboardApi()
+  renderApp(api)
   expect(screen.getByRole('heading', { name: 'Tasks Recorder' })).toBeInTheDocument()
-  expect(await screen.findByText('2 个任务')).toBeInTheDocument()
-  expect(screen.getByRole('status', { name: '实时连接已断开' })).toBeInTheDocument()
-  expect(screen.queryByText(/loading|加载中/i)).not.toBeInTheDocument()
-})
-
-test('switches between URL-backed Tasks and Scheduled workspaces', async () => {
-  const user = userEvent.setup()
-  const api = dashboardApi()
-  renderApp(api)
-
-  const tasks = screen.getByRole('button', { name: 'Tasks' })
-  const scheduled = screen.getByRole('button', { name: 'Scheduled' })
-  expect(tasks).toHaveAttribute('aria-current', 'page')
-  expect(tasks).toHaveAttribute('tabindex', '0')
-  await waitFor(() => expect(window.location.search).toBe('?view=tasks'))
-
-  await user.click(scheduled)
-  expect(await screen.findByRole('heading', { name: 'Scheduled' })).toBeInTheDocument()
-  expect(screen.getByText('Codex update report')).toBeInTheDocument()
-  expect(scheduled).toHaveAttribute('aria-current', 'page')
-  await waitFor(() => expect(window.location.search).toBe('?view=scheduled'))
-
-  await user.click(screen.getByRole('button', { name: '立即运行' }))
-  await waitFor(() => expect(api.runScheduleNow).toHaveBeenCalledWith('schedule-a', expect.any(String)))
-  await user.click(screen.getByRole('button', { name: '暂停 Schedule' }))
-  await waitFor(() => expect(api.pauseSchedule).toHaveBeenCalledWith('schedule-a', schedule.etag))
-
-  await user.click(tasks)
-  expect(await screen.findByTestId('task-gantt')).toBeInTheDocument()
-  expect(tasks).toHaveAttribute('aria-current', 'page')
-})
-
-test('uses distinct Schedule lifecycle affordance and stops an active one-shot Run from the row', async () => {
-  const user = userEvent.setup()
-  const activeSchedule = {
-    ...schedule,
-    enabled: false,
-    current_execution: {
-      kind: 'run' as const,
-      id: 'run-active',
-      status: 'running' as const,
-      started_at: '2026-08-30T10:00:00.000Z',
-    },
-  }
-  const api = dashboardApi()
-  api.schedules = vi.fn(async () => ({
-    capability: { supported: true, backend: 'internal' }, jobs: [activeSchedule], invalid: [],
-  }))
-  renderApp(api)
-
-  await user.click(screen.getByRole('button', { name: 'Scheduled' }))
-  const stop = await screen.findByRole('button', { name: '停止当前 Run' })
-  const enable = screen.getByRole('button', { name: '启用 Schedule' })
-  expect(stop.querySelector('svg')).not.toHaveClass('lucide-play')
-  expect(enable.querySelector('svg')).not.toHaveClass('lucide-play')
-
-  await user.click(stop)
-  await waitFor(() => expect(api.cancelRun).toHaveBeenCalledWith('run-active'))
-})
-
-test('global actions own a safe inset and never use edge-positioned inline styles', () => {
-  renderApp()
-
-  const actions = screen.getByTestId('global-actions')
-  expect(actions).toHaveAttribute('data-safe-area', 'global-actions')
-  expect(actions.style.position).toBe('')
-  expect(actions.style.right).toBe('')
+  expect(screen.getByRole('button', { name: 'Sessions' })).toHaveAttribute('aria-current', 'page')
+  expect(screen.queryByRole('button', { name: 'Tasks' })).not.toBeInTheDocument()
+  expect(screen.getByRole('tab', { name: 'Tree' })).toHaveAttribute('aria-selected', 'true')
+  await waitFor(() => expect(window.location.search).toContain('view=sessions'))
+  await userEvent.click(screen.getByRole('button', { name: 'Scheduled' }))
+  expect(await screen.findByText('1 个计划')).toBeInTheDocument()
+  expect(window.location.search).toContain('view=scheduled')
+  expect(screen.getByTestId('global-actions')).toHaveAttribute('data-safe-area', 'global-actions')
 })
 
 test('opens Run Review and reads durable Run facts and logs', async () => {

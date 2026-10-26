@@ -149,43 +149,16 @@ test('candidate ordering is stable without a current attribution', async () => {
   }
 })
 
-test('POST work context exposes the compact read model through the guarded API', async () => {
-  const current = await fixture()
-  const hub = createRevisionHub({ keepaliveMs: 60_000 })
-  let api
+test('POST work context is retired and does not publish revisions', async () => {
+  const hub = createRevisionHub()
+  const api = createApiServer({ hub, port: 0, dashboardHtml: '<!doctype html>' })
   try {
-    current.createTask('main-task', 'project-a', 'in_progress')
-    current.store.work.startExecution({
-      id: 'api-execution',
-      source: 'codex',
-      source_session_key: 'api-session',
-      source_turn_key: 'turn-1',
-      project_id: 'project-a',
-      kind: 'main',
-      started_at: '2026-08-20T10:10:00.000Z',
-    })
-    api = createApiServer({
-      service: {},
-      journalService: current.service,
-      store: current.store,
-      hub,
-      host: '127.0.0.1',
-      port: 0,
-      dashboardHtml: '<!doctype html>',
-    })
     const address = await api.listen()
     const response = await fetch(`${address.url}/api/v1/work/context`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ execution_id: 'api-execution' }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ execution_id: 'legacy' }),
     })
-    assert.equal(response.status, 200)
-    const context = await response.json()
-    assert.equal(context.execution.id, 'api-execution')
-    assert.deepEqual(context.candidates.map(({ task }) => task.id), ['main-task'])
-  } finally {
-    await api?.close()
-    hub.close()
-    await current.cleanup()
-  }
+    assert.equal(response.status, 410)
+    assert.equal((await response.json()).error.code, 'TASKS_RETIRED')
+    assert.equal(hub.current().revision, 0)
+  } finally { hub.close(); await api.close() }
 })

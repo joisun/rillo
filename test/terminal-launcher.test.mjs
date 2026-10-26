@@ -49,6 +49,20 @@ test('terminal launcher builds a private self-cleaning resume script without she
   ]])
 })
 
+test('session browser resumes from its trusted Codex data root with shell metacharacters quoted', async () => {
+  let script
+  const launcher = createTerminalLauncher({
+    platform: 'darwin', env: { PATH: '/usr/local/bin' },
+    accessImpl: async () => {}, statImpl: async () => ({ isDirectory: () => true }),
+    mkdirImpl: async () => {}, writeFileImpl: async (_path, contents) => { script = contents },
+    execFileImpl: async () => {}, randomId: () => 'source-root',
+  })
+  const codexHome = "/Users/me/Codex's data/$(ignored)"
+  await launcher.launch({ terminal: 'terminal', sessionId: 'session-safe', workspace: '/workspace', codexHome })
+  assert.ok(script.includes('exec /usr/bin/env ' + shellQuote('CODEX_HOME=' + codexHome) + " '/usr/local/bin/codex' resume 'session-safe'"))
+  await assert.rejects(launcher.launch({ sessionId: 'session-safe', workspace: '/workspace', codexHome: 'relative' }), { code: 'SESSION_DATA_ROOT_INVALID' })
+})
+
 test('Otty adapter runs resume inside a persistent shell, then titles and focuses its window', async () => {
   const executions = []
   const writes = []

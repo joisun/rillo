@@ -10,49 +10,48 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 describe('DashboardApi', () => {
-  test('reads the typed dashboard snapshot', async () => {
-    const snapshot = {
-      server_instance_id: 'server-a',
-      revision: 4,
-      schema_version: 3,
-      generated_at: '2026-08-28T04:00:00.000Z',
-      home_directory: '/Users/me',
-      tasks: [],
-      projects: [],
-      warnings: [],
-      project_inbox: [],
-      project_inbox_count: 0,
-      attribution_inbox_count: 0,
-      unassigned_execution_count: 0,
-    }
-    const api = createDashboardApi({ fetchImpl: vi.fn(async () => jsonResponse(snapshot)) })
-
-    await expect(api.snapshot()).resolves.toEqual(snapshot)
+  test('relation metadata and registration allow native runtime validation to finish', async () => {
+    const timer = vi.spyOn(globalThis, 'setTimeout')
+    const api = createDashboardApi({ fetchImpl: async () => jsonResponse({}) })
+    const ref = { provider: 'codex', store_id: 'local', session_id: 'thread' }
+    await api.sessionRelations(ref)
+    await api.linkSessions({ parent: ref, child: { ...ref, session_id: 'child' } })
+    expect(timer.mock.calls.map((call) => call[1])).toEqual([65_000, 65_000])
   })
 
-  test('sends one exact optimistic task update', async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({ task: { id: 'task-a', revision: 8 } }))
-    const api = createDashboardApi({ fetchImpl })
-
-    await api.updateTask('task-a', 7, { title: 'Renamed' })
-
-    expect(fetchImpl).toHaveBeenCalledTimes(1)
-    expect(fetchImpl).toHaveBeenCalledWith('/api/v1/tasks/task-a', expect.objectContaining({
-      method: 'PATCH',
-      body: JSON.stringify({
-        expected_revision: 7,
-        patch: { title: 'Renamed' },
-        actor: 'user',
-      }),
-    }))
+  test('maps SessionRef, child pagination, timeline and seek to the frozen browser API', async () => {
+    const calls: Array<{ url: string; method: string; body: unknown }> = []
+    const api = createDashboardApi({ fetchImpl: async (url, init = {}) => {
+      calls.push({ url: String(url), method: init.method ?? 'GET', body: init.body ? JSON.parse(String(init.body)) : null })
+      return jsonResponse({})
+    } })
+    const parent = { provider: 'codex', store_id: 'store/a', session_id: 'thread/a' }
+    const child = { ...parent, session_id: 'thread-b' }
+    await api.readSession(parent)
+    await api.sessionChildren(parent, { cursor: 'child:2' })
+    await api.sessionTimeline(parent, { from: '2026-10-01T00:00:00Z', to: '2026-10-24T00:00:00Z', cursor: 'turn:15' })
+    await api.sessionMessages(parent, { at: '2026-10-23T09:00:00Z', limit: 5 })
+    await api.sessionRelations({ ...parent, title: 'must not enter query' } as typeof parent)
+    await api.linkSessions({ parent, child, source: 'session-browser' })
+    await api.unlinkSessions({ parent, child })
+    const base = '/api/v1/session-browser/codex/sessions/thread%2Fa'
+    expect(calls).toEqual([
+      { url: base + '/read?store_id=store%2Fa', method: 'GET', body: null },
+      { url: base + '/children?cursor=child%3A2&store_id=store%2Fa', method: 'GET', body: null },
+      { url: base + '/timeline?from=2026-10-01T00%3A00%3A00Z&to=2026-10-24T00%3A00%3A00Z&cursor=turn%3A15&store_id=store%2Fa', method: 'GET', body: null },
+      { url: base + '/messages?at=2026-10-23T09%3A00%3A00Z&limit=5&store_id=store%2Fa', method: 'GET', body: null },
+      { url: '/api/v1/session-browser/relations?provider=codex&store_id=store%2Fa&session_id=thread%2Fa', method: 'GET', body: null },
+      { url: '/api/v1/session-browser/links', method: 'POST', body: { parent, child, source: 'session-browser' } },
+      { url: '/api/v1/session-browser/links', method: 'DELETE', body: { parent, child } },
+    ])
   })
 
-  test('reads task events from their dedicated endpoint', async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({ events: [{ id: 'event-a' }] }))
-    const api = createDashboardApi({ fetchImpl })
-
-    await expect(api.events('task/a')).resolves.toEqual([{ id: 'event-a' }])
-    expect(fetchImpl).toHaveBeenCalledWith('/api/v1/tasks/task%2Fa/events', expect.any(Object))
+  test('propagates caller cancellation without misreporting timeout', async () => {
+    const controller = new AbortController()
+    const api = createDashboardApi({ fetchImpl: (_url, init) => new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))) })
+    const pending = api.sessionMessages({ provider: 'codex', store_id: 'local', session_id: 'thread' }, { at: '2026-10-23T09:00:00Z' }, controller.signal)
+    controller.abort()
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
   })
 
   test('maps Scheduled and Run contracts to exact taskd routes and bodies', async () => {
@@ -123,9 +122,9 @@ describe('DashboardApi', () => {
       name: 'typed server error',
       fetchImpl: async () => jsonResponse({
         ok: false,
-        error: { code: 'TASK_VERSION_CONFLICT', message: 'task changed', details: { revision: 8 } },
+        error: { code: 'SESSION_ALREADY_LINKED', message: 'session already linked', details: { revision: 8 } },
       }, 409),
-      code: 'TASK_VERSION_CONFLICT',
+      code: 'SESSION_ALREADY_LINKED',
       status: 409,
     },
     {
@@ -137,7 +136,7 @@ describe('DashboardApi', () => {
   ])('normalizes $name', async ({ fetchImpl, code, status }) => {
     const api = createDashboardApi({ fetchImpl })
 
-    await expect(api.snapshot()).rejects.toMatchObject({
+    await expect(api.meta()).rejects.toMatchObject({
       name: 'DashboardApiError', code, status,
     })
   })
@@ -152,7 +151,7 @@ describe('DashboardApi', () => {
         })
       }),
     })
-    const pending = api.snapshot()
+    const pending = api.meta()
     const rejection = expect(pending).rejects.toMatchObject({
       code: 'DASHBOARD_REQUEST_TIMEOUT',
     })

@@ -1,16 +1,10 @@
 import assert from 'node:assert/strict'
-import { createHash } from 'node:crypto'
-import { chmod, link, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { createJournalStore } from '../mcp/src/journal-store.mjs'
-import {
-  AUTO_ARCHIVE_SWEEP_MS,
-  startTaskd,
-} from '../server/src/taskd-runtime.mjs'
-import { createCodexRuntimeDefinition } from '../server/src/runtime/adapters/codex.mjs'
+import { startTaskd } from '../server/src/taskd-runtime.mjs'
 
 function scheduleDefinition(id, title, workspace) {
   return `---
@@ -27,50 +21,33 @@ Review the project.
 `
 }
 
-test('taskd runtime composes one store, serves health, and closes the database once', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-runtime-'))
-  const stores = []
-  const codexRuntimeOptions = []
-  let closeCalls = 0
+test('taskd opens only the session links store and never touches legacy persistence', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'sessions-runtime-'))
+  const legacyPath = join(directory, 'tasks.sqlite')
+  const legacy = Buffer.from('legacy database must remain byte-for-byte unchanged')
+  await writeFile(legacyPath, legacy)
   let runtime
   try {
     runtime = await startTaskd({
-      config: {
-        databasePath: join(directory, 'tasks.sqlite'),
-        outputDir: directory,
-        serverHost: '127.0.0.1',
-        serverPort: 0,
-      },
-      dashboardPath: join(directory, 'index.html'),
-      dashboardHtml: '<!doctype html><title>Taskd runtime</title>',
-      createStore(options) {
-        stores.push(options)
-        const store = createJournalStore(options)
-        return {
-          ...store,
-          close() {
-            closeCalls += 1
-            store.close()
-          },
-        }
-      },
-      createCodexRuntime(options) {
-        codexRuntimeOptions.push(options)
-        return createCodexRuntimeDefinition(options)
-      },
-      gitResolver: async () => ({}),
-      renderer: async () => ({}),
-      dashboardAdapter: () => ({ generated_at: '2026-08-12T08:00:00.000Z', tasks: [], warnings: [] }),
+      config: { databasePath: legacyPath, serverHost: '127.0.0.1', serverPort: 0 },
+      dashboardHtml: '<!doctype html>',
+      createStore: () => assert.fail('legacy store must never be created'),
+      createSpool: () => assert.fail('legacy spool must never be created'),
+      createJournal: () => assert.fail('journal must never be created'),
+      prepareStartup: () => assert.fail('Task startup must never run'),
+      scheduleInterval: () => assert.fail('Task maintenance must never be scheduled'),
     })
-
-    assert.deepEqual(stores, [{ databasePath: join(directory, 'tasks.sqlite') }])
-    assert.equal(typeof codexRuntimeOptions[0].runtimeEnvironment.childEnvironment, 'function')
-    assert.equal((await fetch(`${runtime.address.url}/health/ready`).then((response) => response.json())).ready, true)
+    assert.equal(runtime.startup.api_version, 5)
+    assert.equal(runtime.scheduler.ready, true)
+    assert.equal((await fetch(`${runtime.address.url}/health/ready`)).status, 200)
+    assert.deepEqual(await readFile(legacyPath), legacy)
     await runtime.close()
     await runtime.close()
-    assert.equal(closeCalls, 1)
+    assert.deepEqual(await readFile(legacyPath), legacy)
+    await assert.rejects(readFile(join(directory, 'spool')), { code: 'ENOENT' })
+    assert.ok((await readFile(join(directory, 'session-links.sqlite'))).length > 0)
   } finally {
-    await runtime?.close().catch(() => {})
+    await runtime?.close()
     await rm(directory, { recursive: true, force: true })
   }
 })
@@ -105,16 +82,9 @@ test('settings relocates the live Schedule registry, persists the path, and arch
         schedulerSpoolDirectory: join(directory, 'schedule-spool'),
       },
       dashboardPath: join(directory, 'index.html'), dashboardHtml: '<!doctype html>',
-      prepareStartup: async () => {},
       createLauncher: () => ({
         options: async () => [{ id: 'terminal', label: 'Terminal.app', available: true }],
         launch: async () => ({}),
-      }),
-      createSchedulerBackend: () => ({
-        capability: async () => ({ backend: 'test', supported: true }),
-        listOwned: async () => [],
-        reconcile: async () => ({ action: 'installed' }),
-        trigger: async () => ({ action: 'triggered' }),
       }),
       createSchedulerDefinitionMonitor: ({ repository, onDiff }) => {
         monitorRoots.push(repository.rootDirectory)
@@ -125,14 +95,6 @@ test('settings relocates the live Schedule registry, persists the path, and arch
           async close() {},
         }
       },
-      createSchedulerSpool: () => ({
-        replay: async () => ({ pending: 0, last_error: null }),
-        status: async () => ({ pending_files: 0, backlog_files: 0 }),
-      }),
-      recoverSchedulerStaleRuns: async () => ({ recovered: [] }),
-      createSchedulerProtocol: () => ({ start: async () => {}, close: async () => {} }),
-      gitResolver: async () => ({}), renderer: async () => ({}),
-      dashboardAdapter: () => ({ generated_at: '2026-08-26T04:00:00.000Z', tasks: [], warnings: [] }),
       clock: () => new Date('2026-08-26T04:00:00.000Z'),
     })
     assert.equal(runtime.scheduler.ready, true, JSON.stringify(runtime.scheduler))
@@ -162,112 +124,70 @@ test('settings relocates the live Schedule registry, persists the path, and arch
   }
 })
 
-test('taskd runtime closes an active SSE response before waiting for HTTP shutdown', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-runtime-'))
-  let storeCloseCalls = 0
+test('taskd closes an active SSE response and closes session links once', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'sessions-runtime-sse-'))
+  let closes = 0
   let runtime
   let reader
-  let closing
   try {
     runtime = await startTaskd({
-      config: { databasePath: join(directory, 'tasks.sqlite'), outputDir: directory, serverHost: '127.0.0.1', serverPort: 0 },
-      dashboardPath: join(directory, 'index.html'),
+      config: { databasePath: join(directory, 'tasks.sqlite'), serverHost: '127.0.0.1', serverPort: 0 },
       dashboardHtml: '<!doctype html>',
-      createStore: (options) => {
-        const store = createJournalStore(options)
-        return {
-          ...store,
-          close() {
-            storeCloseCalls += 1
-            store.close()
-          },
-        }
-      },
-      gitResolver: async () => ({}), renderer: async () => ({}),
-      dashboardAdapter: () => ({ generated_at: '2026-08-12T08:00:00.000Z', tasks: [], warnings: [] }),
+      createLinks: () => ({ check: () => ({ integrityCheck: 'ok', foreignKeyViolations: [] }), close: () => { closes += 1 } }),
     })
-    const response = await fetch(`${runtime.address.url}/api/v1/events`)
-    reader = response.body.getReader()
+    reader = (await fetch(`${runtime.address.url}/api/v1/events`)).body.getReader()
     await reader.read()
-
-    closing = runtime.close()
-    const closedPromptly = await Promise.race([
-      closing.then(() => true),
-      new Promise((resolve) => setTimeout(() => resolve(false), 100)),
+    await Promise.race([
+      runtime.close(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('SSE close timed out')), 1_000).unref()),
     ])
-    assert.equal(closedPromptly, true)
-    assert.equal(storeCloseCalls, 1)
+    await runtime.close()
+    assert.equal(closes, 1)
+    await assert.rejects(readFile(join(directory, 'tasks.sqlite')), { code: 'ENOENT' })
   } finally {
     await reader?.cancel().catch(() => {})
-    await closing?.catch(() => {})
-    await runtime?.close().catch(() => {})
+    await runtime?.close()
     await rm(directory, { recursive: true, force: true })
   }
 })
 
-test('taskd sweeps continuously and archives a root after five completed days', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-runtime-archive-'))
-  const databasePath = join(directory, 'tasks.sqlite')
-  let now = new Date('2026-08-23T23:00:00.000Z')
-  let scheduledSweep
-  let scheduledDelay
-  let clearedTimer = null
+for (const phase of ['definitions', 'runs']) {
+test(`scheduler failure at ${phase} leaves Sessions and runtime registry available without a Task database`, async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'sessions-runtime-degraded-'))
+  const resolved = []
   let runtime
-  let activeStore
   try {
-    const seed = createJournalStore({
-      databasePath,
-      clock: () => new Date('2026-08-19T00:00:00.000Z'),
-    })
-    seed.projects.create({ id: 'project-a', name: 'Project A' })
-    seed.tasks.create({
-      id: 'independent-task', project_id: 'project-a', title: 'Independent task',
-      lifecycle: 'done',
-    })
-    seed.close()
-
-    const timer = { unrefCalled: false, unref() { this.unrefCalled = true } }
     runtime = await startTaskd({
-      config: {
-        databasePath,
-        outputDir: directory,
-        serverHost: '127.0.0.1',
-        serverPort: 0,
-      },
-      dashboardPath: join(directory, 'index.html'),
+      config: { databasePath: join(directory, 'tasks.sqlite'), serverHost: '127.0.0.1', serverPort: 0 },
       dashboardHtml: '<!doctype html>',
-      createStore(options) {
-        activeStore = createJournalStore({ ...options, clock: () => now })
-        return activeStore
-      },
-      clock: () => now,
-      scheduleInterval(callback, delay) {
-        scheduledSweep = callback
-        scheduledDelay = delay
-        return timer
-      },
-      clearScheduledInterval(value) {
-        clearedTimer = value
-      },
-      gitResolver: async () => ({}), renderer: async () => ({}),
-      dashboardAdapter: () => ({ generated_at: now.toISOString(), tasks: [], warnings: [] }),
+      ...(phase === 'definitions'
+        ? { createSchedulerDefinitions: () => { throw Object.assign(new Error('broken schedules'), { code: 'SCHEDULE_SCAN_FAILED' }) } }
+        : { createRuns: () => { throw Object.assign(new Error('broken runs'), { code: 'RUN_STARTUP_FAILED' }) } }),
+      createRuntimeRegistry: () => ({
+        list: async () => [{ id: 'codex' }],
+        resolve: async (id) => { resolved.push(id); return { executable: '/codex' } },
+      }),
+      createSessionAdapter: ({ resolveLaunch }) => ({
+        id: 'codex', label: 'Codex', storeId: 'native-test', capabilities: {},
+        list: async () => { await resolveLaunch(); return { sessions: [], relations: [], next_cursor: null } },
+        close() {},
+      }),
     })
-
-    assert.equal(activeStore.tasks.show('independent-task').task.archived_at, null)
-    assert.equal(scheduledDelay, AUTO_ARCHIVE_SWEEP_MS)
-    assert.equal(timer.unrefCalled, true)
-
-    now = new Date('2026-08-24T01:00:00.000Z')
-    await scheduledSweep()
-    assert.equal(
-      activeStore.tasks.show('independent-task').task.archived_at,
-      '2026-08-24T01:00:00.000Z',
-    )
-
-    await runtime.close()
-    assert.equal(clearedTimer, timer)
+    assert.equal(runtime.scheduler.degraded, true)
+    assert.equal(runtime.scheduler.error_code, phase === 'definitions' ? 'SCHEDULE_SCAN_FAILED' : 'RUN_STARTUP_FAILED')
+    const base = runtime.address.url
+    assert.equal((await fetch(`${base}/health/ready`)).status, 200)
+    assert.equal((await fetch(`${base}/api/v1/runtimes`)).status, 200)
+    const sessions = await fetch(`${base}/api/v1/session-browser/codex/sessions?store_id=native-test`)
+    assert.equal(sessions.status, 200, await sessions.clone().text())
+    assert.deepEqual((await sessions.json()).sessions, [])
+    assert.deepEqual(resolved, ['codex'])
+    const status = await fetch(`${base}/api/v1/status`).then(response => response.json())
+    assert.equal(status.scheduler.degraded, true)
+    await assert.rejects(readFile(join(directory, 'tasks.sqlite')), { code: 'ENOENT' })
   } finally {
-    await runtime?.close().catch(() => {})
+    await runtime?.close()
     await rm(directory, { recursive: true, force: true })
   }
 })
+}

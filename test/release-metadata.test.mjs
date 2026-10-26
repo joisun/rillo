@@ -19,7 +19,7 @@ test('public package and native adapter metadata share version, license, and rep
   const claudeManifest = await json('adapters/claude/tasks-recorder/.claude-plugin/plugin.json')
   const claudeMarketplace = await json('.claude-plugin/marketplace.json')
 
-  assert.equal(packageManifest.version, '0.8.7')
+  assert.equal(packageManifest.version, '0.9.0')
   assert.equal(packageManifest.license, 'GPL-2.0-only')
   assert.equal(packageManifest.repository.url, 'git+https://github.com/joisun/tasks-recorder.git')
   for (const manifest of [codexManifest, claudeManifest]) {
@@ -38,15 +38,10 @@ test('README installation commands target published service and separate native 
   assert.match(readme, /claude plugin marketplace add joisun\/tasks-recorder/)
   assert.match(readme, /claude plugin install tasks-recorder@tasks-recorder/)
   assert.match(readme, /^## How it works$/m)
-  assert.match(readme, /^## Migrate a schema v2 database$/m)
-  assert.match(readme, /tasks-recorder migrate --dry-run/)
-  assert.match(readme, /tasks-recorder migrate --apply/)
-  assert.match(readme, /version=v0\.8\.7/)
-  assert.match(readme, /`0\.8\.x` release line/)
-  assert.match(readme, /`0\.9\.0`/)
-  assert.match(readme, /~\/\.config\/tasks-recorder\/tasks\.sqlite/)
+  for (const symbol of ['session_sources', 'session_link', 'session_unlink', 'session-links.sqlite']) assert.ok(readme.includes(symbol))
+  assert.doesNotMatch(readme, /tasks-recorder migrate --(?:dry-run|apply)/)
+  assert.match(readme, /version=v0\.9\.0/)
   assert.match(readme, /GPL-2\.0-only/)
-  assert.match(readme, /SVAR React Gantt/)
   assert.doesNotMatch(readme, /DHTMLX/)
 })
 

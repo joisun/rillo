@@ -42,7 +42,7 @@ test('release packaging creates allowlisted service and independent adapter arch
       '/server/THIRD_PARTY_NOTICES.md',
       '/server/src/codex/importer.mjs',
       '/server/src/codex/transcript-reader.mjs',
-      '/mcp/src/task-client.mjs',
+      '/mcp/src/session-client.mjs',
       '/mcp/src/task-execution-store.mjs',
       '/mcp/src/schema-migration.mjs',
       '/mcp/src/task-store.mjs',
@@ -68,7 +68,7 @@ test('release packaging creates allowlisted service and independent adapter arch
       assert.ok(entries.includes('tasks-recorder/dist/mcp-server.mjs'))
       assert.ok(entries.includes('tasks-recorder/.mcp.json'))
       assert.ok(entries.includes('tasks-recorder/hooks/hooks.json'))
-      assert.ok(entries.includes('tasks-recorder/skills/task-manager/SKILL.md'))
+      assert.ok(entries.includes('tasks-recorder/skills/session-relations/SKILL.md'))
       assert.ok(entries.includes('tasks-recorder/LICENSE'))
       assert.ok(entries.includes('tasks-recorder/THIRD_PARTY_NOTICES.md'))
       assert.ok(entries.every((entry) => !entry.includes('/mcp/server.mjs')))
@@ -90,7 +90,7 @@ test('runtime package keeps production dependencies and excludes build-only depe
       '-C', extractDirectory,
     ])
     const packageSource = await readFile(
-      join(extractDirectory, 'tasks-recorder-0.8.7', 'package.json'),
+      join(extractDirectory, 'tasks-recorder-0.9.0', 'package.json'),
       'utf8',
     )
     const manifest = JSON.parse(packageSource)

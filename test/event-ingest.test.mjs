@@ -191,62 +191,19 @@ test('rolls back Observation and Source Session when lifecycle application fails
   }
 })
 
-test('POST event ingest coexists with GET SSE and publishes one revision per changed event', async () => {
-  const current = await journalFixture()
-  const hub = createRevisionHub({ instanceId: 'journal-api-test', keepaliveMs: 60_000 })
-  const journalService = createJournalService({
-    store: current.store,
-    onChange: () => hub.publish(),
-  })
-  const api = createApiServer({
-    service: {},
-    journalService,
-    store: current.store,
-    hub,
-    host: '127.0.0.1',
-    port: 0,
-    dashboardHtml: '<!doctype html>',
-  })
-  const address = await api.listen()
+test('POST event ingest is retired while GET SSE remains available', async () => {
+  const hub = createRevisionHub({ keepaliveMs: 60_000 })
+  const api = createApiServer({ hub, port: 0, dashboardHtml: '<!doctype html>' })
   try {
+    const address = await api.listen()
     const response = await fetch(`${address.url}/api/v1/events`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(event()),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(event()),
     })
-    assert.equal(response.status, 200)
-    const body = await response.json()
-    assert.equal(body.persisted, true)
-    assert.equal(body.change.revision, 1)
-
-    const replay = await fetch(`${address.url}/api/v1/events`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(event()),
-    }).then((result) => result.json())
-    assert.equal(replay.deduped, true)
-    assert.equal(replay.persisted, false)
-    assert.equal(replay.change, undefined)
-    assert.equal(hub.current().revision, 1)
-
-    const conflictResponse = await fetch(`${address.url}/api/v1/events`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(event({ branch: 'feature/different' })),
-    })
-    assert.equal(conflictResponse.status, 409)
-    assert.equal(
-      (await conflictResponse.json()).error.code,
-      'OBSERVATION_IDENTITY_CONFLICT',
-    )
-    assert.equal(hub.current().revision, 1)
-
+    assert.equal(response.status, 410)
+    assert.equal((await response.json()).error.code, 'TASKS_RETIRED')
+    assert.equal(hub.current().revision, 0)
     const sse = await fetch(`${address.url}/api/v1/events`)
     assert.equal(sse.headers.get('content-type'), 'text/event-stream; charset=utf-8')
     await sse.body.cancel()
-  } finally {
-    await api.close()
-    hub.close()
-    await current.cleanup()
-  }
+  } finally { hub.close(); await api.close() }
 })

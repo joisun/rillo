@@ -303,3 +303,14 @@ test('legacy Codex unknown pagination method maps to the bounded history fallbac
   child.stdout.write(JSON.stringify({ id: 1, error: { code: -32600, message: 'Invalid request: unknown variant `thread/items/list`, expected one of `thread/read`' } }) + '\n')
   await assert.rejects(pending, { code: 'RUNTIME_PROTOCOL_METHOD_UNAVAILABLE' })
 })
+
+test('legacy Codex session search and history methods report unsupported capabilities', async (t) => {
+  for (const method of ['thread/search', 'thread/searchOccurrences', 'thread/turns/list']) {
+    const child = fakeChildProcess()
+    const client = createCodexAppServerClient({ executable: '/bin/codex', cwd: '/tmp', spawnImpl: () => child })
+    t.after(() => client.close())
+    const pending = client.request(method)
+    child.stdout.write(JSON.stringify({ id: 1, error: { code: -32600, message: 'Invalid request: unknown variant `' + method + '`, expected one of `thread/read`' } }) + '\n')
+    await assert.rejects(pending, { code: 'RUNTIME_PROTOCOL_METHOD_UNAVAILABLE' })
+  }
+})

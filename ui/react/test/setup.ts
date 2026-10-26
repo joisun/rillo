@@ -11,6 +11,7 @@ class TestResizeObserver implements ResizeObserver {
 }
 
 globalThis.ResizeObserver = TestResizeObserver
+globalThis.matchMedia = (query: string) => ({ matches: false, media: query, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false })
 
 const storedPreferences = new Map<string, string>()
 const preferenceStorage: Storage = {
@@ -29,4 +30,8 @@ Object.defineProperty(window, 'localStorage', {
 
 if (!Element.prototype.getAnimations) {
   Element.prototype.getAnimations = () => []
+}
+
+Element.prototype.scrollTo = function (options: ScrollToOptions | number = {}, y?: number) {
+  this.scrollTop = typeof options === 'number' ? y ?? 0 : options.top ?? this.scrollTop
 }

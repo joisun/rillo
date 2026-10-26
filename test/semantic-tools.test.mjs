@@ -335,97 +335,19 @@ test('structure sync cancels omitted children only after an exact child-set prec
   }
 })
 
-test('guarded semantic API routes publish one revision per committed command', async () => {
-  const current = await fixture()
-  const hub = createRevisionHub({ keepaliveMs: 60_000 })
-  const service = createJournalService({ store: current.store, onChange: () => hub.publish() })
-  let api
+test('retired semantic API never invokes Journal commands or publishes revisions', async () => {
+  const hub = createRevisionHub()
+  const api = createApiServer({ hub, port: 0, dashboardHtml: '<!doctype html>' })
   try {
-    api = createApiServer({
-      service: {},
-      journalService: service,
-      store: current.store,
-      hub,
-      host: '127.0.0.1',
-      port: 0,
-      dashboardHtml: '<!doctype html>',
-    })
     const address = await api.listen()
-    const post = async (path, body, method = 'POST') => {
-      const response = await fetch(`${address.url}${path}`, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      assert.equal(response.status, 200)
-      return response.json()
+    for (const path of ['/work/focus', '/work/intents', '/work/checkpoint', '/tasks/mutate', '/tasks/sync-structure', '/source-sessions/source/project', '/segments/segment/attribution']) {
+      const response = await fetch(`${address.url}/api/v1${path}`, { method: 'POST' })
+      assert.equal(response.status, 410)
+      assert.equal((await response.json()).error.code, 'TASKS_RETIRED')
     }
-    const focused = await post('/api/v1/work/focus', {
-      execution_id: 'execution-1',
-      task_id: 'task-a',
-      provenance: 'agent_explicit',
-      rationale_code: 'selected_task',
-      observed_at: '2026-08-20T11:00:00.000Z',
-    })
-    assert.equal(focused.change.revision, 1)
-    const intent = await post('/api/v1/work/intents', {
-      execution_id: 'execution-1',
-      external_agent_key: 'api-child-agent',
-      task_id: 'task-a',
-      created_at: '2026-08-20T11:01:00.000Z',
-    })
-    assert.equal(intent.change.revision, 2)
-    const corrected = await post(`/api/v1/segments/${focused.segment.id}/attribution`, {
-      task_id: 'task-b',
-      provenance: 'user',
-      rationale_code: 'dashboard_correction',
-      observed_at: '2026-08-20T11:05:00.000Z',
-    }, 'PATCH')
-    assert.equal(corrected.change.revision, 3)
-    const checkpoint = await post('/api/v1/work/checkpoint', {
-      execution_id: 'execution-1',
-      task_id: 'task-b',
-      expected_revision: 1,
-      summary: 'Corrected work is progressing.',
-      next_action: 'Continue Task B.',
-      observed_at: '2026-08-20T11:10:00.000Z',
-    })
-    assert.equal(checkpoint.change.revision, 4)
-    const mutation = await post('/api/v1/tasks/mutate', {
-      action: 'create',
-      task: {
-        id: 'api-child', project_id: 'project-a', parent_id: 'task-a',
-        title: 'API child', lifecycle: 'planned',
-      },
-    })
-    assert.equal(mutation.change.revision, 5)
-    const structure = await post('/api/v1/tasks/sync-structure', {
-      project_id: 'project-a',
-      main_task: { id: 'task-a', expected_revision: 1 },
-      expected_children: [{ id: 'api-child', revision: 1 }],
-      children: [{
-        id: 'api-child', expected_revision: 1, title: 'API child refined',
-        lifecycle: 'in_progress',
-      }],
-    })
-    assert.equal(structure.change.revision, 6)
-    current.store.work.startExecution({
-      id: 'execution-unresolved', source: 'codex', source_session_key: 'session-unresolved',
-      source_turn_key: 'turn-unresolved', project_id: null, kind: 'main',
-      started_at: '2026-08-20T11:20:00.000Z', branch: 'main',
-    })
-    const sourceSession = current.store.snapshot().source_sessions
-      .find(({ external_session_id: id }) => id === 'session-unresolved')
-    const projectAssigned = await post(`/api/v1/source-sessions/${sourceSession.id}/project`, {
-      expected_project_id: null,
-      project_id: 'project-b',
-    }, 'PATCH')
-    assert.equal(projectAssigned.source_session.project_id, 'project-b')
-    assert.equal(projectAssigned.change.revision, 7)
-    assert.equal(hub.current().revision, 7)
+    assert.equal(hub.current().revision, 0)
   } finally {
-    await api?.close()
     hub.close()
-    await current.cleanup()
+    await api.close()
   }
 })

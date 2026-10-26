@@ -162,92 +162,23 @@ test('legacy context and sync tree delegate to compact v3 semantics with depreca
   }
 })
 
-test('default taskd runtime owns one fresh v3 store and serves both event and legacy projections', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-v3-runtime-'))
-  let runtime
-  try {
-    runtime = await startTaskd({
-      config: {
-        databasePath: join(directory, 'tasks.sqlite'),
-        outputDir: directory,
-        spoolDirectory: join(directory, 'spool'),
-        spoolMaxBytes: 1024 * 1024,
-        spoolMaxFiles: 32,
-        spoolMaxAgeMs: 60_000,
-        logsDirectory: join(directory, 'logs'),
-        logMaxFileBytes: 1024 * 1024,
-        logMaxFiles: 3,
-        logMaxAgeMs: 60_000,
-        serverHost: '127.0.0.1',
-        serverPort: 0,
-      },
-      dashboardPath: join(directory, 'index.html'),
-      dashboardHtml: '<!doctype html><title>v3</title>',
-      gitResolver: async (workfolder) => ({
-        gitRoot: workfolder, gitCommonDir: `${workfolder}/.git`, gitRemote: null,
-        worktree: workfolder, branch: 'main',
-      }),
-    })
-    const ready = await fetch(`${runtime.address.url}/health/ready`).then((response) => response.json())
-    assert.equal(ready.ready, true)
-    assert.equal(ready.check.schemaVersion, 3)
-
-    const ingested = await fetch(`${runtime.address.url}/api/v1/events`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        source: 'codex', event_type: 'execution.started', external_event_id: 'runtime:start',
-        observed_at: '2026-08-20T08:00:00.000Z', source_session_key: 'runtime-session',
-        root_session_key: 'runtime-session', source_turn_key: 'runtime-turn',
-        source_agent_key: null, workfolder: '/workspace/runtime', git_root: '/workspace/runtime',
-        git_common_dir: '/workspace/runtime/.git', git_remote: null,
-        worktree: '/workspace/runtime', branch: 'main', payload: { kind: 'main' },
-      }),
-    }).then((response) => response.json())
-    assert.equal(ingested.ok, true)
-
-    const context = await fetch(`${runtime.address.url}/api/v1/context`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: 'runtime-session', workfolder: '/workspace/runtime' }),
-    }).then((response) => response.json())
-    assert.equal(context.compatibility.deprecated, true)
-    assert.equal(context.execution_id, ingested.execution_id)
-
-    const dashboard = await fetch(`${runtime.address.url}/api/v1/snapshot`)
-      .then((response) => response.json())
-    assert.equal(dashboard.schema_version, 3)
-    assert.equal(dashboard.project_inbox_count, 1)
-    assert.equal(dashboard.attribution_inbox_count, 1)
-  } finally {
-    await runtime?.close()
-    await rm(directory, { recursive: true, force: true })
-  }
-})
-
-test('v3 runtime refuses a v2 database without mutating the rollback source', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-v3-gate-'))
+test('Sessions runtime leaves an existing v2 database intact without requiring migration', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'sessions-legacy-v2-'))
   const databasePath = join(directory, 'tasks.sqlite')
   const legacy = createTaskStore({ databasePath })
   legacy.close()
-  await assert.rejects(
-    startTaskd({
-      config: {
-        databasePath, outputDir: directory, spoolDirectory: join(directory, 'spool'),
-        spoolMaxBytes: 1024, spoolMaxFiles: 8, spoolMaxAgeMs: 60_000,
-        logsDirectory: join(directory, 'logs'), logMaxFileBytes: 1024,
-        logMaxFiles: 2, logMaxAgeMs: 60_000,
-        serverHost: '127.0.0.1', serverPort: 0,
-      },
-      dashboardPath: join(directory, 'index.html'), dashboardHtml: '<!doctype html>',
-    }),
-    (error) => error.code === 'SCHEMA_MIGRATION_REQUIRED',
-  )
-  const db = new DatabaseSync(databasePath, { readOnly: true })
+  let runtime
   try {
+    runtime = await startTaskd({
+      config: { databasePath, serverHost: '127.0.0.1', serverPort: 0 },
+      dashboardHtml: '<!doctype html>',
+    })
+    assert.equal((await fetch(`${runtime.address.url}/health/ready`)).status, 200)
+    const db = new DatabaseSync(databasePath, { readOnly: true })
     assert.equal(db.prepare('PRAGMA user_version').get().user_version, 2)
-    assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check, 'ok')
-  } finally {
     db.close()
+  } finally {
+    await runtime?.close()
     await rm(directory, { recursive: true, force: true })
   }
 })

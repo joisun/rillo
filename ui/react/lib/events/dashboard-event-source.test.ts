@@ -37,11 +37,13 @@ test('one changed revision invalidates the server-backed dashboard queries', () 
   events.start()
   source.emit('changed')
 
-  expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.snapshot })
-  expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.tasks })
-  expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.executions })
   expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.schedules })
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.sessionBrowser, predicate: expect.any(Function) })
   expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.allRuns, predicate: expect.any(Function) })
+  const filter = invalidate.mock.calls.find(([options]) => options?.queryKey === queryKeys.sessionBrowser)?.[0]
+  const ref = { provider: 'codex', store_id: 'local', session_id: 'thread' }
+  for (const key of [queryKeys.sessionWorkspaces('codex', false), queryKeys.sessionList('codex', '', '', false), queryKeys.sessionChildren(ref), queryKeys.sessionRelations(ref)]) expect(filter?.predicate?.({ queryKey: key } as never)).toBe(true)
+  for (const key of [queryKeys.sessionSearch('codex', '', '', false), queryKeys.sessionSearch('codex', '', 'search', false), queryKeys.sessionList('codex', '', 'search', false), queryKeys.sessionMessages('codex', 'local', 'thread', ''), queryKeys.sessionTimeline(ref, 'from', 'to')]) expect(filter?.predicate?.({ queryKey: key } as never)).toBe(false)
 })
 
 test('continuous changed revisions are coalesced into one refresh per interval', () => {
@@ -60,11 +62,11 @@ test('continuous changed revisions are coalesced into one refresh per interval',
   source.emit('changed')
   source.emit('changed')
 
-  expect(invalidate).toHaveBeenCalledTimes(5)
+  expect(invalidate).toHaveBeenCalledTimes(3)
   vi.advanceTimersByTime(1_999)
-  expect(invalidate).toHaveBeenCalledTimes(5)
+  expect(invalidate).toHaveBeenCalledTimes(3)
   vi.advanceTimersByTime(1)
-  expect(invalidate).toHaveBeenCalledTimes(10)
+  expect(invalidate).toHaveBeenCalledTimes(6)
 })
 
 test('connection state follows the native stream and close removes every listener', () => {

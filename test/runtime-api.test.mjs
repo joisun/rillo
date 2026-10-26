@@ -15,7 +15,7 @@ async function fixture(runtimeRegistry) {
     dashboardHtml: '<!doctype html>',
     runtimeRegistry,
     packageVersion: '0.6.0-test',
-    apiVersion: 4,
+
   })
   const address = await api.listen()
   return {
@@ -42,8 +42,11 @@ test('meta exposes the runtime-registry compatibility handshake', async () => {
     assert.deepEqual((await json(current.url, '/api/v1/meta')).body, {
       service: 'tasks-recorder',
       service_version: '0.6.0-test',
-      api_version: 4,
+      api_version: 5,
       capabilities: {
+        tasks: false,
+        session_browser: false,
+        session_links: false,
         runtime_registry: true,
         unified_runs: false,
         internal_scheduler: false,
