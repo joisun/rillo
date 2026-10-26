@@ -9,7 +9,6 @@ import type { BrowserSession, SessionMessagesPage, SessionRef } from '@/lib/api/
 import { queryKeys } from '@/lib/query/keys'
 import { Highlight } from './session-format'
 import { AutoPager } from './session-auto-pager'
-import { isSessionConnectionError } from './session-health'
 import { SessionRelations } from './session-relations'
 
 const SEEK_SCROLL_MS = 100
@@ -209,7 +208,7 @@ export function SessionDetail({ api, session, query, onBack, isOpen, at = null, 
         ) : null}
         <AutoPager enabled={Boolean(history.hasNextPage) && !history.isError && !history.isPlaceholderData} loading={history.isFetching} onMore={loadOlder} />
         {history.isPending ? <span className="session-spinner" role="status" aria-label="读取会话" /> : null}
-        {history.isError && !isSessionConnectionError(history.error) && !(history.error instanceof DashboardApiError && history.error.code === 'SESSION_TIMELINE_INCOMPLETE') ? <div className="session-state session-error" role="alert">{history.error.message}</div> : null}
+        {history.isError && !(history.error instanceof DashboardApiError && history.error.code === 'SESSION_TIMELINE_INCOMPLETE') ? <div className="session-state session-error" role="alert">{history.error.message}</div> : null}
         {pages.some((page) => page.truncated) ? <p className="session-notice">本页内容较多，部分消息未展示。</p> : null}
         {!history.isPending && !history.isError && !history.hasNextPage && messages.length === 0 ? <div className="session-state">{seek?.state === 'before_start' ? '此时间之前还没有消息。' : '暂无可展示的文字消息。'}</div> : null}
         {messages.map((message) => (

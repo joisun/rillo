@@ -163,7 +163,7 @@ codex-rollout-timing仅在可展示消息缺少原生时间时启用。路径来
 
 可选activity()与live_presence返回store_id、available、open_session_ids、active_workspaces及checked_at。macOS通过有2秒超时、4MiB输出上限的lsof识别canonical数据根内可写rollout，排除只读、已删除和其他数据根。对匹配文件仅解析有512KiB读取上限的首行session_meta.cwd，缓存目录5分钟/128项；不保留正文或进程环境。活跃目录包含尚未进入列表的会话。探测缓存3秒、合并并发；失败撤下旧证据。绿点表示仍打开，不等于生成中，也不是恢复操作的全局锁。
 
-React Sessions列表与树共用目录、搜索、选择和预览。目录、会话、搜索结果和更早消息通过IntersectionObserver在滚动边缘自动翻页；过滤后的空搜索页也自动继续。目录计数仅为已观测数量。正文搜索debounce 300ms，在ComboBox/Popover/ListBox浮层展示，选择后按该query定位。活跃状态独立每5秒刷新，不轮询正文搜索。请求错误若影响连接或根列表/目录，在Sessions整个区域统一显示，并每3秒重试空闲的失败查询，不反复中断慢请求。共享Codex连接按实例处理关闭，旧连接延迟失败不能关闭新连接。内容仅在查询内存中；REST仍沿用loopback、Origin、JSON与脱敏边界。
+React Sessions列表与树共用目录、搜索、选择和预览。目录、会话、搜索结果和更早消息通过IntersectionObserver在滚动边缘自动翻页；过滤后的空搜索页也自动继续。目录计数仅为已观测数量。正文搜索debounce 300ms，在ComboBox/Popover/ListBox浮层展示，选择后按该query定位。活跃状态独立每5秒刷新，不轮询正文搜索。整页错误仅由来源、根列表或目录查询触发，每3秒重试空闲的失败查询，不反复中断慢请求。正文、时间线、子会话、关系与搜索的503/504或超时只影响对应区域，不参与整页重连；搜索失败显示原因，正文失败保留可用内容及其他会话入口。SSE实时状态独立于原生会话查询结果。共享Codex连接按实例处理关闭，旧连接延迟失败不能关闭新连接。内容仅在查询内存中；REST仍沿用loopback、Origin、JSON与脱敏边界。
 
 热力/children队列最多4个在途请求，后台任务最多占3个，为显式定位或展开保留位置；排队时用户请求先执行，离屏通过AbortSignal取消等待和HTTP读取并停止继续翻页。HTTP取消不宣称能够中止已经发出的原生RPC。自动分页每次加载后重新验证IntersectionObserver，不沿用插入新内容前的旧可见状态。
 

@@ -13,7 +13,6 @@ import { SessionActivity } from './session-activity'
 import { Highlight, sessionKey } from './session-format'
 import { SessionOrigin } from './session-origin'
 import { AutoPager } from './session-auto-pager'
-import { isSessionConnectionError } from './session-health'
 
 export function SessionSearch({ api, provider, workspace, enabled, openIds, onSelect }: {
   api: DashboardApi; provider: string; workspace: string; enabled: boolean
@@ -54,7 +53,7 @@ export function SessionSearch({ api, provider, workspace, enabled, openIds, onSe
         <div ref={list} className="session-search__collection">
         <ListBox className="session-search__results" items={items} renderEmptyState={() => (
           <div className="session-search__state" role={results.isError ? 'alert' : 'status'}>
-            {waiting || results.hasNextPage || isSessionConnectionError(results.error) ? <span className="session-spinner" aria-label="搜索中" /> : results.isError ? results.error.message : '没有找到匹配的会话'}
+            {results.isError ? results.error.message : waiting || results.hasNextPage ? <span className="session-spinner" aria-label="搜索中" /> : '没有找到匹配的会话'}
           </div>
         )}>
           {(session) => <ListBoxItem id={sessionKey(session)} textValue={session.title} className="session-search__item">

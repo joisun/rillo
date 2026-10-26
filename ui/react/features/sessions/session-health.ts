@@ -1,14 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useSyncExternalStore } from 'react'
 
-import { DashboardApiError } from '@/lib/api/dashboard-api'
-
-export function isSessionConnectionError(error: unknown) {
-  return error instanceof DashboardApiError && (['SESSION_BROWSER_UNAVAILABLE', 'DASHBOARD_CONNECTION_FAILED', 'DASHBOARD_REQUEST_TIMEOUT', 'DASHBOARD_INVALID_RESPONSE'].includes(error.code) || error.status === 503 || error.status === 504)
-}
-
 export function isSessionBlockingError(key: readonly unknown[], error: unknown) {
-  return Boolean(error) && (isSessionConnectionError(error) || key[2] === 'providers' || key[3] === 'workspaces' || (key[3] === 'list' && key[5] === ''))
+  return Boolean(error) && key[0] === 'dashboard' && key[1] === 'session-browser'
+    && (key[2] === 'providers' || key[3] === 'workspaces' || (key[3] === 'list' && key[5] === ''))
 }
 
 export function useSessionConnectionError() {

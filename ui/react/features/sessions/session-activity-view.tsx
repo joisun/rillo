@@ -40,7 +40,7 @@ function ChildrenSource({ api, session, onData, expanded }: { api: DashboardApi;
   useEffect(() => { if (!seen && !expanded) void client.cancelQueries({ queryKey: queryKeys.sessionChildren(session), exact: true }) }, [seen, expanded, client, session])
   useLayoutEffect(() => { if (children.data) onData(sessionKey(session), children.data.pages) }, [children.data, session, onData])
   useEffect(() => { if ((seen || expanded) && children.hasNextPage && !children.isFetching && !children.isError) void children.fetchNextPage() }, [seen, expanded, children.hasNextPage, children.isFetching, children.isError, children.fetchNextPage])
-  return <span ref={anchor} className="session-tree__loading" aria-busy={children.isFetching || undefined} />
+  return <span ref={anchor} className="session-tree__loading" aria-busy={children.isFetching || undefined}>{children.isError ? <span className="session-error" role="alert" title={children.error.message}>子会话暂不可用</span> : null}</span>
 }
 
 function TimelineSource({ api, session, onData, continueSequence = 0, eager = false }: {
@@ -73,7 +73,7 @@ function TimelineSource({ api, session, onData, continueSequence = 0, eager = fa
     if (!timeline.dataUpdatedAt || timeline.isFetching) return
     void client.invalidateQueries({ queryKey: ['dashboard', 'session-browser', session.provider, session.store_id, session.session_id, 'messages'], predicate: (query) => query.state.error !== null })
   }, [timeline.dataUpdatedAt, timeline.isFetching, client, session.provider, session.store_id, session.session_id])
-  return <span ref={anchor} className="session-tree__index-status" aria-busy={timeline.isFetching || undefined} />
+  return <span ref={anchor} className="session-tree__index-status" aria-busy={timeline.isFetching || undefined}>{timeline.isError ? <span className="session-error" role="alert" title={timeline.error.message}>时间线暂不可用</span> : null}</span>
 }
 
 export function SessionActivityView({ api, sessions, relations, openIds, presenceSource, selection, at, itemId, readingPosition, onSelect, onSeek, onReadSession, timelineRequest, hasMore = false, loadingMore = false, onMore = () => {} }: {
