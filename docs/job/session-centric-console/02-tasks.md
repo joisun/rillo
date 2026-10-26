@@ -11,3 +11,4 @@
 - [x] [独立会话范围、每秒热力格与自动加载](tasks/phase-5/task-09-second-heat.md)
 - [x] [旧会话时间、平滑阅读与双向位置反馈](tasks/phase-5/task-10-reading-sync.md)
 - [x] [原生索引快速读取与有界后台工作](tasks/phase-6/task-11-loading-performance.md)
+- [x] [Sessions Cards基础视图](tasks/phase-7/task-12-cards.md)

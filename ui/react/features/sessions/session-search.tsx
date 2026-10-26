@@ -27,7 +27,7 @@ export function SessionSearch({ api, provider, workspace, enabled, openIds, onSe
     return () => window.clearTimeout(timer)
   }, [draft])
   const results = useInfiniteQuery({
-    queryKey: queryKeys.sessionList(provider, workspace, query, false),
+    queryKey: queryKeys.sessionSearch(provider, workspace, query, false),
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) => api.sessions(provider, { workspace, query, cursor: pageParam }),
     getNextPageParam: (page: SessionPage) => page.next_cursor ?? undefined,

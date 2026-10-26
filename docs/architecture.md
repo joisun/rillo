@@ -163,7 +163,7 @@ codex-rollout-timing仅在可展示消息缺少原生时间时启用。路径来
 
 可选activity()与live_presence返回store_id、available、open_session_ids、active_workspaces及checked_at。macOS通过有2秒超时、4MiB输出上限的lsof识别canonical数据根内可写rollout，排除只读、已删除和其他数据根。对匹配文件仅解析有512KiB读取上限的首行session_meta.cwd，缓存目录5分钟/128项；不保留正文或进程环境。活跃目录包含尚未进入列表的会话。探测缓存3秒、合并并发；失败撤下旧证据。绿点表示仍打开，不等于生成中，也不是恢复操作的全局锁。
 
-React Sessions列表与树共用目录、搜索、选择和预览。目录、会话、搜索结果和更早消息通过IntersectionObserver在滚动边缘自动翻页；过滤后的空搜索页也自动继续。目录计数仅为已观测数量。正文搜索debounce 300ms，在ComboBox/Popover/ListBox浮层展示，选择后按该query定位。活跃状态独立每5秒刷新，不轮询正文搜索。整页错误仅由来源、根列表或目录查询触发，每3秒重试空闲的失败查询，不反复中断慢请求。正文、时间线、子会话、关系与搜索的503/504或超时只影响对应区域，不参与整页重连；搜索失败显示原因，正文失败保留可用内容及其他会话入口。SSE实时状态独立于原生会话查询结果。共享Codex连接按实例处理关闭，旧连接延迟失败不能关闭新连接。内容仅在查询内存中；REST仍沿用loopback、Origin、JSON与脱敏边界。
+React Sessions列表、树与Cards共用目录、搜索、选择和预览。目录、会话、搜索结果和更早消息通过IntersectionObserver在滚动边缘自动翻页；过滤后的空搜索页也自动继续。目录计数仅为已观测数量。正文搜索debounce 300ms，在ComboBox/Popover/ListBox浮层展示，选择后按该query定位。搜索使用独立sessionSearch查询键，即使query为空也不与主列表共用查询，避免禁用的搜索observer覆盖列表queryFn、分页大小或缓存生命周期。三个浏览视图仍共用sessionList及原生cursor。活跃状态独立每5秒刷新，不轮询正文搜索。整页错误仅由来源、根列表或目录查询触发，每3秒重试空闲的失败查询，不反复中断慢请求。正文、时间线、子会话、关系与搜索的503/504或超时只影响对应区域，不参与整页重连；搜索失败显示原因，正文失败保留可用内容及其他会话入口。SSE实时状态独立于原生会话查询结果。共享Codex连接按实例处理关闭，旧连接延迟失败不能关闭新连接。内容仅在查询内存中；REST仍沿用loopback、Origin、JSON与脱敏边界。
 
 热力/children队列最多4个在途请求，后台任务最多占3个，为显式定位或展开保留位置；排队时用户请求先执行，离屏通过AbortSignal取消等待和HTTP读取并停止继续翻页。HTTP取消不宣称能够中止已经发出的原生RPC。自动分页每次加载后重新验证IntersectionObserver，不沿用插入新内容前的旧可见状态。
 
@@ -185,7 +185,9 @@ Production `taskd` 明确读取自包含的 `ui/dist/react.html`。`ui/dist/inde
 
 顶层导航只有 Sessions 与 Scheduled。Sessions 内的列表/会话树时间轴切换不能丢失目录筛选或当前会话。子树按需加载，引用去重并防止异常原生循环。fork 来源独立跳转，不按 fork 关系重排协作树。
 
-Sessions样式由feature自身的sessions.css维护。宽屏侧栏350px，固定中栏/正文分栏；1100px及以下隐藏侧栏，用目录选择器。中栏顶部只有一组List｜Tree，切换保留目录和选择，最近消息按钮在同栏左侧。正文12px，头部单行标题/操作，关系浮层不挤正文。行下热力条14px、手机20px；标题右侧弱化起止时间，完整时间在title。终端继续按钮始终可见，目录和会话只用绿点表示活跃。
+Sessions样式由feature自身的sessions.css维护。宽屏侧栏350px，固定中栏/正文分栏；1100px及以下隐藏侧栏，用目录选择器。中栏顶部只有一组List｜Tree｜Cards，切换保留目录和选择，最近消息按钮在Tree同栏左侧。分隔线只画图形，不把字符加入可访问标签名。正文12px，头部单行标题/操作，关系浮层不挤正文。Tree行下热力条14px、手机20px；标题右侧弱化起止时间，完整时间在title。终端继续按钮始终可见，目录和会话只用绿点表示活跃。
+
+session-cards-view仅组合现有会话元数据与共享操作，不新增接口或持久会话数据。Cards首次访问才挂载，之后以隐藏panel保留滚动位置；只有选择变化才确保选中卡片可见，返回原视图不强行滚回选中项。原生preview以普通文本显示、折叠空白并最多三行，独立高度上限防止flex伸展泄露截断后的内容。Card主按钮选择正文，终端按钮是独立兄弟节点；窄屏打开正文时沿用返回入口。URL和本机偏好接受sessions=cards，未知模式仍回退Tree。
 
 每条热力条使用独立会话起止范围，不再使用全局7天或日/时/分切换，不聚合项目曲线。secondHeatCells按真实UTC秒计数，空秒稀疏表示；Canvas绘制矩形，以每秒消息数的对数映射颜色深度。物理像素容不下所有秒格时保留该像素内最高每秒计数，不能叠加alpha伪造密度。TimelineSource在行进入屏幕120px附近时持续分页，离屏暂停补页，原生并发最多4。子树缓存60秒、gcTime5分钟，只为确有子节点的行提供展开按钮；useLayoutEffect在paint前同步子节点。无时间、unavailable或unsupported不持续伪造索引。
 

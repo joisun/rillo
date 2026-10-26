@@ -1,15 +1,17 @@
 # 状态
 
 - status: complete
-- phase: performance
-- current_task: task-11及热力悬停响应补充修复完成；连续移动、当前页直接定位和100ms滚动已验收
+- phase: cards
+- current_task: task-12 Cards基础视图完成；共享数据、预览、分页、选择和滚动位置已验收
 - worktree: /Users/joi-com/Desktop/space/projects/tasks-recorder/.worktree/feature-session-browser
 - branch: feature/session-browser
 - authorization: 已确认完整计划，并明确要求实施。
-- next: 43129源码和43130构建预览已更新；按用户要求提交性能修复后，增加Cards视图。
-- commits: ff125e6、de553df、5e3052e为此前提交；task-11及悬停修复本次提交，具体提交号见git log。测试文件留在工作树。
+- next: 43129源码和43130构建预览可查看Cards；用户反馈实用性有限，后续优先讨论最近一轮对话预览，本期没有实现内容增强。
+- commits: ff125e6、de553df、5e3052e、f4910d2已提交；Cards基础视图尚未提交。测试文件留在工作树。
 
 Task Recorder MCP暂不可用；不绕过服务写数据库。这里是已授权工程工作流记录，不代替产品数据。
+
+Cards验收：React82/82、定向Sessions与事件45/45、check/build通过；真实100条会话只发1次limit=100主列表请求，不预读正文/children/timeline。合成数据1600/1280/1024/390宽度分别5/3/4/1列，无横向溢出；视图切换scrollTop1000保持不变，正文DOM不重建，过滤、搜索、键盘、终端独立操作与连接恢复通过。详见phase-7-log.md及06-test-report.md。
 
 性能验收见phase-6-log.md与06-test-report.md：原生300条分页一致，冷连接列表946ms，热启动列表234–342ms；后端585项完整回归、前端74项完整回归及后续新增定向验证通过。冷启动不纳入热缓存目标，不把3次页面采样当成长期p95。
 

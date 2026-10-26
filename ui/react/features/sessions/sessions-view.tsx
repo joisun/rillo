@@ -18,6 +18,7 @@ import { SessionSearch } from './session-search'
 import { SessionOrigin } from './session-origin'
 import { activityDay, activityTime, sessionKey, workspaceName } from './session-format'
 import { SessionActivityView } from './session-activity-view'
+import { SessionCardsView } from './session-cards-view'
 import { SessionResumeButton } from './session-resume-button'
 import './sessions.css'
 import type { TimelineLoadRequest } from './session-timeline-queue'
@@ -40,6 +41,7 @@ export function SessionsView({ api }: { api: DashboardApi }) {
   const [mode, setMode] = useState(readSessionsView)
   const [readerExpanded, setReaderExpanded] = useState(false)
   const [activityVisited, setActivityVisited] = useState(mode === 'activity')
+  const [cardsVisited, setCardsVisited] = useState(mode === 'cards')
   const [timelineRequest, setTimelineRequest] = useState<TimelineLoadRequest | null>(null)
   const timelineRequestSequence = useRef(0)
   const initialPreview = useRef('')
@@ -141,7 +143,7 @@ export function SessionsView({ api }: { api: DashboardApi }) {
   }
 
   return (
-    <Tabs className="sessions-workspace" aria-label="会话浏览器" data-detail-open={Boolean(selection)} data-seeking={Boolean(selection?.at)} data-reader-expanded={readerExpanded} data-mode={mode} selectedKey={mode} onSelectionChange={(key) => { const next = key === 'list' ? 'list' : 'activity'; setMode(next); if (next === 'activity') setActivityVisited(true) }}>
+    <Tabs className="sessions-workspace" aria-label="会话浏览器" data-detail-open={Boolean(selection)} data-seeking={Boolean(selection?.at)} data-reader-expanded={readerExpanded} data-mode={mode} selectedKey={mode} onSelectionChange={(key) => { const next = key === 'list' || key === 'cards' ? key : 'activity'; setMode(next); if (next === 'activity') setActivityVisited(true); if (next === 'cards') setCardsVisited(true) }}>
       <header className="sessions-toolbar" inert={Boolean(connectionError)}>
         <div className="sessions-toolbar__search">
           <SessionSearch key={providerId + ':' + workspace} api={api} provider={providerId} workspace={workspace}
@@ -173,7 +175,7 @@ export function SessionsView({ api }: { api: DashboardApi }) {
           </div>
         </aside>
         <div className="sessions-main">
-          <header className="sessions-main__toolbar"><TabList className="sessions-view-tabs" aria-label="会话视图" variant="line"><Tab id="list">List</Tab><Tab id="activity">Tree</Tab></TabList></header>
+          <header className="sessions-main__toolbar"><TabList className="sessions-view-tabs" aria-label="会话视图" variant="line"><Tab id="list">List</Tab><Tab id="activity">Tree</Tab><Tab id="cards">Cards</Tab></TabList></header>
         <TabPanel className="session-timeline" id="list" shouldForceMount hidden={mode !== 'list'}>
           <div className="session-timeline__list">
             {!results.isPending && !results.isError && sessions.length === 0 ? <div className="session-state"><Search /><strong>这里还没有会话</strong></div> : null}
@@ -201,6 +203,9 @@ export function SessionsView({ api }: { api: DashboardApi }) {
               const followRequest = resumeFollowing ? ++followRequestSequence.current : undefined
               setSelection((current) => current && sessionKey(current.session) === sessionKey(session) && current.at === at && current.itemId === itemId && !current.query && !resumeFollowing ? current : { session, query: '', at, itemId, followRequest: followRequest ?? current?.followRequest })
             }} /> : null}
+        </TabPanel>
+        <TabPanel className="sessions-cards-panel" id="cards" shouldForceMount hidden={mode !== 'cards'}>
+          {cardsVisited ? <SessionCardsView api={api} sessions={sessions} selection={selection?.session ?? null} openIds={openIds} active={mode === 'cards'} pending={results.isPending} hasMore={Boolean(results.hasNextPage) && !results.isError} loadingMore={results.isFetching} onSelect={selectSession} onMore={() => results.fetchNextPage()} /> : null}
         </TabPanel>
         </div>
         {selection ? <SessionDetail key={sessionKey(selection.session)} api={api} session={selection.session} query={selection.query} at={selection.at} itemId={selection.itemId} followRequest={selection.followRequest} isOpen={selection.session.provider === providerId && selection.session.store_id === provider?.store_id && openIds.has(selection.session.session_id)} onReadingPosition={(at, itemId) => { const key = sessionKey(selection.session); setReadingPosition(current => current?.key === key && current.at === at && current.itemId === itemId ? current : { key, at, itemId }) }} onReadSession={(ref) => void onReadSession(ref)} onLoadTimeline={() => { setMode('activity'); setActivityVisited(true); setTimelineRequest({ session: selection.session, sequence: ++timelineRequestSequence.current }) }} onExpand={() => setReaderExpanded(true)} onBack={() => setSelection(null)} /> : (

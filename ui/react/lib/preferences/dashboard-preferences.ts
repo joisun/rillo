@@ -1,5 +1,5 @@
 export type DashboardView = 'scheduled' | 'sessions'
-export type SessionsViewMode = 'list' | 'activity'
+export type SessionsViewMode = 'list' | 'activity' | 'cards'
 const SESSIONS_VIEW_KEY = 'tasks-recorder.sessions-view'
 
 export function readDashboardView(location = window.location): DashboardView {
@@ -11,7 +11,8 @@ export function readSessionsView(location = window.location): SessionsViewMode {
   const parameters = new URLSearchParams(location.search)
   if (parameters.get('view') === 'tasks') return 'activity'
   const mode = parameters.get('sessions') ?? window.localStorage.getItem(SESSIONS_VIEW_KEY)
-  return mode === 'list' ? 'list' : 'activity'
+  if (mode === 'list' || mode === 'cards') return mode
+  return 'activity'
 }
 
 export function persistSessionsView(mode: SessionsViewMode) {

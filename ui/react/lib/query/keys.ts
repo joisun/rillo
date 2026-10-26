@@ -16,6 +16,7 @@ export const queryKeys = {
   sessionActivity: (provider: string, store: string) => ['dashboard', 'session-browser', provider, store, 'activity'] as const,
   sessionWorkspaces: (provider: string, archived: boolean) => ['dashboard', 'session-browser', provider, 'workspaces', archived] as const,
   sessionList: (provider: string, workspace: string, query: string, archived: boolean) => ['dashboard', 'session-browser', provider, 'list', workspace, query, archived] as const,
+  sessionSearch: (provider: string, workspace: string, query: string, archived: boolean) => ['dashboard', 'session-browser', provider, 'search', workspace, query, archived] as const,
   sessionMessages: (provider: string, store: string, id: string, query: string, at = '', itemId = '') => ['dashboard', 'session-browser', provider, store, id, 'messages', query, at, itemId] as const,
   sessionRead: (ref: SessionRef) => ['dashboard', 'session-browser', ref.provider, ref.store_id, ref.session_id, 'read'] as const,
   sessionChildren: (ref: SessionRef) => ['dashboard', 'session-browser', ref.provider, ref.store_id, ref.session_id, 'children'] as const,
