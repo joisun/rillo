@@ -1,6 +1,14 @@
 # 验证结果
 
-## 当前：局部失败触发整页重连（2026-10-26）
+## 当前：v0.9.0发布与本地更新（2026-10-26）
+
+发布标签v0.9.0指向2ef0cf8，CI与Release均成功。完整Node586/586、React87/87通过，构建、类型检查及13项发布包和安装器验证通过。用户明确允许提交后，43个相关测试文件已入库。
+
+从GitHub Release下载产物并核对SHA256SUMS，再用发布的安装器更新本地。current指向releases/0.9.0，43127的ready=true、API v5；配置文件哈希保持一致。Codex与Claude Code插件均更新至0.9.0。43129源码预览恢复并代理43127；早期43130隔离预览已结束。两个地址真实浏览器均显示100张Cards，实时连接open，无重连遮罩、失败响应或页面异常。主目录main的既有改动保留，未混入本次发布。
+
+发布记录：[GitHub Release](https://github.com/joisun/tasks-recorder/releases/tag/v0.9.0)、[Release构建](https://github.com/joisun/tasks-recorder/actions/runs/40263072239)、[CI](https://github.com/joisun/tasks-recorder/actions/runs/40263072347)。
+
+## 阶段记录：局部失败触发整页重连（2026-10-26）
 
 用户的43129 Chrome页面实测顶部实时连接正常，但整个Sessions被自动重连遮罩锁住。独立浏览器观察40秒，两个预览的SSE均保持open；曾捕获relations接口503。不能据此确认用户那次具体失败的查询，但确认原实现将任意局部查询的503/504或超时判为整页断连。
 
