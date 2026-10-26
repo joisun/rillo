@@ -11,6 +11,7 @@ import type {
   SessionRelation,
   SessionTimeline,
   SessionWorkspacePage,
+  SessionBranchPage,
   RunControlResponse,
   RunConversationResponse,
   RunLogResponse,
@@ -61,6 +62,7 @@ export interface DashboardApi {
   sessionActivity(provider: string): Promise<SessionActivityPage>
   sessionProviders(): Promise<{ providers: SessionProvider[] }>
   sessionWorkspaces(provider: string, filters: SessionFilters): Promise<SessionWorkspacePage>
+  sessionBranches(provider: string, filters: SessionFilters): Promise<SessionBranchPage>
   sessions(provider: string, filters: SessionFilters): Promise<SessionPage>
   readSession(session: SessionRef, signal?: AbortSignal): Promise<{ session: BrowserSession }>
   sessionChildren(session: SessionRef, filters: SessionFilters, signal?: AbortSignal): Promise<SessionPage>
@@ -194,6 +196,10 @@ export function createDashboardApi({
   return {
     sessionActivity: (provider) => request(`/api/v1/session-browser/${encodeURIComponent(provider)}/activity`),
     sessionProviders: () => request('/api/v1/session-browser/providers'),
+    sessionBranches: (provider, filters) => request(
+      `/api/v1/session-browser/${encodeURIComponent(provider)}/branches${queryString(filters)}`,
+      { requestTimeoutMs: RUNTIME_TIMEOUT_MS },
+    ),
     sessionWorkspaces: (provider, filters) => request(
       `/api/v1/session-browser/${encodeURIComponent(provider)}/workspaces${queryString(filters)}`,
       { requestTimeoutMs: RUNTIME_TIMEOUT_MS },

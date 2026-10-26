@@ -171,8 +171,8 @@
   display: grid;
   height: 100vh;
   min-height: 100vh;
-  grid-template-rows: 48px minmax(0, 1fr);
-  padding: 12px;
+  grid-template-rows: 40px minmax(0, 1fr);
+  padding: 0;
   overflow: hidden;
   background: var(--surface-0);
 }
@@ -182,9 +182,7 @@
   min-width: 0;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  border: 1px solid var(--border-subtle);
-  border-bottom: 0;
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border-bottom: 1px solid var(--border-subtle);
   background: var(--surface-1);
 }
 
@@ -234,14 +232,60 @@
 }
 
 .app-navigation {
-  display: flex;
+  flex-shrink: 0;
+}
+
+.segmented-control {
+  display: inline-flex;
+  width: fit-content;
   height: 32px;
+  flex-shrink: 0;
   align-items: center;
   gap: 2px;
   padding: 3px;
-  border: 1px solid var(--border-subtle);
+  border: 0;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--surface-2) 50%, var(--surface-1));
+}
+
+.segmented-control > :is(button, [role='tab']) {
+  display: inline-flex;
+  height: 26px;
+  min-height: 26px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin: 0;
+  padding: 3px 9px;
+  border: 0;
   border-radius: 7px;
-  background: color-mix(in oklab, var(--surface-2) 70%, transparent);
+  color: var(--text-muted);
+  background: transparent;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.segmented-control > :is(button, [role='tab']):is([aria-current='page'], [aria-pressed='true'], [aria-selected='true']) {
+  color: var(--text-primary);
+  background: var(--surface-2);
+  box-shadow: 0 1px 3px rgb(0 0 0 / .18), inset 0 0 0 1px color-mix(in oklab, var(--text-muted) 12%, transparent);
+}
+
+.segmented-control > :is(button, [role='tab']):hover {
+  color: var(--text-primary);
+}
+
+.segmented-control svg {
+  width: 13px;
+  height: 13px;
+}
+
+.segmented-control [data-tab-indicator] {
+  display: none;
 }
 
 .app-task-status-nav {
@@ -349,8 +393,6 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--border-subtle);
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   background: var(--surface-1);
 }
 
@@ -2543,10 +2585,6 @@
 }
 
 @media (max-width: 720px) {
-  .app-shell {
-    padding: 8px;
-  }
-
   .app-shell__header {
     grid-template-columns: auto 1fr auto;
   }

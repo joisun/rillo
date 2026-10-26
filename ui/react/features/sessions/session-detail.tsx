@@ -10,6 +10,7 @@ import { queryKeys } from '@/lib/query/keys'
 import { Highlight } from './session-format'
 import { AutoPager } from './session-auto-pager'
 import { SessionRelations } from './session-relations'
+import { SessionResumeButton } from './session-resume-button'
 
 const SEEK_SCROLL_MS = 100
 
@@ -191,6 +192,7 @@ export function SessionDetail({ api, session, query, onBack, isOpen, at = null, 
           <Button className="session-detail__back" size="xs" variant="quiet" aria-label="返回会话列表" onPress={onBack}><ArrowLeft /></Button>
           <div><h2 title={current.title}>{current.title}</h2></div>
           <div className="session-detail__tools">
+            <SessionResumeButton api={api} session={current} />
             <span title={copyStatus || session.session_id}><Button size="xs" variant="quiet" isIconOnly aria-label="复制 Session ID" onPress={() => void copyId()}>{copyStatus === '已复制' ? <Check /> : <Copy />}</Button></span>
             <SessionRelations api={api} session={current} onReadSession={onReadSession} />
           {at && onExpand ? <Button className="session-detail__expand" size="xs" variant="quiet" isIconOnly aria-label="展开会话预览" onPress={onExpand}><Maximize2 /></Button> : null}

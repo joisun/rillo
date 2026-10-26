@@ -13,7 +13,8 @@ export function AutoPager({ enabled, loading, onMore, observeLastWithin }: {
   useEffect(() => {
     if (!anchor.current || typeof IntersectionObserver === 'undefined') return
     const options = observeLastWithin?.current?.querySelectorAll('[role="option"]')
-    const target = options?.length ? options[options.length - 1] : anchor.current
+    // React Aria's empty-state option uses display:contents and has no observable box.
+    const target = [...(options ?? [])].filter(option => option.getClientRects().length).at(-1) ?? anchor.current
     visibility.current = false
     setVisible(false)
     const observer = new IntersectionObserver(([entry]) => { visibility.current = entry.isIntersecting; setVisible(entry.isIntersecting) }, { rootMargin: '160px' })

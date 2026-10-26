@@ -2,10 +2,6 @@ export function sessionKey(session: { provider: string; store_id: string; sessio
   return `${session.provider}:${session.store_id}:${session.session_id}`
 }
 
-export function workspaceName(path: string) {
-  return path.split('/').filter(Boolean).at(-1) || path
-}
-
 export function activityDay(timestamp: string | null) {
   if (!timestamp) return '时间未知'
   const date = new Date(timestamp)

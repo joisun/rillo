@@ -186,11 +186,14 @@ export function createCodexSessionAdapter({
     return metadata
   }
 
-  async function list({ workspace, query, archived, cursor, limit }) {
-    if (!query) return metadataPages.list({
-      cursor, limit, archived, sortKey: 'recency_at', sortDirection: 'desc', sourceKinds: SOURCES,
-      ...(workspace ? { cwd: workspace } : {}),
-    })
+  async function list({ workspace, branch, query, archived, cursor, limit }) {
+    if (!query) {
+      const page = await metadataPages.list({
+        cursor, limit, archived, sortKey: 'recency_at', sortDirection: 'desc', sourceKinds: SOURCES,
+        ...(workspace ? { cwd: workspace } : {}),
+      })
+      return branch ? { ...page, sessions: page.sessions.filter(row => row.branch === branch) } : page
+    }
     let next = cursor
     let scanned = 0
     let data = []
@@ -209,7 +212,7 @@ export function createCodexSessionAdapter({
       data = page.data.map((row) => ({
         ...session(query ? row.thread : row),
         snippet: query ? bounded(row.snippet, 4000) : null,
-      })).filter((row) => !workspace || row.workspace === workspace)
+      })).filter((row) => (!workspace || row.workspace === workspace) && (!branch || row.branch === branch))
       if (page.cursor !== null && page.cursor === next) {
         throw sessionBrowserError('SESSION_BROWSER_READ_FAILED', 'Codex returned a repeated cursor', 502)
       }
@@ -220,16 +223,32 @@ export function createCodexSessionAdapter({
   }
 
   async function workspaces(input) {
-    const page = await list({ ...input, workspace: '', query: '' })
+    const page = await list({ ...input, workspace: '', branch: '', query: '' })
     const groups = new Map()
     for (const row of page.sessions) {
       if (!row.workspace) continue
-      const group = groups.get(row.workspace) ?? { path: row.workspace, observed_count: 0, last_active_at: row.last_active_at }
+      const group = groups.get(row.workspace) ?? { path: row.workspace, observed_count: 0, branch_names: [], last_active_at: row.last_active_at }
       group.observed_count += 1
+      if (row.branch && !group.branch_names.includes(row.branch)) group.branch_names.push(row.branch)
       if (String(row.last_active_at) > String(group.last_active_at)) group.last_active_at = row.last_active_at
       groups.set(row.workspace, group)
     }
     return { workspaces: [...groups.values()], next_cursor: page.next_cursor }
+  }
+
+  async function branches(input) {
+    const page = await list({ ...input, workspace: '', branch: '', query: '' })
+    const groups = new Map()
+    for (const row of page.sessions) {
+      if (!row.branch) continue
+      const group = groups.get(row.branch) ?? { name: row.branch, observed_count: 0, workspace_paths: [], session_ids: [], last_active_at: row.last_active_at }
+      group.observed_count += 1
+      if (row.workspace && !group.workspace_paths.includes(row.workspace)) group.workspace_paths.push(row.workspace)
+      group.session_ids.push(row.session_id)
+      if (String(row.last_active_at) > String(group.last_active_at)) group.last_active_at = row.last_active_at
+      groups.set(row.branch, group)
+    }
+    return { branches: [...groups.values()], next_cursor: page.next_cursor }
   }
 
   async function children(sessionId, { cursor, limit }) {
@@ -347,10 +366,11 @@ export function createCodexSessionAdapter({
     runtimeId: 'codex',
     storeId,
     resumeOptions: { codexHome: root },
-    capabilities: { full_text_search: true, search_experimental: true, message_location: true, resume: true, live_presence: true, timeline: true, relations: true },
+    capabilities: { full_text_search: true, search_experimental: true, message_location: true, resume: true, live_presence: true, timeline: true, relations: true, branch_groups: true },
     async activity() { return { ...await presence.snapshot(), store_id: storeId } },
     list,
     workspaces,
+    branches,
     children,
     timeline: timeIndex.timeline,
     readSession,

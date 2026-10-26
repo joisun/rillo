@@ -26,6 +26,7 @@ function query(input = {}) {
   }
   return {
     workspace,
+    branch: text(input.branch, 'branch', 200),
     limit,
     query: text(input.query, 'query', 256),
     cursor: text(input.cursor, 'cursor', 8192) || null,
@@ -193,6 +194,11 @@ export function createSessionBrowser({ adapters, settings, terminalLauncher, lin
     },
     workspaces(id, input) {
       return source(id).workspaces({ ...query(input), limit: 100 })
+    },
+    branches(id, input) {
+      const adapter = source(id)
+      if (!adapter.branches) throw sessionBrowserError('SESSION_BROWSER_UNSUPPORTED', '此来源不支持按分支浏览', 501)
+      return adapter.branches({ ...query(input), limit: 100 })
     },
     messages(id, sessionId, input) {
       const adapter = source(id)

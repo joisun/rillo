@@ -14,8 +14,9 @@ import { Highlight, sessionKey } from './session-format'
 import { SessionOrigin } from './session-origin'
 import { AutoPager } from './session-auto-pager'
 
-export function SessionSearch({ api, provider, workspace, enabled, openIds, onSelect }: {
+export function SessionSearch({ api, provider, workspace, branch = '', enabled, openIds, onSelect }: {
   api: DashboardApi; provider: string; workspace: string; enabled: boolean
+  branch?: string
   openIds: Set<string>; onSelect: (session: BrowserSession, query: string) => void
 }) {
   const [draft, setDraft] = useState('')
@@ -27,9 +28,9 @@ export function SessionSearch({ api, provider, workspace, enabled, openIds, onSe
     return () => window.clearTimeout(timer)
   }, [draft])
   const results = useInfiniteQuery({
-    queryKey: queryKeys.sessionSearch(provider, workspace, query, false),
+    queryKey: queryKeys.sessionSearch(provider, workspace, query, false, branch),
     initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) => api.sessions(provider, { workspace, query, cursor: pageParam }),
+    queryFn: ({ pageParam }) => api.sessions(provider, { workspace, branch, query, cursor: pageParam }),
     getNextPageParam: (page: SessionPage) => page.next_cursor ?? undefined,
     enabled: enabled && Boolean(query), retry: false, gcTime: 0,
   })

@@ -3,7 +3,7 @@ import { useCallback, useSyncExternalStore } from 'react'
 
 export function isSessionBlockingError(key: readonly unknown[], error: unknown) {
   return Boolean(error) && key[0] === 'dashboard' && key[1] === 'session-browser'
-    && (key[2] === 'providers' || key[3] === 'workspaces' || (key[3] === 'list' && key[5] === ''))
+    && (key[2] === 'providers' || key[3] === 'workspaces' || key[3] === 'branches' || (key[3] === 'list' && key[5] === ''))
 }
 
 export function useSessionConnectionError() {

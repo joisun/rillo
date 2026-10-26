@@ -3,7 +3,7 @@ import type { SessionRef } from '../api/types'
 export function isSessionMetadataQuery(key: readonly unknown[]) {
   if (key[0] !== 'dashboard' || key[1] !== 'session-browser') return false
   if (key[3] === 'list') return key[5] === ''
-  if (key[3] === 'workspaces') return true
+  if (key[3] === 'workspaces' || key[3] === 'branches') return true
   return key.at(-1) === 'children' || key.at(-1) === 'relations'
 }
 
@@ -15,8 +15,9 @@ export const queryKeys = {
   sessionProviders: ['dashboard', 'session-browser', 'providers'] as const,
   sessionActivity: (provider: string, store: string) => ['dashboard', 'session-browser', provider, store, 'activity'] as const,
   sessionWorkspaces: (provider: string, archived: boolean) => ['dashboard', 'session-browser', provider, 'workspaces', archived] as const,
-  sessionList: (provider: string, workspace: string, query: string, archived: boolean) => ['dashboard', 'session-browser', provider, 'list', workspace, query, archived] as const,
-  sessionSearch: (provider: string, workspace: string, query: string, archived: boolean) => ['dashboard', 'session-browser', provider, 'search', workspace, query, archived] as const,
+  sessionBranches: (provider: string, archived: boolean) => ['dashboard', 'session-browser', provider, 'branches', archived] as const,
+  sessionList: (provider: string, workspace: string, query: string, archived: boolean, branch = '') => ['dashboard', 'session-browser', provider, 'list', workspace, query, archived, branch] as const,
+  sessionSearch: (provider: string, workspace: string, query: string, archived: boolean, branch = '') => ['dashboard', 'session-browser', provider, 'search', workspace, query, archived, branch] as const,
   sessionMessages: (provider: string, store: string, id: string, query: string, at = '', itemId = '') => ['dashboard', 'session-browser', provider, store, id, 'messages', query, at, itemId] as const,
   sessionRead: (ref: SessionRef) => ['dashboard', 'session-browser', ref.provider, ref.store_id, ref.session_id, 'read'] as const,
   sessionChildren: (ref: SessionRef) => ['dashboard', 'session-browser', ref.provider, ref.store_id, ref.session_id, 'children'] as const,

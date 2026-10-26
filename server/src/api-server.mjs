@@ -461,13 +461,12 @@ export function createApiServer({
           sendJson(response, 200, await sessionBrowser.activity(safeSegment(activity[1])))
           return
         }
-        const collection = pathname.match(/^\/api\/v1\/session-browser\/([^/]+)\/(workspaces|sessions)$/)
+        const collection = pathname.match(/^\/api\/v1\/session-browser\/([^/]+)\/(workspaces|branches|sessions)$/)
         if (request.method === 'GET' && collection) {
           const provider = safeSegment(collection[1])
           const input = Object.fromEntries(url.searchParams)
-          const result = collection[2] === 'workspaces'
-            ? await sessionBrowser.workspaces(provider, input)
-            : await sessionBrowser.list(provider, input)
+          const operation = collection[2] === 'sessions' ? 'list' : collection[2]
+          const result = await sessionBrowser[operation](provider, input)
           sendJson(response, 200, result)
           return
         }

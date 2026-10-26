@@ -13,6 +13,71 @@ const thread = (id = 'session-1', cwd = '/workspace/example') => ({
 })
 const filters = { workspace: '', query: '', archived: false, cursor: null, limit: 2 }
 
+test('branch catalog groups exact names across projects and reuses bounded native metadata pages', async t => {
+  const current = nativeFixture(t, (method, params) => {
+    assert.equal(method, 'thread/list')
+    assert.equal(params.useStateDbOnly, true)
+    assert.equal(params.cwd, undefined)
+    return { data: [
+      { ...thread('one', '/workspace/api'), gitInfo: { branch: 'feature/shared' } },
+      { ...thread('two', '/workspace/web'), gitInfo: { branch: 'feature/shared' } },
+      { ...thread('three', '/workspace/api'), gitInfo: null },
+    ], nextCursor: 'later' }
+  })
+  const page = await current.adapter.branches({ ...filters, limit: 100 })
+  assert.equal(page.next_cursor, 'later')
+  assert.deepEqual(page.branches, [{ name: 'feature/shared', observed_count: 2, workspace_paths: ['/workspace/api', '/workspace/web'], session_ids: ['one', 'two'], last_active_at: '1970-01-01T00:05:00.000Z' }])
+  const workspaces = await current.adapter.workspaces({ ...filters, limit: 100 })
+  assert.deepEqual(workspaces.workspaces.map(({ path, branch_names, observed_count }) => ({ path, branch_names, observed_count })), [
+    { path: '/workspace/api', branch_names: ['feature/shared'], observed_count: 2 },
+    { path: '/workspace/web', branch_names: ['feature/shared'], observed_count: 1 },
+  ])
+  assert.equal(current.calls.filter(call => call.method === 'thread/list').length, 1)
+})
+
+test('workspace branch children keep exact names, deduplicate, and leave unknown branches at the workspace root', async t => {
+  const current = nativeFixture(t, () => ({ data: [
+    thread('main-one'), thread('main-two'),
+    { ...thread('feature'), gitInfo: { branch: 'feature/shared' } },
+    { ...thread('unknown', '/workspace/unknown'), gitInfo: null },
+  ], nextCursor: 'later' }))
+  const page = await current.adapter.workspaces({ ...filters, limit: 100 })
+  assert.deepEqual(page.workspaces.map(({ path, branch_names, observed_count }) => ({ path, branch_names, observed_count })), [
+    { path: '/workspace/example', branch_names: ['main', 'feature/shared'], observed_count: 3 },
+    { path: '/workspace/unknown', branch_names: [], observed_count: 1 },
+  ])
+  assert.equal(page.next_cursor, 'later')
+})
+
+test('branch filtering preserves empty-page cursors and uses exact names across workspaces', async t => {
+  const current = nativeFixture(t, (_method, params) => ({
+    data: params.cursor ? [
+      { ...thread('api', '/workspace/api'), gitInfo: { branch: 'feature/shared' } },
+      { ...thread('web', '/workspace/web'), gitInfo: { branch: 'feature/shared-v2' } },
+    ] : [{ ...thread(), gitInfo: { branch: 'main' } }], nextCursor: params.cursor ? null : 'later',
+  }))
+  const first = await current.adapter.list({ ...filters, branch: 'feature/shared' })
+  assert.deepEqual(first.sessions, [])
+  assert.equal(first.next_cursor, 'later')
+  const second = await current.adapter.list({ ...filters, branch: 'feature/shared', cursor: first.next_cursor })
+  assert.deepEqual(second.sessions.map(row => row.session_id), ['api'])
+  assert.equal(second.next_cursor, null)
+  assert.equal(current.calls.some(call => call.params.branch), false)
+})
+
+test('body search continues native pages until the selected branch matches', async t => {
+  const current = nativeFixture(t, (method, params) => {
+    assert.equal(method, 'thread/search')
+    assert.equal(params.branch, undefined)
+    const row = { ...thread(params.cursor ? 'hit' : 'outside'), gitInfo: { branch: params.cursor ? 'feature/shared' : 'main' } }
+    return { data: [{ thread: row, snippet: 'needle in body' }], nextCursor: params.cursor ? null : 'later' }
+  })
+  const page = await current.adapter.list({ ...filters, query: 'needle', branch: 'feature/shared' })
+  assert.deepEqual(page.sessions.map(row => row.session_id), ['hit'])
+  assert.equal(page.search_scope, 'messages')
+  assert.equal(page.scanned_count, 2)
+})
+
 test('timeline without a window requests the session lifetime, but a half-specified window is rejected', async () => {
   let received
   const browser = createSessionBrowser({ adapters: [{ id: 'codex', storeId: 'store', timeline: async (_id, filters) => { received = filters; return {} } }] })
@@ -20,6 +85,15 @@ test('timeline without a window requests the session lifetime, but a half-specif
   assert.equal(received.from, null)
   assert.equal(received.to, null)
   await assert.rejects(browser.timeline('codex', 'thread', { store_id: 'store', from: '2026-01-01T00:00:00Z' }), { code: 'SESSION_BROWSER_INPUT_INVALID' })
+})
+
+test('browser validates branch filters and reports unsupported branch catalogs explicitly', async () => {
+  let received
+  const browser = createSessionBrowser({ adapters: [{ id: 'codex', list: async filters => { received = filters; return { sessions: [] } } }] })
+  await browser.list('codex', { branch: 'feature/shared' })
+  assert.equal(received.branch, 'feature/shared')
+  assert.throws(() => browser.list('codex', { branch: 'x'.repeat(201) }), { code: 'SESSION_BROWSER_INPUT_INVALID' })
+  assert.throws(() => browser.branches('codex', {}), { code: 'SESSION_BROWSER_UNSUPPORTED' })
 })
 
 function nativeFixture(t, respond) {

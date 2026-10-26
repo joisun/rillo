@@ -2,7 +2,7 @@ export interface SessionProvider {
   id: string
   name: string
   store_id: string
-  capabilities: { full_text_search: boolean; search_experimental: boolean; message_location: boolean; resume: boolean; live_presence?: boolean }
+  capabilities: { full_text_search: boolean; search_experimental: boolean; message_location: boolean; resume: boolean; live_presence?: boolean; branch_groups?: boolean }
 }
 
 export interface SessionActivityPage {
@@ -60,6 +60,7 @@ export interface SessionTimeline {
 }
 
 export interface SessionFilters {
+  branch?: string
   item_id?: string
   workspace?: string
   query?: string
@@ -81,7 +82,12 @@ export interface SessionPage {
 }
 
 export interface SessionWorkspacePage {
-  workspaces: { path: string; observed_count: number; last_active_at: string | null }[]
+  workspaces: { path: string; observed_count: number; branch_names?: string[]; last_active_at: string | null }[]
+  next_cursor: string | null
+}
+
+export interface SessionBranchPage {
+  branches: { name: string; observed_count: number; workspace_paths: string[]; session_ids: string[]; last_active_at: string | null }[]
   next_cursor: string | null
 }
 

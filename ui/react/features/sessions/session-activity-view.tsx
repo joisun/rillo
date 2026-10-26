@@ -11,7 +11,7 @@ import { AutoPager } from './session-auto-pager'
 import { SessionOrigin } from './session-origin'
 import { SessionDensity } from './session-density'
 import { SessionResumeButton } from './session-resume-button'
-import { sessionKey, workspaceName } from './session-format'
+import { sessionKey } from './session-format'
 import { projectSessionTree, sessionMessageRange, type SessionTreeNode } from './session-projection'
 import { createTimelineRequestQueue, type TimelineLoadRequest } from './session-timeline-queue'
 
@@ -160,10 +160,13 @@ export function SessionActivityView({ api, sessions, relations, openIds, presenc
               {session ? <button type="button" className="session-tree__title" title={session.title} aria-pressed={node.key === selectedKey} onClick={() => onSelect(session)}>{session.title}</button>
                 : <button type="button" className="session-tree__missing" title={node.key} onClick={() => onReadSession(node.ref)}>父会话未载入 · {node.ref.session_id}</button>}
               {session ? <SessionActivity state={session.state} isOpen={session.provider === presenceSource.provider && session.store_id === presenceSource.store_id && openIds.has(session.session_id)} /> : null}
-              {range ? <span className="session-plot__bounds"><time dateTime={new Date(range.start).toISOString()} title={'会话开始：' + new Date(range.start).toLocaleString('zh-CN')}>{formatTime(range.start)}</time><span>–</span><time dateTime={new Date(range.end).toISOString()} title={'最后一条消息：' + new Date(range.end).toLocaleString('zh-CN')}>{formatTime(range.end)}</time></span> : null}
+              {session?.branch ? <SessionOrigin workspace={null} branch={session.branch} /> : null}
               {session ? <SessionResumeButton api={api} session={session} /> : null}
             </div>
-            {session ? <SessionOrigin workspace={session.workspace} branch={session.branch} /> : null}
+            <div className="session-tree__workspace-row">
+              {session?.workspace ? <SessionOrigin workspace={session.workspace} branch={null} /> : null}
+              {range ? <span className="session-plot__bounds"><time dateTime={new Date(range.start).toISOString()} title={'会话开始：' + new Date(range.start).toLocaleString('zh-CN')}>{formatTime(range.start)}</time><span>–</span><time dateTime={new Date(range.end).toISOString()} title={'最后一条消息：' + new Date(range.end).toLocaleString('zh-CN')}>{formatTime(range.end)}</time></span> : null}
+            </div>
             <div className="session-tree__meta">
               {node.relation ? <span>{node.relation.origin === 'registered' ? '登记父子' : '原生 subagent'}</span> : null}
               {node.conflict ? <span className="session-error">关系冲突，未推断父级</span> : null}
@@ -192,7 +195,7 @@ export function SessionActivityView({ api, sessions, relations, openIds, presenc
     {latestError ? <p className="session-error" role="alert">{latestError}</p> : null}
     <div className="session-activity-view__scroll">
       {[...groups.entries()].map(([path, nodes]) => <div key={path} className="session-tree__workspace">
-        <div className="session-tree__group"><Folder /><span title={path}>{path ? workspaceName(path) : '目录未知 / 父会话未载入'}</span><small>{nodes.length}</small></div>
+        <div className="session-tree__group"><Folder /><span className="session-path" title={path}><bdi dir="ltr">{path || '目录未知 / 父会话未载入'}</bdi></span><small>{nodes.length}</small></div>
         {nodes.map(node => renderNode(node, 0))}
       </div>)}
       {roots.length === 0 ? <p className="session-state">尚未载入会话</p> : null}
