@@ -18,7 +18,8 @@ function usageError() {
   )
 }
 
-async function defaultDashboardOpener(url) {
+export async function defaultDashboardOpener(url, { platform = process.platform } = {}) {
+  if (platform === 'linux') return { opened: false, url, message: 'Open this URL in your browser; use SSH port forwarding for a remote service.' }
   await new Promise((resolve, reject) => {
     const child = spawn('/usr/bin/open', [url], { stdio: 'ignore' })
     child.once('error', reject)

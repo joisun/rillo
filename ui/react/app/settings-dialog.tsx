@@ -45,7 +45,7 @@ export function SettingsDialog() {
           <DialogContent aria-label="设置" showCloseButton={!save.isPending}>
             <DialogHeader>
               <DialogTitle>设置</DialogTitle>
-              <DialogDescription>选择恢复 Codex 会话时使用的终端。</DialogDescription>
+              <DialogDescription>{settings.data?.local_actions_supported === false ? '复制 Session ID 后，在服务器终端恢复会话。' : '选择恢复 Codex 会话时使用的终端。'}</DialogDescription>
             </DialogHeader>
             <DialogBody>
               {settings.isPending ? <p role="status">正在读取设置…</p> : null}
@@ -55,7 +55,7 @@ export function SettingsDialog() {
                   <Button size="sm" variant="secondary" onPress={() => void settings.refetch()}>重新读取</Button>
                 </div>
               ) : null}
-              {settings.data ? (
+              {settings.data && settings.data.local_actions_supported !== false ? (
                 <>
                   <Select
                     aria-label="恢复会话使用的终端"

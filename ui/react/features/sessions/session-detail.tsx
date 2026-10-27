@@ -16,8 +16,9 @@ import { sessionReadRequests } from './session-timeline-queue'
 
 const SEEK_SCROLL_MS = 100
 
-export function SessionDetail({ api, session, knownSessions, knownRelations, query, onBack, at = null, itemId, followRequest = 0, onReadingPosition, onReadSession, onLoadTimeline }: {
+export function SessionDetail({ api, session, knownSessions, knownRelations, query, onBack, canResume = true, at = null, itemId, followRequest = 0, onReadingPosition, onReadSession, onLoadTimeline }: {
   api: DashboardApi
+  canResume?: boolean
   session: BrowserSession
   knownSessions?: Map<string, BrowserSession>
   knownRelations?: SessionRelation[]
@@ -193,7 +194,7 @@ export function SessionDetail({ api, session, knownSessions, knownRelations, que
         <div className="session-detail__heading">
           <div className="session-detail__identity"><div className="session-detail__title"><SessionActivity session={session} /><h2 title={current.title}>{current.title}</h2></div><SessionTimeRange api={api} session={session} /></div>
           <div className="session-detail__tools">
-            <SessionResumeButton api={api} session={{ ...current, state: session.state }} />
+            {canResume ? <SessionResumeButton api={api} session={{ ...current, state: session.state }} /> : null}
             <span title={copyStatus || session.session_id}><Button size="xs" variant="quiet" isIconOnly aria-label="复制 Session ID" onPress={() => void copyId()}>{copyStatus === '已复制' ? <Check /> : <Copy />}</Button></span>
             <SessionRelations api={api} session={current} knownSessions={knownSessions} knownRelations={knownRelations} onReadSession={onReadSession} />
           <Button className="session-detail__close" size="xs" variant="quiet" isIconOnly aria-label="收起会话面板" onPress={onBack}><PanelRightClose /></Button>

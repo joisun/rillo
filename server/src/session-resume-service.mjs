@@ -90,7 +90,7 @@ export function createSessionResumeService({
       if (!await sessionInventory.has(target.session_id)) {
         throw resumeError(
           'CODEX_SESSION_NOT_FOUND',
-          'The Codex session transcript is not available on this Mac.',
+          'The Codex session transcript is not available on this machine.',
           { run_id: target.run_id, session_id: target.session_id },
         )
       }
@@ -103,7 +103,7 @@ export function createSessionResumeService({
       }
       const launch = await runtimeRegistry.resolve(target.runtime_id)
       if (!await definition.sessionExists({ launch, sessionId: target.session_id, workspace: target.workspace })) {
-        throw resumeError('RUNTIME_SESSION_NOT_FOUND', 'The runtime session is not available on this Mac.', {
+        throw resumeError('RUNTIME_SESSION_NOT_FOUND', 'The runtime session is not available on this machine.', {
           run_id: target.run_id, session_id: target.session_id, runtime_id: target.runtime_id,
         })
       }

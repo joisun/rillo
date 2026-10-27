@@ -317,5 +317,5 @@ export function createTerminalLauncher({
     }
   }
 
-  return { launch, options }
+  return { launch, options, supported: platform === 'darwin' }
 }

@@ -6,6 +6,7 @@ import { expect, test, vi } from 'vitest'
 import { createDashboardApi } from '@/lib/api/dashboard-api'
 import type { RunRecord } from '@/lib/api/types'
 import { RunDetail } from './run-detail'
+import { queryKeys } from '@/lib/query/keys'
 
 vi.mock('./live-session', () => ({ LiveSession: () => null, SessionConversation: () => null }))
 
@@ -19,8 +20,12 @@ const run: RunRecord = {
   created_at: '2026-09-08T08:00:00Z', updated_at: '2026-09-08T08:00:00Z',
 }
 
+function desktopApi() {
+  return { ...createDashboardApi(), settings: vi.fn(async () => ({ settings: { resume_terminal: 'terminal', schedule_definitions_dir: '/schedules' }, terminal_options: [], local_actions_supported: true, restart_required: false })) }
+}
+
 function mount(openRunFile = vi.fn(async (_id: string, path: string) => ({ opened: true, path }))) {
-  const api = { ...createDashboardApi(), openRunFile }
+  const api = { ...desktopApi(), openRunFile }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   render(<QueryClientProvider client={client}><RunDetail api={api} run={run} /></QueryClientProvider>)
   return { api }
@@ -29,6 +34,7 @@ function mount(openRunFile = vi.fn(async (_id: string, path: string) => ({ opene
 test('output filename is keyboard accessible and opens the recorded path for this Run', async () => {
   const { api } = mount()
   const file = screen.getByRole('button', { name: '打开文件 reports/产出 #1.md' })
+  await waitFor(() => expect(file).toBeEnabled())
   file.focus()
   await userEvent.keyboard('{Enter}')
   await waitFor(() => expect(api.openRunFile).toHaveBeenCalledWith('run-a', 'reports/产出 #1.md'))
@@ -41,6 +47,7 @@ test('prevents repeated clicks while opening and displays actionable failures', 
   const open = vi.fn((_id: string, _path: string) => new Promise<{ opened: boolean; path: string }>((_resolve, fail) => { reject = fail }))
   mount(open)
   const file = screen.getByRole('button', { name: '打开文件 reports/产出 #1.md' })
+  await waitFor(() => expect(file).toBeEnabled())
   await userEvent.click(file)
   await waitFor(() => expect(file).toBeDisabled())
   await userEvent.click(file)
@@ -53,26 +60,39 @@ test('prevents repeated clicks while opening and displays actionable failures', 
 
 test('closed protocol displays an actionable terminal error and its exit code', () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(<QueryClientProvider client={client}><RunDetail api={createDashboardApi()} run={{ ...run, status: 'failed', error_code: 'RUNTIME_PROTOCOL_CLOSED', exit_code: 17 }} /></QueryClientProvider>)
+  render(<QueryClientProvider client={client}><RunDetail api={desktopApi()} run={{ ...run, status: 'failed', error_code: 'RUNTIME_PROTOCOL_CLOSED', exit_code: 17 }} /></QueryClientProvider>)
   expect(screen.getByText(/Codex 执行连接已关闭/)).toBeInTheDocument()
   expect(screen.getByText('17')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: '停止' })).not.toBeInTheDocument()
 })
 
 test('clicking a completed Session resumes it in the configured terminal', async () => {
-  const api = { ...createDashboardApi(), resumeScheduledRun: vi.fn(async () => ({ ok: true })) }
+  const api = { ...desktopApi(), resumeScheduledRun: vi.fn(async () => ({ ok: true })) }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   render(<QueryClientProvider client={client}><RunDetail api={api} run={{ ...run, runtime_id: 'opencode', thread_id: 'ses_finished_session' }} /></QueryClientProvider>)
-  await userEvent.click(screen.getByRole('button', { name: '恢复此 Session' }))
+  await userEvent.click(await screen.findByRole('button', { name: '恢复此 Session' }))
   await waitFor(() => expect(api.resumeScheduledRun).toHaveBeenCalledWith('run-a'))
 })
 
 test('model availability failures show both a specific explanation and provider detail', () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(<QueryClientProvider client={client}><RunDetail api={createDashboardApi()} run={{
+  render(<QueryClientProvider client={client}><RunDetail api={desktopApi()} run={{
     ...run, runtime_id: 'opencode', status: 'failed', error_code: 'RUNTIME_MODEL_UNAVAILABLE',
     final_message: 'This model is not available in your country.',
   }} /></QueryClientProvider>)
   expect(screen.getByText('所选模型在当前地区不可用，请换用可访问的模型。')).toBeInTheDocument()
   expect(screen.getByText('This model is not available in your country.')).toBeInTheDocument()
+})
+
+
+test('Web-only Run detail keeps Session ID copying while desktop actions remain unavailable', async () => {
+  const api = { ...desktopApi(), resumeScheduledRun: vi.fn(), openRunFile: vi.fn() }
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  client.setQueryData(queryKeys.settings, { ...await api.settings(), local_actions_supported: false })
+  render(<QueryClientProvider client={client}><RunDetail api={api} run={{ ...run, thread_id: 'ses_linux_session' }} /></QueryClientProvider>)
+  expect(screen.getByRole('button', { name: '复制 Session ID' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: '恢复此 Session' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '打开文件 reports/产出 #1.md' })).toBeDisabled()
+  expect(api.resumeScheduledRun).not.toHaveBeenCalled()
+  expect(api.openRunFile).not.toHaveBeenCalled()
 })

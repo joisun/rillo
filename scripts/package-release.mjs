@@ -75,11 +75,10 @@ export async function packageRelease({
       'ui/THIRD_PARTY_NOTICES.md',
     ])
 
-    const artifacts = [await archive(
-      stageDirectory,
-      runtimeName,
-      join(outputDirectory, 'tasks-recorder-macos.tar.gz'),
-    )]
+    const artifacts = []
+    for (const platform of ['macos', 'linux']) {
+      artifacts.push(await archive(stageDirectory, runtimeName, join(outputDirectory, `tasks-recorder-${platform}.tar.gz`)))
+    }
 
     for (const host of ['codex', 'claude']) {
       const adapterStage = join(stageDirectory, `${host}-adapter`)

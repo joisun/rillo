@@ -23,6 +23,7 @@ test('release packaging creates allowlisted service and independent adapter arch
     assert.deepEqual(artifacts.map((path) => basename(path)).sort(), [
       'tasks-recorder-claude-adapter.tar.gz',
       'tasks-recorder-codex-adapter.tar.gz',
+      'tasks-recorder-linux.tar.gz',
       'tasks-recorder-macos.tar.gz',
     ])
 
@@ -116,6 +117,7 @@ test('release packaging CLI writes all artifacts to an explicit output directory
     assert.deepEqual(stdout.trim().split('\n').sort(), [
       'tasks-recorder-claude-adapter.tar.gz',
       'tasks-recorder-codex-adapter.tar.gz',
+      'tasks-recorder-linux.tar.gz',
       'tasks-recorder-macos.tar.gz',
     ])
   } finally {

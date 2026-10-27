@@ -6,16 +6,16 @@ Tasks Recorder 是运行在本机的 coding-agent 会话与自动化控制台。
 
 当前状态：
 
-- macOS service 与 React Dashboard 可用；Legacy bundle 仅作为回滚资产保留，不是 production entry；
+- 支持 macOS 和具有 systemd 用户服务的 Linux；React Dashboard 可用；Legacy bundle 仅作为回滚资产保留，不是 production entry；
 - Codex 和 Claude Code 插件提供会话关系登记工具；Sessions 数据读取当前支持 Codex；
 - Scheduled Task runtime 支持 Codex 和 OpenCode；
-- Sessions 支持按项目目录浏览 Codex 会话、按活跃时间排列、搜索对话正文及在终端恢复；
+- Sessions 支持按项目目录浏览 Codex 会话、按活跃时间排列和搜索正文；macOS 可一键打开终端，Linux 复制 Session ID 后自行恢复；
 - runtime registry 已按 multi-CLI contract 设计，后续 runtime 只增加 adapter，不增加第二套调度链路；
 - 所有数据都保存在本机，不需要 cloud account 或 auth token。
 
 ## Quick start
 
-要求 macOS、Node.js 24+、`curl`、`tar` 与 `shasum`。
+要求 macOS 或提供 systemd 用户服务的 Linux、Node.js 24+、`curl`、`tar`，以及 `sha256sum` 或 `shasum`。
 
 安装 latest GitHub Release：
 
@@ -40,6 +40,28 @@ bash install.sh --version "$version"
 ```
 
 installer 会在解包前验证 Release 中的 `SHA256SUMS`，但不会探测、登录或配置任何 agent CLI。CLI availability 由运行时 registry 统一解析。
+
+## Linux Web service
+
+Linux 使用 `systemd --user` 管理一个 `tasks-recorder.service`，安装、启停、状态和卸载沿用相同的 `tasks-recorder` 命令，不需要 root。安装时需要可用的用户级 systemd manager；installer 不修改系统服务或用户 lingering 策略。退出登录后是否继续运行取决于该机器的用户 manager 配置。
+
+Linux 安装需要 Release 包含 `tasks-recorder-linux.tar.gz`；macOS 使用 `tasks-recorder-macos.tar.gz`。两个包均为自包含的 JavaScript runtime 与预构建 Dashboard，不捆绑 Node.js。安装后无需 `npm install`。Linux 日志位于 `~/.local/state/tasks-recorder/`，用户 unit 位于 `~/.config/systemd/user/tasks-recorder.service`。
+
+远程使用时，服务仍只监听服务器的 `127.0.0.1`。在访问网页的电脑上建立 SSH 转发（以下为默认端口示例，替换登录地址）：
+
+```bash
+ssh -N -L 43127:127.0.0.1:43127 user@server
+```
+
+随后在该电脑打开 `http://127.0.0.1:43127/?view=sessions`。Linux 上的 `tasks-recorder open` 输出访问地址，不启动服务器上的桌面应用。
+
+会话树、正文、搜索、关系与 Scheduled 均通过 Web 使用。点击对话标题右侧的复制按钮取得 Session ID，然后在服务器上的对应 workspace 与相同 `CODEX_HOME` 下执行：
+
+```bash
+codex resume <session-id>
+```
+
+Linux 不提供启动终端、tmux 或系统应用打开产出文件的功能；Session ID 复制保留，相关桌面操作不在页面提供。服务卸载保留配置、Schedule、运行记录与日志。
 
 ## Connect an agent
 
@@ -91,7 +113,7 @@ Schedule.md ──watch──▶ taskd Scheduler ──▶ Runtime Registry
                                       └── SSE ──▶ Dashboard
 ```
 
-macOS `launchd` 只负责让 `taskd` 常驻。每个 Schedule 不再创建 LaunchAgent，也没有独立 runner、Unix socket、claim、heartbeat 或 completion spool。
+macOS 使用 `launchd`，Linux 使用 `systemd --user`，两者都只负责让同一个 `taskd` 常驻。每个 Schedule 不再创建 LaunchAgent，也没有独立 runner、Unix socket、claim、heartbeat 或 completion spool。
 
 ### Session ownership
 
@@ -172,7 +194,7 @@ Sessions与Scheduled共用零外边距、无外框的根布局，切换时不改
 
 正文搜索和命中定位依赖Codex的实验接口，已在Codex CLI 0.163.0验证。旧版本不支持时会明确提示更新，不会只搜索preview。搜索浮层接近末项时继续检查原生结果，过滤后的空页也会自动继续。预览长消息仍有节选提示，原文由Codex保存，Tasks Recorder不复制或持久化正文。
 
-点击 **在终端继续**，使用右上角设置中的恢复终端。恢复目录和 Session ID 由服务重新读取；浏览器不能指定命令。Claude Code 会话浏览尚未接入，现有 Claude Recorder adapter 不等同于 Sessions provider。
+macOS 点击 **在终端继续**，使用右上角设置中的恢复终端。Linux 保留复制 Session ID，自行在服务器终端恢复。恢复目录和 Session ID 由服务重新读取；浏览器不能指定命令。Claude Code 会话浏览尚未接入，现有 Claude Recorder adapter 不等同于 Sessions provider。
 
 ## Scheduled Tasks
 

@@ -40,6 +40,7 @@ async function createReleaseFixture(directory) {
   const { stdout } = await execFileAsync('shasum', [
     '-a', '256',
     'tasks-recorder-macos.tar.gz',
+    'tasks-recorder-linux.tar.gz',
   ], { cwd: directory })
   await writeFile(join(directory, 'SHA256SUMS'), stdout)
 }
@@ -96,13 +97,8 @@ test('installer creates versioned runtime and preserves existing config/database
         join(homeDirectory, 'Library', 'LaunchAgents', 'com.joi.tasks-recorder.taskd.plist'),
       )
     } else {
-      await assert.rejects(
-        execFileAsync(wrapper, ['status'], { env: { ...process.env, HOME: homeDirectory } }),
-        (error) => {
-          assert.match(error.stderr, /currently requires macOS/)
-          return true
-        },
-      )
+      const { stdout } = await execFileAsync(wrapper, ['status'], { env: { ...process.env, HOME: homeDirectory } })
+      assert.equal(JSON.parse(stdout).unitPath, join(homeDirectory, '.config', 'systemd', 'user', 'tasks-recorder.service'))
     }
 
     const second = await runInstaller({
@@ -216,10 +212,12 @@ esac
 exec "$TASKS_RECORDER_REAL_CURL" "$@"
 `)
     await writeFile(join(commandDirectory, 'launchctl'), '#!/usr/bin/env sh\nexit 0\n')
+    await writeFile(join(commandDirectory, 'systemctl'), '#!/usr/bin/env sh\nexit 0\n')
     await writeFile(join(commandDirectory, 'sleep'), '#!/usr/bin/env sh\nexit 0\n')
     await Promise.all([
       chmod(fakeCurl, 0o755),
       chmod(join(commandDirectory, 'launchctl'), 0o755),
+      chmod(join(commandDirectory, 'systemctl'), 0o755),
       chmod(join(commandDirectory, 'sleep'), 0o755),
     ])
 
@@ -242,5 +240,22 @@ exec "$TASKS_RECORDER_REAL_CURL" "$@"
     await rm(homeDirectory, { recursive: true, force: true })
     await rm(releaseDirectory, { recursive: true, force: true })
     await rm(commandDirectory, { recursive: true, force: true })
+  }
+})
+
+test('Linux installer selects the Linux archive and preserves config on file-only install', async () => {
+  const homeDirectory = await mkdtemp(join(tmpdir(), 'tasks-recorder-linux-home-'))
+  const releaseDirectory = await mkdtemp(join(tmpdir(), 'tasks-recorder-linux-release-'))
+  try {
+    await createReleaseFixture(releaseDirectory)
+    await writeFile(join(releaseDirectory, 'tasks-recorder-macos.tar.gz'), 'macOS archive must not be selected')
+    const installed = await runInstaller({ homeDirectory, releaseDirectory, args: ['--version', 'v0.10.0', '--no-start'], env: { TASKS_RECORDER_TEST_PLATFORM: 'Linux' } })
+    assert.equal(installed.code, 0, installed.stderr)
+    const runtime = await readlink(join(homeDirectory, '.local/share/tasks-recorder/current'))
+    assert.match(await readFile(join(runtime, 'server/control/systemd.mjs'), 'utf8'), /systemctl/)
+    assert.equal(JSON.parse(await readFile(join(homeDirectory, '.config/tasks-recorder/config.json'), 'utf8')).resume_terminal, 'terminal')
+  } finally {
+    await rm(homeDirectory, { recursive: true, force: true })
+    await rm(releaseDirectory, { recursive: true, force: true })
   }
 })

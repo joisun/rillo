@@ -403,3 +403,17 @@ test('native status buttons promote matching sessions in Tree and toggle back to
   await userEvent.click(within(controls).getByRole('button', { name: 'Working 1' }))
   expect(document.querySelector('.session-tree__title')).toHaveTextContent('历史会话')
 })
+
+
+test('a Web-only provider exposes Session ID copying without terminal launch controls', async () => {
+  const { api, mount } = fixture()
+  const data = await api.sessionProviders()
+  data.providers[0].capabilities.resume = false
+  api.sessionProviders.mockResolvedValue(data)
+  mount()
+  await userEvent.click(await screen.findByRole('button', { name: 'Unrelated session title' }))
+  const detail = within(await screen.findByRole('region', { name: '会话预览' }))
+  expect(detail.getByRole('button', { name: '复制 Session ID' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /在终端继续/ })).not.toBeInTheDocument()
+  expect(api.resumeSession).not.toHaveBeenCalled()
+})

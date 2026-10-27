@@ -7,6 +7,8 @@ import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { createSystemdController } from './control/systemd.mjs'
+
 import { resolveAppConfig } from '../mcp/src/config.mjs'
 import { cleanupLegacyScheduleLaunchAgents } from './src/scheduler/legacy-launchd-cleanup.mjs'
 
@@ -54,9 +56,9 @@ export function renderLaunchAgentPlist({
 `
 }
 
-async function runCommand(command, args, { allowFailure = false } = {}) {
+async function runCommand(command, args, { allowFailure = false, timeoutMs } = {}) {
   const result = await new Promise((resolveResult, reject) => {
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...(timeoutMs ? { timeout: timeoutMs } : {}) })
     let stdout = ''
     let stderr = ''
     child.stdout.on('data', (chunk) => { stdout += chunk })
@@ -219,16 +221,18 @@ export async function runControlCommand(command = 'status', {
   env = process.env,
   homeDirectory = homedir(),
   configResolver = resolveAppConfig,
-  controllerFactory = createTaskdController,
+  controllerFactory,
+  run = runCommand,
 } = {}) {
-  if (platform !== 'darwin') {
-    throw new Error('tasks-recorder taskd controller currently requires macOS')
+  if (!['darwin', 'linux'].includes(platform)) {
+    throw new Error('tasks-recorder supports macOS and Linux with systemd')
   }
   if (!['install', 'start', 'stop', 'status', 'uninstall'].includes(command)) {
     throw new Error('usage: npm run taskd -- install|start|stop|status|uninstall')
   }
   const config = await configResolver({ projectRoot, env, homeDirectory })
-  const controller = controllerFactory({ projectRoot, config, homeDirectory })
+  const factory = controllerFactory ?? (platform === 'linux' ? createSystemdController : createTaskdController)
+  const controller = factory({ projectRoot, config, homeDirectory, env, run, build: createInstallBuildStep({ projectRoot, env, run }), probeHealth: defaultProbeHealth })
   return controller[command]()
 }
 

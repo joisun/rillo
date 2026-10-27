@@ -13,7 +13,15 @@ Schedule Markdown ──watch───────▶│──▶ scheduler.sqli
                                   └──▶ Runtime Registry ──▶ local agent CLI
 ```
 
-macOS `launchd` 只管理一个 KeepAlive service：`taskd`。`taskd` 是唯一 SQLite writer、唯一 HTTP/SSE server、唯一 scheduler 和唯一 Run supervisor。
+macOS `launchd` 与 Linux `systemd --user` 均只管理一个 `taskd` 常驻服务。`taskd` 是唯一 SQLite writer、唯一 HTTP/SSE server、唯一 scheduler 和唯一 Run supervisor。
+
+## Host service lifecycle
+
+`server/control.mjs` 按真实平台选择 macOS LaunchAgent 或 `server/control/systemd.mjs`，Windows 不进入安装路径。Linux controller 写入用户级 `tasks-recorder.service`，确认 Node.js 24、用户 manager、端口占用与预构建资产；启用后只重启一次服务。ExecStart 固定为可信 Node 与 taskd 绝对路径，禁用 shell/环境展开，转义 systemd 百分号 specifier 与路径引号。unit 固定 HOME、与 Node executable 一致的 PATH，以及显式 CODEX_HOME，不持久化 API key。日志和 unit 使用用户私有权限。卸载停止并禁用本 unit，删除 unit 后 reload manager；数据和日志保留，不调用 sudo、不改系统 unit 或 lingering。
+
+installer 按 Darwin/Linux 选择不同命名的自包含 archive，校验平台对应的 SHA256 后再切换 current；runtime 本身为同一份跨平台 JavaScript，Node.js 由用户安装。Linux 优先使用 sha256sum，macOS 可使用 shasum。两平台均检查 Node.js 24+、loopback 配置及预构建入口，服务卸载失败时不继续删除程序文件。CI 同时运行 macos-latest 和 ubuntu-latest；Release 输出两种 service archive 和原有 adapter archive。
+
+Linux 按 Web 服务使用，不启动浏览器、桌面终端或 tmux；`tasks-recorder open` 仅返回 URL，远程使用通过 SSH loopback 转发访问。terminalLauncher.supported=false 时 providers 的 resume=false，settings 返回 local_actions_supported=false。Sessions 不显示终端启动按钮，Scheduled 保留 Session ID 复制并禁用服务器本机文件打开操作，终端选择设置不出现；桌面操作 API 仍返回 typed unsupported。macOS 操作保持原有实现。状态读取通过已有 Codex Unix socket；没有共享服务器时只标记状态不可用，不启动任何 daemon 或使用进程反查。
 
 ## Non-negotiable invariants
 

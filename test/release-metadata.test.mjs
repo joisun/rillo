@@ -58,7 +58,9 @@ test('CI and release workflows use pinned actions and the installer artifact con
   }
   assert.match(ci, /permissions:\s+contents: read/)
   assert.match(release, /permissions:\s+contents: write/)
+  assert.match(ci, /os: \[macos-latest, ubuntu-latest\]/)
   assert.match(release, /tasks-recorder-macos\.tar\.gz/)
+  assert.match(release, /tasks-recorder-linux\.tar\.gz/)
   assert.match(release, /tasks-recorder-codex-adapter\.tar\.gz/)
   assert.match(release, /tasks-recorder-claude-adapter\.tar\.gz/)
   assert.match(release, /SHA256SUMS/)

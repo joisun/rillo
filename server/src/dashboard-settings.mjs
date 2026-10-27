@@ -59,6 +59,7 @@ export function createDashboardSettings({
         schedule_definitions_dir: configuredDefinitionsDirectory(config),
       },
       terminal_options: terminalOptions,
+      local_actions_supported: terminalLauncher.supported !== false,
       restart_required: false,
       ...(relocation ? { relocation } : {}),
     }

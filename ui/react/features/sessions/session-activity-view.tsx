@@ -52,8 +52,8 @@ function TimelineSource({ api, session, onData, continueSequence = 0, eager = fa
   return <span ref={anchor} className="session-tree__index-status" aria-busy={timeline.isFetching || undefined}>{timeline.isError ? <span className="session-source-error" role="img" aria-label="时间线暂不可用" title={timeline.error.message}>!</span> : null}</span>
 }
 
-export function SessionActivityView({ api, sessions, relations, relationIndex, knownSessions, onChildren, ancestorState = 'complete', activity, statuses, statusSort, selection, at, itemId, readingPosition, onSelect, onSeek, onReadSession, timelineRequest, hasMore = false, loadingMore = false, onMore = () => {} }: {
-  api: DashboardApi; sessions: BrowserSession[]; relations: SessionRelation[]; ancestorState?: 'pending' | 'unavailable' | 'complete'; relationIndex: SessionRelationIndex; knownSessions: Map<string, BrowserSession>; onChildren: (key: string, pages: SessionPage[]) => void; activity?: SessionActivityPage; statuses: Map<string, BrowserSession>; statusSort: SessionStatusGroup | null; timelineRequest: TimelineLoadRequest | null
+export function SessionActivityView({ api, sessions, relations, relationIndex, knownSessions, onChildren, canResume = true, ancestorState = 'complete', activity, statuses, statusSort, selection, at, itemId, readingPosition, onSelect, onSeek, onReadSession, timelineRequest, hasMore = false, loadingMore = false, onMore = () => {} }: {
+  api: DashboardApi; canResume?: boolean; sessions: BrowserSession[]; relations: SessionRelation[]; ancestorState?: 'pending' | 'unavailable' | 'complete'; relationIndex: SessionRelationIndex; knownSessions: Map<string, BrowserSession>; onChildren: (key: string, pages: SessionPage[]) => void; activity?: SessionActivityPage; statuses: Map<string, BrowserSession>; statusSort: SessionStatusGroup | null; timelineRequest: TimelineLoadRequest | null
   selection: BrowserSession | null; at: string | null; itemId?: string
   readingPosition?: { key: string; at: string; itemId: string } | null
   onSelect: (session: BrowserSession) => void
@@ -162,7 +162,7 @@ export function SessionActivityView({ api, sessions, relations, relationIndex, k
             <SessionChildrenSource api={api} session={session} expanded={isExpanded} onData={onChildren} />
             <TimelineSource api={api} session={session} onData={rememberTimeline} eager={node.key === selectedKey || Boolean(timelineRequest && sessionKey(timelineRequest.session) === node.key)} continueSequence={timelineRequest && sessionKey(timelineRequest.session) === node.key ? timelineRequest.sequence : 0} />
           </> : null}</span>
-          <SessionResumeButton api={api} session={session} />
+          {canResume ? <SessionResumeButton api={api} session={session} /> : null}
         </div>
         <div className="session-tree__workspace-row">
           {session.workspace ? <SessionOrigin workspace={session.workspace} branch={null} /> : null}

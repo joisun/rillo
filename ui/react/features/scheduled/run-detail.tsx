@@ -28,6 +28,8 @@ export function RunDetail({ api, run }: { api: DashboardApi; run: RunRecord }) {
   const [copied, setCopied] = useState(false)
   const [actionError, setActionError] = useState('')
   const active = ACTIVE_STATUSES.has(run.status)
+  const settings = useQuery({ queryKey: queryKeys.settings, queryFn: () => api.settings(), staleTime: 60_000 })
+  const localActions = Boolean(settings.data && settings.data.local_actions_supported !== false)
   const log = useQuery({
     queryKey: queryKeys.runLog(run.id, logStream ?? 'stdout'),
     queryFn: () => api.scheduledRunLog(run.id, { stream: logStream ?? 'stdout', tail: LOG_TAIL_BYTES }),
@@ -187,7 +189,7 @@ export function RunDetail({ api, run }: { api: DashboardApi; run: RunRecord }) {
                 <Button
                   className="run-detail__file-open"
                   aria-label={`打开文件 ${file.path}`}
-                  isDisabled={fileOpen.isPending || ['delete', 'deleted', 'removed'].includes(file.kind)}
+                  isDisabled={!localActions || fileOpen.isPending || ['delete', 'deleted', 'removed'].includes(file.kind)}
                   size="xs"
                   variant="quiet"
                   onPress={() => fileOpen.mutate(file.path)}
@@ -213,9 +215,9 @@ export function RunDetail({ api, run }: { api: DashboardApi; run: RunRecord }) {
         <div className="run-detail__section-heading"><h3>Session</h3></div>
         {run.thread_id ? (
           <div className="run-detail__session">
-            <Button className="run-detail__session-resume" aria-label="恢复此 Session" isPending={resume.isPending} isDisabled={active} size="xs" variant="quiet" onPress={() => resume.mutate()}>
+            {localActions ? <Button className="run-detail__session-resume" aria-label="恢复此 Session" isPending={resume.isPending} isDisabled={active} size="xs" variant="quiet" onPress={() => resume.mutate()}>
               <code>{shortSessionId(run.thread_id)}</code>
-            </Button>
+            </Button> : <code title={run.thread_id}>{shortSessionId(run.thread_id)}</code>}
             <Button aria-label="复制 Session ID" isIconOnly size="xs" variant="quiet" onPress={() => void copySession()}>
               {copied ? <Check aria-hidden="true" /> : <Clipboard aria-hidden="true" />}
             </Button>

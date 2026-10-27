@@ -102,6 +102,7 @@ export interface SessionMessagesPage {
 }
 
 export interface DashboardSettingsResponse {
+  local_actions_supported?: boolean
   settings: {
     resume_terminal: string
     schedule_definitions_dir: string

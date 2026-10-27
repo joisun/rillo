@@ -48,6 +48,7 @@ jobs:
           cd release
           shasum -a 256 \
             tasks-recorder-macos.tar.gz \
+            tasks-recorder-linux.tar.gz \
             tasks-recorder-codex-adapter.tar.gz \
             tasks-recorder-claude-adapter.tar.gz \
             install.sh > SHA256SUMS
@@ -58,6 +59,7 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" \
             release/tasks-recorder-macos.tar.gz \
+            release/tasks-recorder-linux.tar.gz \
             release/tasks-recorder-codex-adapter.tar.gz \
             release/tasks-recorder-claude-adapter.tar.gz \
             release/install.sh \

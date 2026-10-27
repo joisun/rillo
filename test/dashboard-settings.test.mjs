@@ -79,3 +79,15 @@ test('settings never exposes a new config when permission hardening fails before
   await assert.rejects(settings.update({ resume_terminal: 'otty' }), { code: 'SETTINGS_WRITE_FAILED' })
   assert.deepEqual(JSON.parse(await readFile(configPath, 'utf8')), original)
 })
+
+
+test('Web-only hosts report desktop actions unavailable without changing stored configuration', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-web-settings-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const configPath = join(directory, 'config.json')
+  const original = '{"output_dir":"."}'
+  await writeFile(configPath, original)
+  const settings = createDashboardSettings({ configPath, terminalLauncher: { supported: false, options: async () => [] } })
+  assert.equal((await settings.get()).local_actions_supported, false)
+  assert.equal(await readFile(configPath, 'utf8'), original)
+})

@@ -3,7 +3,7 @@
 set -eu
 
 repository="joisun/tasks-recorder"
-asset_name="tasks-recorder-macos.tar.gz"
+asset_name=""
 requested_version="latest"
 start_service=1
 uninstall=0
@@ -13,7 +13,7 @@ usage() {
 Usage: install.sh [--version <vX.Y.Z>] [--no-start] [--uninstall]
 
   --version <tag>  Install a specific GitHub Release tag (default: latest)
-  --no-start       Install files only; do not install or start the LaunchAgent
+  --no-start       Install files only; do not install or start the background service
   --uninstall      Remove the service and program files; preserve user data
 EOF
 }
@@ -49,16 +49,28 @@ while [ "$#" -gt 0 ]; do
 done
 
 platform="${TASKS_RECORDER_TEST_PLATFORM:-$(uname -s)}"
-[ "$platform" = 'Darwin' ] || die 'this release currently supports macOS only'
+case "$platform" in
+  Darwin) asset_name='tasks-recorder-macos.tar.gz' ;;
+  Linux) asset_name='tasks-recorder-linux.tar.gz' ;;
+  *) die 'this release supports macOS and Linux only' ;;
+esac
 [ -n "${HOME:-}" ] || die 'HOME is not set'
 case "$HOME" in
   /*) ;;
   *) die 'HOME must be an absolute path' ;;
 esac
 
-for command_name in node curl tar shasum; do
+for command_name in node curl tar; do
   command -v "$command_name" >/dev/null 2>&1 || die "required command not found: $command_name"
 done
+
+if command -v sha256sum >/dev/null 2>&1; then
+  checksum_tool=sha256sum
+elif command -v shasum >/dev/null 2>&1; then
+  checksum_tool=shasum
+else
+  die 'sha256sum or shasum is required'
+fi
 
 node_major="$(node -p 'process.versions.node.split(".")[0]')"
 [ "$node_major" -ge 24 ] || die 'Node.js 24 or newer is required'
@@ -73,7 +85,7 @@ config_path="$data_directory/config.json"
 
 if [ "$uninstall" -eq 1 ]; then
   if [ -x "$wrapper_path" ] && [ -L "$current_link" ]; then
-    "$wrapper_path" uninstall >/dev/null 2>&1 || true
+    "$wrapper_path" uninstall || die 'service removal failed; program files were preserved'
   fi
   if [ -e "$wrapper_path" ] || [ -L "$wrapper_path" ]; then
     rm -f "$wrapper_path"
@@ -107,7 +119,11 @@ curl -fsSL "$release_base_url/SHA256SUMS" -o "$checksums_path"
 
 expected_checksum="$(awk -v name="$asset_name" '$2 == name || $2 == "*" name { print $1; exit }' "$checksums_path")"
 [ -n "$expected_checksum" ] || die "checksum entry missing for $asset_name"
-actual_checksum="$(shasum -a 256 "$archive_path" | awk '{ print $1 }')"
+if [ "$checksum_tool" = sha256sum ]; then
+  actual_checksum="$(sha256sum "$archive_path" | awk '{ print $1 }')"
+else
+  actual_checksum="$(shasum -a 256 "$archive_path" | awk '{ print $1 }')"
+fi
 [ "$expected_checksum" = "$actual_checksum" ] || die "checksum verification failed for $asset_name"
 
 archive_entries="$temporary_directory/archive-entries.txt"
@@ -210,7 +226,12 @@ if [ "$start_service" -eq 1 ]; then
     attempt=$((attempt + 1))
     sleep 0.2
   done
-  [ "$ready" -eq 1 ] || die "service did not become ready; check $HOME/Library/Logs/tasks-recorder/taskd.stderr.log"
+  if [ "$platform" = Linux ]; then
+    service_log="$HOME/.local/state/tasks-recorder/taskd.stderr.log"
+  else
+    service_log="$HOME/Library/Logs/tasks-recorder/taskd.stderr.log"
+  fi
+  [ "$ready" -eq 1 ] || die "service did not become ready; check $service_log"
 fi
 
 printf 'Installed Tasks Recorder %s.\n' "$installed_version"

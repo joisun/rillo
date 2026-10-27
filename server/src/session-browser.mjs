@@ -96,7 +96,7 @@ export function createSessionBrowser({ adapters, settings, terminalLauncher, lin
         id: adapter.id,
         name: adapter.name,
         store_id: adapter.storeId,
-        capabilities: adapter.capabilities,
+        capabilities: { ...adapter.capabilities, resume: adapter.capabilities.resume && terminalLauncher.supported !== false },
       })) }
     },
     list(id, input) {

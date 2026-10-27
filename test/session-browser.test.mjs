@@ -320,3 +320,11 @@ test('native source metadata distinguishes parentless subagents and preserves th
   assert.equal(page.sessions[1].native_parent.session_id, 'main')
   assert.equal(page.sessions[2].is_subagent, false)
 })
+
+
+test('Web-only hosts advertise browsing and search without desktop session launching', () => {
+  const browser = createSessionBrowser({ adapters: [{ id: 'codex', name: 'Codex', storeId: 'store', capabilities: { resume: true, full_text_search: true } }], terminalLauncher: { supported: false } })
+  const provider = browser.providers().providers[0]
+  assert.equal(provider.capabilities.resume, false)
+  assert.equal(provider.capabilities.full_text_search, true)
+})
