@@ -9,12 +9,14 @@ import { codexTimestamp, createCodexSessionTimeline } from '../codex-session-tim
 import { messageTimestamp } from '../codex-message-timing.mjs'
 import { createCodexRolloutTiming } from '../codex-rollout-timing.mjs'
 import { createSessionMetadata } from './codex-sessions/metadata.mjs'
+import { searchCodexSessions } from './codex-sessions/search.mjs'
+import { searchCodexFiles } from './codex-sessions/file-search.mjs'
 import { createCodexRolloutHistory } from '../codex-rollout-history.mjs'
 
 const SOURCES = ['cli', 'vscode', 'appServer', 'exec']
 const MESSAGE_LIMIT = 16 * 1024
-const SEARCH_PAGE_BUDGET = 3
 const IDLE_MS = 45_000
+const SEARCH_TIMEOUT_MS = 60_000
 
 function timestamp(value) {
   if (!Number.isFinite(value)) return null
@@ -46,9 +48,8 @@ export function createCodexSessionAdapter({
   const root = resolve(dataRoot)
   const storeId = createHash('sha256').update(root).digest('hex').slice(0, 20)
   const status = createCodexSessionStatus({ dataRoot: root, createClient: createStatusClient, onChange, clock })
-  let connection = null
-  let idleTimer = null
-  let activeRequests = 0
+  const readChannel = { connection: null, idleTimer: null, activeRequests: 0 }
+  const searchChannels = new Set()
   let closed = false
   let repairClient = null
   const metadataPages = createSessionMetadata({ load: listPage, reconcile, dataRoot: root, onChange, clock, watchImpl })
@@ -57,25 +58,25 @@ export function createCodexSessionAdapter({
   const historyRevision = createCodexRolloutHistory({ dataRoot: root, resolvePath: metadata => rolloutPaths.get(metadata) })
   const timeIndex = createCodexSessionTimeline({ request, readSession, hydrateEntries: rolloutTiming.hydrate, historyRevision })
 
-  function closeConnection(expected = connection) {
-    if (connection !== expected) return
-    const previous = connection
-    connection = null
-    clearTimeout(idleTimer)
-    idleTimer = null
+  function closeConnection(channel = readChannel, expected = channel.connection) {
+    if (channel.connection !== expected) return
+    const previous = channel.connection
+    channel.connection = null
+    clearTimeout(channel.idleTimer)
+    channel.idleTimer = null
     previous?.then((client) => client.close()).catch(() => {})
   }
 
-  async function connected() {
+  async function connected(channel) {
     if (closed) throw sessionBrowserError('SESSION_BROWSER_UNAVAILABLE', 'Session browser is closed', 503)
-    if (!connection) {
-      connection = (async () => {
+    if (!channel.connection) {
+      channel.connection = (async () => {
         const launch = await resolveLaunch()
         const client = createClient({
           executable: launch.executable,
           cwd: homedir(),
           env: { CODEX_HOME: root },
-          requestTimeoutMs: 20_000,
+          requestTimeoutMs: channel.search ? SEARCH_TIMEOUT_MS : 20_000,
           maximumLineBytes: 8 * 1024 * 1024,
         })
         try {
@@ -95,7 +96,7 @@ export function createCodexSessionAdapter({
         }
       })()
     }
-    return connection
+    return channel.connection
   }
 
   async function reconcile() {
@@ -125,13 +126,13 @@ export function createCodexSessionAdapter({
     return { sessions: result.data.map(row => ({ ...session(row), snippet: null })).filter(row => !params.cwd || row.workspace === params.cwd), next_cursor: result.cursor, scanned_count: result.data.length, search_scope: null }
   }
 
-  async function request(method, params) {
-    activeRequests += 1
-    clearTimeout(idleTimer)
+  async function request(method, params, channel = readChannel) {
+    channel.activeRequests += 1
+    clearTimeout(channel.idleTimer)
     let attempt = null
     try {
-      const pendingClient = connected()
-      attempt = connection
+      const pendingClient = connected(channel)
+      attempt = channel.connection
       const client = await pendingClient
       return await client.request(method, params)
     } catch (error) {
@@ -139,16 +140,19 @@ export function createCodexSessionAdapter({
       if (error.code === 'RUNTIME_PROTOCOL_METHOD_UNAVAILABLE') {
         throw sessionBrowserError('SESSION_BROWSER_UNSUPPORTED', '当前 Codex 版本不支持此会话能力，请更新 Codex。正文搜索没有降级为标题搜索。', 501)
       }
-      closeConnection(attempt)
+      closeConnection(channel, attempt)
       const timeout = error.code === 'RUNTIME_PROTOCOL_TIMEOUT'
+      if (channel.search) throw sessionBrowserError('SESSION_BROWSER_SEARCH_FAILED', timeout
+        ? 'Codex 正文搜索超时，请稍后重试。'
+        : 'Codex 正文搜索暂不可用，列表和对话仍可继续浏览。', timeout ? 504 : 503)
       throw sessionBrowserError('SESSION_BROWSER_UNAVAILABLE', timeout
         ? 'Codex 查询超时，请缩小搜索范围或稍后重试。'
         : '无法读取本机 Codex 会话，请确认 Codex CLI 和数据目录可用。', timeout ? 504 : 503)
     } finally {
-      activeRequests -= 1
-      if (activeRequests === 0) {
-        idleTimer = setTimeout(closeConnection, IDLE_MS)
-        idleTimer.unref?.()
+      channel.activeRequests -= 1
+      if (channel.activeRequests === 0) {
+        channel.idleTimer = setTimeout(() => closeConnection(channel), IDLE_MS)
+        channel.idleTimer.unref?.()
       }
     }
   }
@@ -189,7 +193,7 @@ export function createCodexSessionAdapter({
     return metadata
   }
 
-  async function list({ workspace, branch, query, archived, cursor, limit }) {
+  async function list({ workspace, branch, query, archived, cursor, limit }, options) {
     if (!query) {
       const page = await metadataPages.list({
         cursor, limit, archived, sortKey: 'recency_at', sortDirection: 'desc', sourceKinds: SOURCES,
@@ -197,32 +201,43 @@ export function createCodexSessionAdapter({
       })
       return branch ? { ...page, sessions: page.sessions.filter(row => row.branch === branch) } : page
     }
-    let next = cursor
-    let scanned = 0
-    let data = []
-    for (let pageNumber = 0; pageNumber < SEARCH_PAGE_BUDGET; pageNumber += 1) {
-      const response = await request(query ? 'thread/search' : 'thread/list', {
-        cursor: next,
-        limit,
-        archived,
-        sortKey: 'recency_at',
-        sortDirection: 'desc',
-        sourceKinds: SOURCES,
-        ...(query ? { searchTerm: query } : workspace ? { cwd: workspace } : {}),
-      })
-      const page = nativePage(response)
-      scanned += page.data.length
-      data = page.data.map((row) => ({
-        ...session(query ? row.thread : row),
-        snippet: query ? bounded(row.snippet, 4000) : null,
-      })).filter((row) => (!workspace || row.workspace === workspace) && (!branch || row.branch === branch))
-      if (page.cursor !== null && page.cursor === next) {
-        throw sessionBrowserError('SESSION_BROWSER_READ_FAILED', 'Codex returned a repeated cursor', 502)
+    const channel = { connection: null, idleTimer: null, activeRequests: 0, search: true }
+    const callerSignal = options?.signal
+    callerSignal?.throwIfAborted()
+    const controller = new AbortController()
+    const signal = controller.signal
+    const abort = () => { controller.abort(callerSignal.reason); closeConnection(channel) }
+    callerSignal?.addEventListener('abort', abort, { once: true })
+    searchChannels.add(channel)
+    let timedOut = false
+    const budget = setTimeout(() => { timedOut = true; controller.abort(); closeConnection(channel) }, SEARCH_TIMEOUT_MS)
+    budget.unref?.()
+    try {
+      if (!cursor || cursor.startsWith('files:')) {
+        const files = await searchCodexFiles({ workspace, branch, query, archived, cursor, limit }, {
+          dataRoot: root, resolveLaunch, signal, session,
+          load: async params => nativePage(await request('thread/list', { ...params, sourceKinds: SOURCES })),
+        })
+        if (files) return files
+        if (cursor) throw sessionBrowserError('SESSION_BROWSER_SEARCH_FAILED', '文件搜索暂不可用，请重新搜索。', 503)
       }
-      next = page.cursor
-      if (data.length || next === null || !query) break
+      return await searchCodexSessions({ workspace, branch, query, archived, cursor, limit }, {
+        signal,
+        load: async params => nativePage(await request('thread/search', { ...params, sourceKinds: SOURCES }, channel)),
+        session,
+      })
+    } catch (error) {
+      callerSignal?.throwIfAborted()
+      if (timedOut) throw sessionBrowserError('SESSION_BROWSER_SEARCH_FAILED', 'Codex 正文搜索超时，请稍后重试。', 504)
+      if (!error.code?.startsWith('SESSION_BROWSER_')) throw sessionBrowserError('SESSION_BROWSER_SEARCH_FAILED', '会话文件搜索暂不可用，请检查读取权限。', 503)
+      throw error
+    } finally {
+      clearTimeout(budget)
+      callerSignal?.removeEventListener('abort', abort)
+      controller.abort()
+      closeConnection(channel)
+      searchChannels.delete(channel)
     }
-    return { sessions: data, next_cursor: next, search_scope: query ? 'messages' : null, scanned_count: scanned }
   }
 
   async function workspaces(input) {
@@ -381,6 +396,16 @@ export function createCodexSessionAdapter({
     timeline: timeIndex.timeline,
     readSession,
     messages,
-    close() { closed = true; status.close(); metadataPages.close(); repairClient?.close(); closeConnection(); timeIndex.clear(); rolloutTiming.clear() },
+    close() {
+      closed = true
+      status.close()
+      metadataPages.close()
+      repairClient?.close()
+      closeConnection()
+      for (const channel of searchChannels) closeConnection(channel)
+      searchChannels.clear()
+      timeIndex.clear()
+      rolloutTiming.clear()
+    },
   }
 }

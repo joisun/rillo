@@ -46,7 +46,7 @@ export function renderLaunchAgentPlist({
   <key>KeepAlive</key>
   <true/>
   <key>ProcessType</key>
-  <string>Background</string>
+  <string>Standard</string>
   <key>StandardOutPath</key>
   <string>${escapeXml(stdoutPath)}</string>
   <key>StandardErrorPath</key>

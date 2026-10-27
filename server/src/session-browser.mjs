@@ -99,10 +99,10 @@ export function createSessionBrowser({ adapters, settings, terminalLauncher, lin
         capabilities: { ...adapter.capabilities, resume: adapter.capabilities.resume && terminalLauncher.supported !== false },
       })) }
     },
-    list(id, input) {
+    list(id, input, options) {
       const adapter = source(id)
       const filters = query(input)
-      return adapter.list(filters).then((result) => ({ ...result, relations: relationsFor(result.sessions) }))
+      return adapter.list(filters, options).then((result) => ({ ...result, relations: relationsFor(result.sessions) }))
     },
     async read(id, sessionId, input) {
       const adapter = source(id)

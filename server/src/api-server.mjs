@@ -18,6 +18,7 @@ const PUBLIC_SERVICE_ERRORS = new Set([
   'SESSION_BROWSER_UNAVAILABLE',
   'SESSION_BROWSER_UNSUPPORTED',
   'SESSION_BROWSER_READ_FAILED',
+  'SESSION_BROWSER_SEARCH_FAILED',
 ])
 
 function httpError(code, message, statusCode) {
@@ -468,8 +469,21 @@ export function createApiServer({
           const provider = safeSegment(collection[1])
           const input = Object.fromEntries(url.searchParams)
           const operation = collection[2] === 'sessions' ? 'list' : collection[2]
-          const result = await sessionBrowser[operation](provider, input)
-          sendJson(response, 200, result)
+          if (operation !== 'list' || !input.query) {
+            sendJson(response, 200, await sessionBrowser[operation](provider, input))
+            return
+          }
+          const controller = new AbortController()
+          const abort = () => controller.abort()
+          response.once('close', abort)
+          try {
+            const result = await sessionBrowser[operation](provider, input, { signal: controller.signal })
+            if (!controller.signal.aborted) sendJson(response, 200, result)
+          } catch (error) {
+            if (!controller.signal.aborted) throw error
+          } finally {
+            response.off('close', abort)
+          }
           return
         }
         const session = pathname.match(/^\/api\/v1\/session-browser\/([^/]+)\/sessions\/([^/]+)\/(read|children|timeline|messages|resume)$/)

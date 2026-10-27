@@ -64,7 +64,7 @@ export interface DashboardApi {
   sessionProviders(): Promise<{ providers: SessionProvider[] }>
   sessionWorkspaces(provider: string, filters: SessionFilters): Promise<SessionWorkspacePage>
   sessionBranches(provider: string, filters: SessionFilters): Promise<SessionBranchPage>
-  sessions(provider: string, filters: SessionFilters): Promise<SessionPage>
+  sessions(provider: string, filters: SessionFilters, signal?: AbortSignal): Promise<SessionPage>
   readSession(session: SessionRef, signal?: AbortSignal): Promise<{ session: BrowserSession }>
   sessionChildren(session: SessionRef, filters: SessionFilters, signal?: AbortSignal): Promise<SessionPage>
   sessionTimeline(session: SessionRef, filters: SessionFilters, signal?: AbortSignal): Promise<SessionTimeline>
@@ -205,9 +205,9 @@ export function createDashboardApi({
       `/api/v1/session-browser/${encodeURIComponent(provider)}/workspaces${queryString(filters)}`,
       { requestTimeoutMs: RUNTIME_TIMEOUT_MS },
     ),
-    sessions: (provider, filters) => request(
+    sessions: (provider, filters, signal) => request(
       `/api/v1/session-browser/${encodeURIComponent(provider)}/sessions${queryString(filters)}`,
-      { requestTimeoutMs: RUNTIME_TIMEOUT_MS },
+      { requestTimeoutMs: RUNTIME_TIMEOUT_MS, signal },
     ),
     readSession: (session, signal) => request(
       `/api/v1/session-browser/${encodeURIComponent(session.provider)}/sessions/${encodeURIComponent(session.session_id)}/read${queryString({ store_id: session.store_id })}`,
