@@ -1,6 +1,6 @@
 {
   "name": "tasks-recorder",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "Browse native sessions and register explicit session delegation relations.",
   "author": {
     "name": "Joi Sun",
