@@ -42,7 +42,7 @@ test('one changed revision invalidates the server-backed dashboard queries', () 
   expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.allRuns, predicate: expect.any(Function) })
   const filter = invalidate.mock.calls.find(([options]) => options?.queryKey === queryKeys.sessionBrowser)?.[0]
   const ref = { provider: 'codex', store_id: 'local', session_id: 'thread' }
-  for (const key of [queryKeys.sessionWorkspaces('codex', false), queryKeys.sessionList('codex', '', '', false), queryKeys.sessionChildren(ref), queryKeys.sessionRelations(ref)]) expect(filter?.predicate?.({ queryKey: key } as never)).toBe(true)
+  for (const key of [queryKeys.sessionActivity('codex', 'local'), queryKeys.sessionWorkspaces('codex', false), queryKeys.sessionList('codex', '', '', false), queryKeys.sessionChildren(ref), queryKeys.sessionRelations(ref)]) expect(filter?.predicate?.({ queryKey: key } as never)).toBe(true)
   for (const key of [queryKeys.sessionSearch('codex', '', '', false), queryKeys.sessionSearch('codex', '', 'search', false), queryKeys.sessionList('codex', '', 'search', false), queryKeys.sessionMessages('codex', 'local', 'thread', ''), queryKeys.sessionTimeline(ref, 'from', 'to')]) expect(filter?.predicate?.({ queryKey: key } as never)).toBe(false)
 })
 

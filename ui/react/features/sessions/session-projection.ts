@@ -1,4 +1,4 @@
-import type { BrowserSession, SessionRef, SessionRelation, SessionTimeline } from '@/lib/api/types'
+import type { BrowserSession, SessionPage, SessionRef, SessionRelation, SessionTimeline } from '@/lib/api/types'
 import { sessionKey } from './session-format'
 
 export type SessionTreeNode = {
@@ -15,12 +15,7 @@ export function projectSessionTree(sessions: BrowserSession[], relations: Sessio
     key: sessionKey(session), ref: session, session, relation: null, conflict: false, children: [],
   }]))
   const candidates = new Map<string, Map<string, SessionRelation>>()
-  const parentRelations = relations.filter((relation) => relation.kind !== 'fork')
-  for (const session of sessions) {
-    if (!session.native_parent) continue
-    parentRelations.push({ id: `native:${sessionKey(session)}`, parent: session.native_parent, child: session,
-      kind: 'subagent', origin: 'native', created_at: null, source: 'native_parent' })
-  }
+  const parentRelations = collectSessionRelations(sessions, relations).filter(relation => relation.kind !== 'fork')
   for (const relation of parentRelations) {
     const childKey = sessionKey(relation.child)
     if (!nodes.has(childKey)) continue
@@ -44,7 +39,87 @@ export function projectSessionTree(sessions: BrowserSession[], relations: Sessio
     if (!nodes.has(parentKey)) nodes.set(parentKey, { key: parentKey, ref: relation.parent, session: null, relation: null, conflict: false, children: [] })
   }
   for (const [childKey, parentKey] of parents) nodes.get(parentKey)!.children.push(nodes.get(childKey)!)
-  return [...nodes.values()].filter((node) => !parents.has(node.key))
+  return [...nodes.values()].filter(node => node.session && !parents.has(node.key) && !isChildSession(node.session, parentRelations))
+}
+
+export function isChildSession(session: BrowserSession, relations: SessionRelation[]) {
+  return Boolean(session.is_subagent || session.native_parent || relations.some(relation => relation.kind !== 'fork' && sessionKey(relation.child) === sessionKey(session)))
+}
+
+export function collectSessionRelations(sessions: BrowserSession[], relations: SessionRelation[]) {
+  const edges = new Map<string, SessionRelation>()
+  const native = sessions.flatMap(session => [
+    session.native_parent ? { id: `native-parent:${sessionKey(session)}`, kind: 'subagent' as const, parent: session.native_parent, child: session, origin: 'native' as const, source: 'native_parent', created_at: session.created_at } : null,
+    session.forked_from ? { id: `native-fork:${sessionKey(session)}`, kind: 'fork' as const, parent: session.forked_from, child: session, origin: 'native' as const, source: 'forked_from', created_at: session.created_at } : null,
+  ]).filter((relation): relation is NonNullable<typeof relation> => Boolean(relation))
+  for (const relation of [...relations, ...native]) {
+    const key = JSON.stringify([relation.kind === 'fork' ? 'fork' : 'parent', sessionKey(relation.parent), sessionKey(relation.child)])
+    if (!edges.has(key) || relation.origin === 'registered') edges.set(key, relation)
+  }
+  return [...edges.values()]
+}
+
+export function collectSessionFamily(roots: BrowserSession[], relations: SessionRelation[], childPages: Record<string, SessionPage[]>, ancestors: Record<string, BrowserSession> = {}) {
+  const sessions = new Map(roots.map(session => [sessionKey(session), session]))
+  const pending = [...sessions.keys()]
+  const visited = new Set<string>()
+  const edges: SessionRelation[] = []
+  const parents = new Map<string, SessionRef[]>()
+  const missing = new Map<string, SessionRef>()
+  function addRelations(rows: SessionRelation[]) {
+    edges.push(...rows)
+    for (const relation of rows) {
+      if (relation.kind === 'fork') continue
+      const key = sessionKey(relation.child)
+      parents.set(key, [...(parents.get(key) ?? []), relation.parent])
+    }
+  }
+  addRelations(relations)
+  function include(session: BrowserSession) {
+    const key = sessionKey(session)
+    if (!sessions.has(key)) sessions.set(key, session)
+    if (!visited.has(key)) pending.push(key)
+  }
+  while (pending.length) {
+    const key = pending.shift()!
+    if (visited.has(key)) continue
+    visited.add(key)
+    for (const page of childPages[key] ?? []) {
+      addRelations(page.relations)
+      page.sessions.forEach(include)
+    }
+    const current = sessions.get(key)!
+    const references = [...(parents.get(key) ?? []), ...(current.native_parent ? [current.native_parent] : [])]
+    for (const parent of references) {
+      const parentKey = sessionKey(parent)
+      if (ancestors[parentKey]) include(ancestors[parentKey])
+      if (!sessions.has(parentKey)) missing.set(parentKey, parent)
+    }
+  }
+  const rows = [...sessions.values()]
+  return { sessions: rows, relations: collectSessionRelations(rows, edges), missingParents: [...missing.values()].filter(ref => !sessions.has(sessionKey(ref))) }
+}
+
+export type SessionRelationSummary = { parents: SessionRelation[]; children: SessionRelation[]; forkSources: SessionRelation[]; forks: SessionRelation[] }
+export type SessionRelationIndex = Map<string, SessionRelationSummary>
+
+export function indexSessionRelations(relations: SessionRelation[]): SessionRelationIndex {
+  const index: SessionRelationIndex = new Map()
+  function entry(ref: SessionRef) {
+    const key = sessionKey(ref)
+    if (!index.has(key)) index.set(key, { parents: [], children: [], forkSources: [], forks: [] })
+    return index.get(key)!
+  }
+  for (const relation of relations) {
+    if (relation.kind === 'fork') {
+      entry(relation.child).forkSources.push(relation)
+      entry(relation.parent).forks.push(relation)
+    } else {
+      entry(relation.child).parents.push(relation)
+      entry(relation.parent).children.push(relation)
+    }
+  }
+  return index
 }
 
 export type Interval = { start: number; end: number }

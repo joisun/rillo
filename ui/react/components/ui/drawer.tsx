@@ -104,6 +104,9 @@ function getInitialFocusTarget(popupElement: HTMLDivElement | null) {
 }
 
 interface DrawerProps {
+  container?: DrawerPrimitive.Portal.Props["container"];
+  keepMounted?: boolean;
+  initialFocus?: DrawerPrimitive.Popup.Props["initialFocus"];
   placement?: DrawerPlacement;
   modal?: boolean;
   isOpen?: boolean;
@@ -119,6 +122,9 @@ interface DrawerProps {
 }
 
 function Drawer({
+  container,
+  keepMounted,
+  initialFocus,
   children,
   className,
   defaultOpen,
@@ -194,14 +200,14 @@ function Drawer({
         {/* Keyboard-aware focus/scroll handling: publishes --drawer-keyboard-inset
             on the viewport while the software keyboard is open. */}
         <DrawerPrimitive.VirtualKeyboardProvider>
-          <DrawerPrimitive.Portal>
+          <DrawerPrimitive.Portal container={container} keepMounted={keepMounted}>
             <ClearPressResponder>
-              <div className={overlay({ className: modal ? undefined : "pointer-events-none" })}>
+              <div data-slot="drawer-overlay" className={overlay({ className: modal ? undefined : "pointer-events-none" })}>
                 {modal ? <DrawerPrimitive.Backdrop className={backdrop()} /> : null}
-                <DrawerPrimitive.Viewport className={viewport({ placement })}>
+                <DrawerPrimitive.Viewport data-slot="drawer-viewport" className={viewport({ placement })}>
                   <DrawerPrimitive.Popup
                     data-base-ui-swipe-ignore={swipeToDismiss ? undefined : ""}
-                    initialFocus={() => getInitialFocusTarget(popupRef.current)}
+                    initialFocus={initialFocus ?? (() => getInitialFocusTarget(popupRef.current))}
                     finalFocus={
                       finalFocus ??
                       (() =>

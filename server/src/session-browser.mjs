@@ -215,7 +215,10 @@ export function createSessionBrowser({ adapters, settings, terminalLauncher, lin
       if (!session.workspace || !isAbsolute(session.workspace)) {
         throw sessionBrowserError('SESSION_BROWSER_WORKSPACE_UNAVAILABLE', 'The original session workspace is unavailable', 409)
       }
-      if (session.state === 'active') {
+      const activity = await adapter.activity?.()
+      const nativeState = activity?.available && activity.store_id === adapter.storeId
+        ? activity.sessions.find(row => row.session_id === session.session_id)?.state : null
+      if (nativeState === 'active' || session.state === 'active') {
         throw sessionBrowserError('SESSION_BROWSER_SESSION_ACTIVE', 'This session is active; return to its existing terminal', 409)
       }
       const current = await settings.get()

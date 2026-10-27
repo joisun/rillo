@@ -228,12 +228,13 @@ test('message lookup uses the native match anchor, hides tool/reasoning data and
 function browserFixture() {
   const launches = []
   let state = 'idle'
+  let nativeState = 'idle'
   let reads = 0
   const adapter = {
     id: 'codex', name: 'Codex', runtimeId: 'codex', storeId: 'local-store',
     resumeOptions: { codexHome: '/local/codex' },
     capabilities: { full_text_search: true },
-    activity: async () => ({ store_id: 'local-store', available: true, open_session_ids: ['session-1'], checked_at: '2026-10-23T08:00:00Z' }),
+    activity: async () => ({ store_id: 'local-store', available: true, sessions: [{ session_id: 'session-1', state: nativeState }], checked_at: '2026-10-23T08:00:00Z' }),
     list: async (input) => ({ sessions: [], next_cursor: null, input }),
     workspaces: async () => ({ workspaces: [], next_cursor: null }),
     messages: async () => ({ messages: [] }),
@@ -244,7 +245,7 @@ function browserFixture() {
     settings: { get: async () => ({ settings: { resume_terminal: 'otty' } }) },
     terminalLauncher: { launch: async (input) => { launches.push(input); return { terminal_label: 'Otty' } } },
   })
-  return { browser, launches, get reads() { return reads }, setState(value) { state = value } }
+  return { browser, launches, get reads() { return reads }, setState(value) { state = value }, setNativeState(value) { nativeState = value } }
 }
 
 test('resume works without Task/Run data and re-reads native facts before launching', async () => {
@@ -255,6 +256,10 @@ test('resume works without Task/Run data and re-reads native facts before launch
   assert.equal(current.reads, 1)
   assert.deepEqual(current.launches, [{ runtimeId: 'codex', terminal: 'otty', sessionId: 'session-1', workspace: '/trusted/workspace', title: 'Native title', codexHome: '/local/codex' }])
   current.setState('active')
+  await assert.rejects(current.browser.resume('codex', 'session-1', { store_id: 'local-store' }), { code: 'SESSION_BROWSER_SESSION_ACTIVE' })
+  assert.equal(current.launches.length, 1)
+  current.setState('idle')
+  current.setNativeState('active')
   await assert.rejects(current.browser.resume('codex', 'session-1', { store_id: 'local-store' }), { code: 'SESSION_BROWSER_SESSION_ACTIVE' })
   assert.equal(current.launches.length, 1)
 })
@@ -280,7 +285,7 @@ test('HTTP session routes retain loopback/origin protection and reject browser l
   assert.equal((await response.json()).providers[0].id, 'codex')
   const activity = await fetch(url + '/api/v1/session-browser/codex/activity')
   assert.equal(activity.status, 200)
-  assert.deepEqual((await activity.json()).open_session_ids, ['session-1'])
+  assert.deepEqual((await activity.json()).sessions.map(row => row.session_id), ['session-1'])
   const path = url + '/api/v1/session-browser/codex/sessions/session-1/resume'
   const foreign = await fetch(path, { method: 'POST', headers: { Origin: 'http://foreign.example', 'Content-Type': 'application/json' }, body: JSON.stringify({ store_id: 'local-store' }) })
   assert.equal(foreign.status, 403)
@@ -299,4 +304,19 @@ test('HTTP session routes retain loopback/origin protection and reject browser l
     request.end()
   })
   assert.equal(hostStatus, 403)
+})
+
+
+test('native source metadata distinguishes parentless subagents and preserves thread-spawn ancestry', async t => {
+  const current = nativeFixture(t, () => ({ data: [
+    { ...thread('review'), source: { subAgent: 'review' } },
+    { ...thread('spawn'), source: { subAgent: { thread_spawn: { parent_thread_id: 'main', depth: 1 } } } },
+    { ...thread('main'), source: 'cli' },
+  ], nextCursor: null }))
+  const page = await current.adapter.list(filters)
+  assert.equal(page.sessions[0].is_subagent, true)
+  assert.equal(page.sessions[0].native_parent, null)
+  assert.equal(page.sessions[1].is_subagent, true)
+  assert.equal(page.sessions[1].native_parent.session_id, 'main')
+  assert.equal(page.sessions[2].is_subagent, false)
 })

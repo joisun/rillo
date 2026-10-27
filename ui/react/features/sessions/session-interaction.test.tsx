@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, test, vi } from 'vitest'
 import { useState } from 'react'
@@ -48,7 +48,7 @@ function timelinePage(filters: SessionFilters = {}): SessionTimeline {
 function fixture() {
   const api = { ...createDashboardApi(), sessionProviders: vi.fn(async () => ({ providers: [{ id: 'codex', name: 'Codex', store_id: 'store', capabilities: { full_text_search: true, search_experimental: false, message_location: true, resume: true } }] })),
     sessionWorkspaces: vi.fn(async () => ({ workspaces: [], next_cursor: null })),
-    sessions: vi.fn(async () => ({ sessions: [session], relations: [], next_cursor: null, search_scope: null, scanned_count: 1 })),
+    sessions: vi.fn<DashboardApi['sessions']>(async () => ({ sessions: [session], relations: [], next_cursor: null, search_scope: null, scanned_count: 1 })),
     sessionChildren: vi.fn<DashboardApi['sessionChildren']>(async () => ({ sessions: [], relations: [], next_cursor: null, search_scope: null, scanned_count: 0 })),
     sessionTimeline: vi.fn(async (_ref, filters: SessionFilters) => timelinePage(filters)),
     sessionMessages: vi.fn<DashboardApi['sessionMessages']>(async (_ref, filters: SessionFilters) => messagePage('正文', filters.at)),
@@ -331,19 +331,19 @@ test('parent and child have independent start/end domains and workspace headings
   expect(api.sessionTimeline.mock.calls[0][1]).not.toHaveProperty('from')
 })
 
-test('an unloaded parent remains readable and unavailable references do not pretend to index forever', async () => {
-  window.history.replaceState(null, '', '/?view=sessions&sessions=activity')
+test('an out-of-page parent is read before its child can appear in the tree', async () => {
+  window.history.replaceState(null, '', '/?view=sessions')
   const { api, wrap } = fixture()
-  const parent = { provider: 'codex', store_id: 'store', session_id: 'unloaded-parent' }
-  api.sessions.mockResolvedValue({ sessions: [
-    { ...session, native_parent: parent },
-    { ...session, session_id: 'missing', title: '会话暂不可用', state: 'unavailable' },
-  ], relations: [], next_cursor: null, search_scope: null, scanned_count: 2 })
+  const parent = { ...session, session_id: 'unloaded-parent', title: '已读取的主会话' }
+  const child = { ...session, title: '子项', native_parent: parent }
+  api.sessions.mockResolvedValue({ sessions: [child], relations: [], next_cursor: null, search_scope: null, scanned_count: 1 })
+  api.readSession.mockResolvedValue({ session: parent })
   render(wrap(<SessionsView api={api} />))
-  expect(await screen.findAllByText('会话引用未载入或暂不可用')).toHaveLength(2)
-  await userEvent.click(await screen.findByRole('button', { name: '父会话未载入 · unloaded-parent' }))
-  await waitFor(() => expect(api.readSession).toHaveBeenCalledWith(parent, expect.any(AbortSignal)))
-  expect(api.sessionTimeline).not.toHaveBeenCalledWith(expect.objectContaining({ session_id: 'missing' }), expect.anything(), expect.anything())
+  await waitFor(() => expect(api.readSession).toHaveBeenCalledWith(expect.objectContaining({ session_id: 'unloaded-parent' }), expect.any(AbortSignal)))
+  expect(await screen.findByRole('button', { name: '已读取的主会话' })).toBeVisible()
+  expect(screen.queryByRole('button', { name: '子项' })).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: '展开 已读取的主会话' }))
+  expect(await screen.findByRole('button', { name: '子项' })).toBeVisible()
 })
 
 test('visible timelines automatically continue beyond three pages and stop at the native end', async () => {
@@ -424,17 +424,23 @@ test('normal reading opens recent content and automatically keeps its anchor whe
   await waitFor(() => expect(body.scrollTop).toBe(700))
 })
 
-test('desktop timeline opens the recent session once and clearing the preview does not reopen it', async () => {
-  window.history.replaceState(null, '', '/?view=sessions&sessions=activity')
-  const original = window.matchMedia
-  vi.stubGlobal('matchMedia', (query: string) => ({ ...original(query), matches: query === '(min-width: 981px)' }))
+test('the sheet opens on selection, collapses without losing its reader, and opens again without a second message read', async () => {
+  window.history.replaceState(null, '', '/?view=sessions')
   const { api, wrap } = fixture()
   render(wrap(<SessionsView api={api} />))
+  await screen.findByRole('button', { name: '父会话' })
+  expect(screen.queryByRole('dialog', { name: '会话面板' })).not.toBeInTheDocument()
+  expect(api.sessionMessages).not.toHaveBeenCalled()
+  await userEvent.click(screen.getByRole('button', { name: '父会话' }))
   expect(await screen.findByText('正文')).toBeInTheDocument()
-  expect(api.resumeSession).not.toHaveBeenCalled()
-  await userEvent.click(screen.getByRole('button', { name: '关闭会话预览' }))
-  expect(screen.queryByText('正文')).not.toBeInTheDocument()
-  await waitFor(() => expect(screen.getByText('悬停时间轴，浏览对应消息')).toBeInTheDocument())
+  const reader = document.querySelector('.session-detail__conversation')
+  await userEvent.click(screen.getByRole('button', { name: '收起会话面板' }))
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: '会话面板' })).not.toBeInTheDocument())
+  expect(document.querySelector('.session-detail__conversation')).toBe(reader)
+  await userEvent.click(screen.getByRole('button', { name: '展开会话面板' }))
+  await screen.findByRole('dialog', { name: '会话面板' })
+  expect(document.querySelector('.session-detail__conversation')).toBe(reader)
+  expect(api.sessionMessages).toHaveBeenCalledTimes(1)
 })
 
 test('recent messages also seeks the latest item and explicitly resumes paused reading', async () => {
@@ -553,15 +559,77 @@ test('reduced motion positions the message immediately without scheduling animat
   scroll.mockRestore()
 })
 
-test('List and Tree share one switch inside the middle column', async () => {
-  window.history.replaceState(null, '', '/?view=sessions&sessions=list')
+test('every Tree item has exactly title, subtitle and timeline rows without a view switch', async () => {
+  window.history.replaceState(null, '', '/?view=sessions')
   const { api, wrap } = fixture()
   render(wrap(<SessionsView api={api} />))
-  await screen.findByRole('button', { name: '查看会话：父会话' })
-  expect(screen.getByRole('tablist', { name: '会话视图' }).closest('.sessions-main__toolbar')).toBeInTheDocument()
-  expect(document.querySelector('.sessions-toolbar [role="tab"]')).not.toBeInTheDocument()
-  await userEvent.click(screen.getByRole('tab', { name: 'Tree' }))
-  expect(await screen.findByRole('slider', { name: '定位 父会话 的消息' })).toBeInTheDocument()
-  await userEvent.click(screen.getByRole('tab', { name: 'List' }))
-  expect(screen.getByRole('button', { name: '查看会话：父会话' })).toBeInTheDocument()
+  await screen.findByRole('button', { name: '父会话' })
+  expect(screen.queryByRole('tab')).not.toBeInTheDocument()
+  const row = document.querySelector('.session-tree__row')!
+  expect([...row.children].map(child => child.className)).toEqual(['session-tree__title-row', 'session-tree__workspace-row', 'session-tree__heat'])
+  expect(row.querySelector('.session-tree__meta')).toBeNull()
+})
+
+test('registered and native children appear only below their main session', async () => {
+  window.history.replaceState(null, '', '/?view=sessions')
+  const { api, wrap } = fixture()
+  const native = { ...session, session_id: 'native', title: '校验服务端权限', native_parent: session, is_subagent: true }
+  const registered = { ...session, session_id: 'registered', title: '协作子项' }
+  const relation = { id: 'delegation', kind: 'delegation' as const, origin: 'registered' as const, parent: session, child: registered, source: 'test', created_at: null }
+  api.sessions.mockResolvedValue({ sessions: [session, registered], relations: [relation], next_cursor: null, search_scope: null, scanned_count: 2 })
+  api.sessionChildren.mockImplementation(async ref => ({ sessions: ref.session_id === 'parent' ? [native, registered] : [], relations: [relation], next_cursor: null, search_scope: null, scanned_count: 2 }))
+  render(wrap(<SessionsView api={api} />))
+  const expand = await screen.findByRole('button', { name: '展开 父会话' })
+  expect(document.querySelectorAll('.session-tree__workspace > .session-tree__branch')).toHaveLength(1)
+  expect(screen.queryByRole('button', { name: '协作子项' })).not.toBeInTheDocument()
+  await userEvent.click(expand)
+  expect(await screen.findByRole('button', { name: '校验服务端权限' })).toBeVisible()
+  expect(screen.getByRole('button', { name: '协作子项' })).toBeVisible()
+  expect(document.querySelectorAll('.session-tree__workspace > .session-tree__branch')).toHaveLength(1)
+})
+
+test('fork menus navigate by full provider/store/session identity and dismiss with Escape', async () => {
+  window.history.replaceState(null, '', '/?view=sessions&sessions=list')
+  const { api, wrap } = fixture()
+  const fork = { ...session, session_id: 'fork', title: '替代方案', forked_from: session }
+  api.sessions.mockResolvedValue({ sessions: [session, fork], relations: [], next_cursor: null, search_scope: null, scanned_count: 2 })
+  render(wrap(<SessionsView api={api} />))
+  const trigger = await screen.findByRole('button', { name: '查看派生 Fork：父会话' })
+  await userEvent.click(trigger)
+  const dialog = await screen.findByRole('dialog', { name: '父会话的派生 Fork' })
+  expect(within(dialog).getByRole('button', { name: /替代方案/ })).toBeInTheDocument()
+  await userEvent.keyboard('{Escape}')
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: '父会话的派生 Fork' })).not.toBeInTheDocument())
+  await waitFor(() => expect(trigger).toHaveFocus())
+  await userEvent.click(trigger)
+  await userEvent.click(within(await screen.findByRole('dialog', { name: '父会话的派生 Fork' })).getByRole('button', { name: /替代方案/ }))
+  await waitFor(() => expect(api.readSession).toHaveBeenCalledWith(expect.objectContaining({ provider: 'codex', store_id: 'store', session_id: 'fork' }), expect.any(AbortSignal)))
+  expect(screen.queryByRole('dialog', { name: '父会话的派生 Fork' })).not.toBeInTheDocument()
+})
+
+test('status precedes titles, branch shares the workspace row and accurate time bounds appear only in the reader subtitle', async () => {
+  window.history.replaceState(null, '', '/?view=sessions&sessions=activity')
+  const { api, wrap } = fixture()
+  render(wrap(<SessionsView api={api} />))
+  await userEvent.click(await screen.findByRole('button', { name: '父会话' }))
+  await waitFor(() => expect(document.querySelector('.session-detail__subtitle')).toHaveTextContent('–'))
+  expect(document.querySelector('.session-detail__subtitle time:first-child')).toHaveAttribute('datetime', session.created_at!)
+  expect(document.querySelector('.session-detail__subtitle time:last-child')).toHaveAttribute('datetime', secondAt)
+  expect(document.querySelector('.session-tree__row time')).toBeNull()
+  expect(document.querySelector('.session-tree__title-row .session-origin')).toBeNull()
+  expect(document.querySelector('.session-tree__workspace-row .session-origin__branch')).toHaveTextContent('main')
+  expect(document.querySelector('.session-detail__title h2')).toHaveTextContent('父会话')
+  expect(api.sessionTimeline.mock.calls.filter(([ref]) => ref.session_id === 'parent')).toHaveLength(1)
+})
+
+
+test('unavailable ancestors never cause an orphaned subagent to appear as a main session', async () => {
+  const { api, wrap } = fixture()
+  const child = { ...session, title: '孤立子会话', native_parent: { provider: 'codex', store_id: 'store', session_id: 'missing-main' }, is_subagent: true }
+  api.sessions.mockResolvedValue({ sessions: [child], relations: [], next_cursor: null, search_scope: null, scanned_count: 1 })
+  api.readSession.mockRejectedValue(new DashboardApiError('会话已删除', { code: 'SESSION_BROWSER_SESSION_NOT_FOUND', status: 404 }))
+  render(wrap(<SessionsView api={api} />))
+  expect(await screen.findByText('父会话暂不可读取')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: '孤立子会话' })).not.toBeInTheDocument()
+  expect(document.querySelectorAll('.session-tree__workspace > .session-tree__branch')).toHaveLength(0)
 })

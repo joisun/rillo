@@ -1,31 +1,33 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Check, Copy, Maximize2, X } from 'lucide-react'
+import { Check, Copy, PanelRightClose } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message'
 import { Button } from '@/components/ui/button'
 import { DashboardApiError, type DashboardApi } from '@/lib/api/dashboard-api'
-import type { BrowserSession, SessionMessagesPage, SessionRef } from '@/lib/api/types'
+import type { BrowserSession, SessionMessagesPage, SessionRef, SessionRelation, SessionTimeline } from '@/lib/api/types'
 import { queryKeys } from '@/lib/query/keys'
 import { Highlight } from './session-format'
 import { AutoPager } from './session-auto-pager'
 import { SessionRelations } from './session-relations'
 import { SessionResumeButton } from './session-resume-button'
+import { SessionActivity } from './session-activity'
+import { sessionReadRequests } from './session-timeline-queue'
 
 const SEEK_SCROLL_MS = 100
 
-export function SessionDetail({ api, session, query, onBack, isOpen, at = null, itemId, followRequest = 0, onReadingPosition, onReadSession, onLoadTimeline, onExpand }: {
+export function SessionDetail({ api, session, knownSessions, knownRelations, query, onBack, at = null, itemId, followRequest = 0, onReadingPosition, onReadSession, onLoadTimeline }: {
   api: DashboardApi
   session: BrowserSession
+  knownSessions?: Map<string, BrowserSession>
+  knownRelations?: SessionRelation[]
   query: string
   onBack: () => void
-  isOpen?: boolean
   at?: string | null
   itemId?: string
   followRequest?: number
   onReadSession: (ref: SessionRef) => void
   onLoadTimeline: () => void
-  onExpand?: () => void
   onReadingPosition?: (at: string, itemId: string) => void
 }) {
   const client = useQueryClient()
@@ -189,14 +191,12 @@ export function SessionDetail({ api, session, query, onBack, isOpen, at = null, 
     <section className="session-detail" aria-label="会话预览">
       <header className="session-detail__header">
         <div className="session-detail__heading">
-          <Button className="session-detail__back" size="xs" variant="quiet" aria-label="返回会话列表" onPress={onBack}><ArrowLeft /></Button>
-          <div><h2 title={current.title}>{current.title}</h2></div>
+          <div className="session-detail__identity"><div className="session-detail__title"><SessionActivity session={session} /><h2 title={current.title}>{current.title}</h2></div><SessionTimeRange api={api} session={session} /></div>
           <div className="session-detail__tools">
-            <SessionResumeButton api={api} session={current} />
+            <SessionResumeButton api={api} session={{ ...current, state: session.state }} />
             <span title={copyStatus || session.session_id}><Button size="xs" variant="quiet" isIconOnly aria-label="复制 Session ID" onPress={() => void copyId()}>{copyStatus === '已复制' ? <Check /> : <Copy />}</Button></span>
-            <SessionRelations api={api} session={current} onReadSession={onReadSession} />
-          {at && onExpand ? <Button className="session-detail__expand" size="xs" variant="quiet" isIconOnly aria-label="展开会话预览" onPress={onExpand}><Maximize2 /></Button> : null}
-          <Button className="session-detail__close" size="xs" variant="quiet" isIconOnly aria-label="关闭会话预览" onPress={onBack}><X /></Button>
+            <SessionRelations api={api} session={current} knownSessions={knownSessions} knownRelations={knownRelations} onReadSession={onReadSession} />
+          <Button className="session-detail__close" size="xs" variant="quiet" isIconOnly aria-label="收起会话面板" onPress={onBack}><PanelRightClose /></Button>
           </div>
         </div>
         {copyStatus ? <span className="sr-only" role="status">{copyStatus}</span> : null}
@@ -228,4 +228,18 @@ export function SessionDetail({ api, session, query, onBack, isOpen, at = null, 
       </div>
     </section>
   )
+}
+
+function SessionTimeRange({ api, session }: { api: DashboardApi; session: BrowserSession }) {
+  const timeline = useInfiniteQuery({
+    queryKey: queryKeys.sessionTimeline(session, 'session', session.updated_at ?? ''),
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam, signal }) => sessionReadRequests.run(() => api.sessionTimeline(session, { cursor: pageParam }, signal), signal),
+    getNextPageParam: (page: SessionTimeline) => page.next_cursor ?? undefined,
+    retry: false, staleTime: 60_000, gcTime: 300_000, refetchOnWindowFocus: false,
+  })
+  const bounds = timeline.data?.pages.find(page => page.bounds?.end_state === 'known')?.bounds
+  if (!bounds?.start_at || !bounds.end_at) return null
+  const format = (at: string) => new Date(at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return <div className="session-detail__subtitle"><time dateTime={bounds.start_at} title="会话开始">{format(bounds.start_at)}</time><span>–</span><time dateTime={bounds.end_at} title="最后一条消息">{format(bounds.end_at)}</time></div>
 }

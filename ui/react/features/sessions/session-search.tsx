@@ -7,17 +7,18 @@ import { Input, InputGroup, InputGroupAddon } from '@/components/ui/input'
 import { ListBox, ListBoxItem } from '@/components/ui/list-box'
 import { Popover } from '@/components/ui/popover'
 import type { DashboardApi } from '@/lib/api/dashboard-api'
-import type { BrowserSession, SessionPage } from '@/lib/api/types'
+import type { BrowserSession, SessionActivityPage, SessionPage } from '@/lib/api/types'
 import { queryKeys } from '@/lib/query/keys'
 import { SessionActivity } from './session-activity'
 import { Highlight, sessionKey } from './session-format'
 import { SessionOrigin } from './session-origin'
 import { AutoPager } from './session-auto-pager'
+import { sessionWithStatus } from './session-status'
 
-export function SessionSearch({ api, provider, workspace, branch = '', enabled, openIds, onSelect }: {
+export function SessionSearch({ api, provider, workspace, branch = '', enabled, activity, statuses, onSelect }: {
   api: DashboardApi; provider: string; workspace: string; enabled: boolean
   branch?: string
-  openIds: Set<string>; onSelect: (session: BrowserSession, query: string) => void
+  activity: SessionActivityPage | undefined; statuses: Map<string, BrowserSession>; onSelect: (session: BrowserSession, query: string) => void
 }) {
   const [draft, setDraft] = useState('')
   const [query, setQuery] = useState('')
@@ -38,9 +39,7 @@ export function SessionSearch({ api, provider, workspace, branch = '', enabled, 
     .map((session) => [sessionKey(session), session])).values()], [results.data])
   const waiting = draft.trim() !== query || results.isPending
   // React Aria caches each option by item identity, including its activity badge.
-  const items = useMemo(() => waiting ? [] : sessions.map((session) => ({
-    ...session, isOpen: openIds.has(session.session_id),
-  })), [waiting, sessions, openIds])
+  const items = useMemo(() => waiting ? [] : sessions.map(session => sessionWithStatus(session, activity, statuses)), [waiting, sessions, activity, statuses])
   return (
     <ComboBox className="session-search" aria-label="搜索会话正文" inputValue={draft} onInputChange={(value) => { setDraft(value); setSelectedKey(null) }}
       value={selectedKey} allowsCustomValue allowsEmptyCollection={Boolean(draft.trim())} items={items}
@@ -59,7 +58,7 @@ export function SessionSearch({ api, provider, workspace, branch = '', enabled, 
         )}>
           {(session) => <ListBoxItem id={sessionKey(session)} textValue={session.title} className="session-search__item">
             <div className="session-search__result">
-              <div className="session-search__title"><strong title={session.title}><Highlight text={session.title} query={query} /></strong><SessionActivity state={session.state} isOpen={session.isOpen} /><SessionOrigin workspace={session.workspace} branch={session.branch} /></div>
+              <div className="session-search__title"><SessionActivity session={session} /><strong title={session.title}><Highlight text={session.title} query={query} /></strong><SessionOrigin workspace={session.workspace} branch={session.branch} /></div>
               <span className="session-row__preview"><Highlight text={session.snippet || session.preview} query={query} /></span>
             </div>
           </ListBoxItem>}

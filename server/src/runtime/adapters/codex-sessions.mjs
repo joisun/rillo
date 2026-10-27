@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path'
 
 import { sessionBrowserError } from '../../session-reference.mjs'
 import { createCodexAppServerClient } from '../codex-app-server-client.mjs'
-import { createCodexSessionPresence } from '../codex-session-presence.mjs'
+import { createCodexSessionStatus } from '../codex-session-status.mjs'
 import { codexTimestamp, createCodexSessionTimeline } from '../codex-session-timeline.mjs'
 import { messageTimestamp } from '../codex-message-timing.mjs'
 import { createCodexRolloutTiming } from '../codex-rollout-timing.mjs'
@@ -41,10 +41,11 @@ export function createCodexSessionAdapter({
   onChange,
   clock,
   watchImpl,
+  createStatusClient,
 } = {}) {
   const root = resolve(dataRoot)
   const storeId = createHash('sha256').update(root).digest('hex').slice(0, 20)
-  const presence = createCodexSessionPresence({ dataRoot: root })
+  const status = createCodexSessionStatus({ dataRoot: root, createClient: createStatusClient, onChange, clock })
   let connection = null
   let idleTimer = null
   let activeRequests = 0
@@ -171,7 +172,9 @@ export function createCodexSessionAdapter({
       updated_at: timestamp(thread.updatedAt),
       last_active_at: timestamp(thread.recencyAt ?? thread.updatedAt ?? thread.createdAt),
       state: bounded(thread.status?.type, 64) || 'unknown',
-      native_parent: ref(thread.parentThreadId),
+      active_flags: (thread.status?.activeFlags ?? []).filter(flag => ['waitingOnApproval', 'waitingOnUserInput'].includes(flag)),
+      is_subagent: Boolean(thread.parentThreadId || (thread.source && typeof thread.source === 'object' && Object.hasOwn(thread.source, 'subAgent'))),
+      native_parent: ref(thread.parentThreadId ?? thread.source?.subAgent?.thread_spawn?.parent_thread_id),
       forked_from: ref(thread.forkedFromId),
     }
   }
@@ -367,7 +370,10 @@ export function createCodexSessionAdapter({
     storeId,
     resumeOptions: { codexHome: root },
     capabilities: { full_text_search: true, search_experimental: true, message_location: true, resume: true, live_presence: true, timeline: true, relations: true, branch_groups: true },
-    async activity() { return { ...await presence.snapshot(), store_id: storeId } },
+    async activity() {
+      const snapshot = await status.snapshot()
+      return { store_id: storeId, available: snapshot.available, sessions: snapshot.threads.map(session), checked_at: snapshot.checked_at }
+    },
     list,
     workspaces,
     branches,
@@ -375,6 +381,6 @@ export function createCodexSessionAdapter({
     timeline: timeIndex.timeline,
     readSession,
     messages,
-    close() { closed = true; metadataPages.close(); repairClient?.close(); closeConnection(); timeIndex.clear(); rolloutTiming.clear() },
+    close() { closed = true; status.close(); metadataPages.close(); repairClient?.close(); closeConnection(); timeIndex.clear(); rolloutTiming.clear() },
   }
 }

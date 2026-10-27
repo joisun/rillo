@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { createDashboardApi, DashboardApiError } from '@/lib/api/dashboard-api'
-import type { BrowserSession, SessionFilters, SessionMessagesPage, SessionPage, SessionTimeline, SessionWorkspacePage } from '@/lib/api/types'
+import type { BrowserSession, SessionActivityPage, SessionFilters, SessionMessagesPage, SessionPage, SessionTimeline, SessionWorkspacePage } from '@/lib/api/types'
 import { queryKeys } from '@/lib/query/keys'
 import { SessionsView } from './sessions-view'
 
@@ -26,7 +26,7 @@ function fixture() {
       id: 'codex', name: 'Codex', store_id: 'local-store',
       capabilities: { full_text_search: true, search_experimental: true, message_location: true, resume: true, live_presence: true, branch_groups: true },
     }] })),
-    sessionActivity: vi.fn(async () => ({ store_id: 'local-store', available: true, open_session_ids: ['session-1'], checked_at: '2026-10-23T08:00:00Z' })),
+    sessionActivity: vi.fn(async (): Promise<SessionActivityPage> => ({ store_id: 'local-store', available: true, sessions: [session], checked_at: '2026-10-23T08:00:00Z' })),
     sessionWorkspaces: vi.fn(async (): Promise<SessionWorkspacePage> => ({ workspaces: [{ path: '/workspace/project', observed_count: 1, branch_names: ['main'], last_active_at: session.last_active_at }], next_cursor: null })),
     sessionBranches: vi.fn(async () => ({ branches: [{ name: 'feature/shared', observed_count: 2, workspace_paths: ['/workspace/api', '/workspace/web'], session_ids: ['session-1', 'session-2'], last_active_at: session.last_active_at }], next_cursor: null as string | null })),
     sessions: vi.fn(async (_provider: string, filters: SessionFilters = {}): Promise<SessionPage> => ({
@@ -52,7 +52,7 @@ test('workspace selection requests the exact directory and preview does not laun
   mount()
   await userEvent.click(await screen.findByRole('button', { name: /workspace\/project/ }, { timeout: 5000 }))
   await waitFor(() => expect(api.sessions).toHaveBeenLastCalledWith('codex', expect.objectContaining({ workspace: '/workspace/project' })))
-  await userEvent.click(await screen.findByRole('button', { name: '查看会话：Unrelated session title' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Unrelated session title' }))
   expect(await screen.findByText('A needle deep in the conversation')).toBeInTheDocument()
   expect(api.resumeSession).not.toHaveBeenCalled()
   await userEvent.click(within(screen.getByRole('region', { name: '会话预览' })).getByRole('button', { name: '在终端继续：Unrelated session title' }))
@@ -61,7 +61,7 @@ test('workspace selection requests the exact directory and preview does not laun
 })
 
 test('branch grouping selects matching sessions across projects and scopes Tree and body search', async () => {
-  const { api, mount } = fixture()
+  const { api, mount, client } = fixture()
   api.sessions.mockImplementation(async (_provider, filters: { branch?: string; query?: string } = {}) => ({
     sessions: filters.branch ? [
       { ...session, title: 'API work', branch: filters.branch, workspace: '/workspace/api' },
@@ -71,12 +71,13 @@ test('branch grouping selects matching sessions across projects and scopes Tree 
   mount()
   await userEvent.click(await screen.findByRole('button', { name: /workspace\/project/ }))
   await userEvent.click(screen.getByRole('button', { name: 'Branch' }))
+  api.sessionActivity.mockResolvedValue({ store_id: 'local-store', available: true, sessions: [{ ...session, state: 'active', branch: 'feature/shared', workspace: '/workspace/api' }], checked_at: session.last_active_at! })
+  await client.invalidateQueries({ queryKey: queryKeys.sessionActivity('codex', 'local-store') })
   const sidebar = await screen.findByRole('complementary', { name: '分支分组' })
   await userEvent.click(await within(sidebar).findByRole('button', { name: /feature\/shared/ }))
   await waitFor(() => expect(api.sessions).toHaveBeenLastCalledWith('codex', expect.objectContaining({ branch: 'feature/shared', workspace: '' })))
-  expect(document.querySelectorAll('.session-timeline .session-row')).toHaveLength(2)
+  expect(document.querySelectorAll('.session-tree__row')).toHaveLength(2)
   expect(within(sidebar).getByRole('img', { name: '分支活跃' })).toBeInTheDocument()
-  await userEvent.click(screen.getByRole('tab', { name: 'Tree' }))
   expect(document.querySelectorAll('.session-tree__row')).toHaveLength(2)
   expect(api.sessionMessages).not.toHaveBeenCalled()
   await userEvent.type(screen.getByRole('combobox', { name: '搜索会话正文' }), 'needle')
@@ -97,7 +98,7 @@ test('workspace branch children preserve both filters and the reader when groupi
   const children = await screen.findByRole('list', { name: '/workspace/project 分支' })
   await userEvent.click(within(children).getByRole('button', { name: 'main' }))
   await waitFor(() => expect(api.sessions).toHaveBeenLastCalledWith('codex', expect.objectContaining({ workspace: '/workspace/project', branch: 'main' })))
-  await userEvent.click(await screen.findByRole('button', { name: '查看会话：Unrelated session title' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Unrelated session title' }))
   const preview = screen.getByRole('region', { name: '会话预览' })
   await userEvent.click(screen.getByRole('button', { name: '折叠项目分支' }))
   expect(children).not.toBeVisible()
@@ -143,7 +144,7 @@ test('a selected branch automatically continues empty native pages instead of de
   const sidebar = await screen.findByRole('complementary', { name: '分支分组' })
   await userEvent.click(await within(sidebar).findByRole('button', { name: /feature\/shared/ }))
   await waitFor(() => expect(api.sessions).toHaveBeenLastCalledWith('codex', expect.objectContaining({ branch: 'feature/shared', cursor: 'later' })))
-  expect(await screen.findByRole('button', { name: '查看会话：Unrelated session title' })).toBeInTheDocument()
+  expect(await screen.findByRole('button', { name: 'Unrelated session title' })).toBeInTheDocument()
   expect(screen.queryByText('这里还没有会话')).not.toBeInTheDocument()
 })
 
@@ -163,7 +164,7 @@ test('branch workspace children combine both filters and collapse without changi
   await userEvent.click(apiDirectory)
   await waitFor(() => expect(api.sessions).toHaveBeenLastCalledWith('codex', expect.objectContaining({ branch: 'feature/shared', workspace: '/workspace/api' })))
   expect(apiDirectory).toHaveAttribute('aria-pressed', 'true')
-  expect(document.querySelectorAll('.session-timeline .session-row')).toHaveLength(1)
+  expect(document.querySelectorAll('.session-tree__row')).toHaveLength(1)
   await userEvent.type(screen.getByRole('combobox', { name: '搜索会话正文' }), 'needle')
   await waitFor(() => expect(api.sessions).toHaveBeenLastCalledWith('codex', expect.objectContaining({ query: 'needle', branch: 'feature/shared', workspace: '/workspace/api' })))
   await userEvent.keyboard('{Escape}')
@@ -176,38 +177,30 @@ test('branch workspace children combine both filters and collapse without changi
   expect(projects).toBeVisible()
   await userEvent.click(within(screen.getByRole('complementary', { name: '分支分组' })).getByRole('button', { name: /feature\/shared/ }))
   await waitFor(() => expect(api.sessions).toHaveBeenLastCalledWith('codex', expect.objectContaining({ branch: 'feature/shared', workspace: '' })))
-  expect(document.querySelectorAll('.session-timeline .session-row')).toHaveLength(2)
+  expect(document.querySelectorAll('.session-tree__row')).toHaveLength(2)
 })
 
-test('List and Tree share the selected conversation while old Cards preferences return to Tree', async () => {
-  window.history.replaceState(null, '', '/?view=sessions&sessions=cards')
-  window.localStorage.setItem('tasks-recorder.sessions-view', 'cards')
-  const { api, mount } = fixture()
+test('only Tree remains and obsolete view preferences do not create a second view', async () => {
+  window.history.replaceState(null, '', '/?view=sessions&sessions=list')
+  window.localStorage.setItem('tasks-recorder.sessions-view', 'list')
+  const { mount } = fixture()
   mount()
-  expect(await screen.findByRole('tab', { name: 'Tree' })).toHaveAttribute('aria-selected', 'true')
-  expect(screen.queryByRole('tab', { name: 'Cards' })).not.toBeInTheDocument()
-  expect(screen.queryByRole('region', { name: '会话卡片' })).not.toBeInTheDocument()
-  await userEvent.click(screen.getByRole('tab', { name: 'List' }))
-  await userEvent.click(await screen.findByRole('button', { name: '查看会话：Unrelated session title' }))
-  const preview = screen.getByRole('region', { name: '会话预览' })
-  expect(await within(preview).findByText('A needle deep in the conversation')).toBeInTheDocument()
-  await userEvent.click(screen.getByRole('tab', { name: 'Tree' }))
-  expect(screen.getByRole('region', { name: '会话预览' })).toBe(preview)
-  expect(window.localStorage.getItem('tasks-recorder.sessions-view')).toBe('activity')
-  expect(new URLSearchParams(window.location.search).get('sessions')).toBe('activity')
-  expect(api.resumeSession).not.toHaveBeenCalled()
+  await screen.findByRole('button', { name: 'Unrelated session title' })
+  expect(screen.queryByRole('tab')).not.toBeInTheDocument()
+  expect(document.querySelector('.session-timeline')).toBeNull()
+  expect(window.localStorage.getItem('tasks-recorder.sessions-view')).toBeNull()
+  expect(new URLSearchParams(window.location.search).has('sessions')).toBe(false)
 })
 
-test('the list terminal action does not select a conversation', async () => {
+test('the Tree terminal action does not select a conversation', async () => {
   const { api, mount } = fixture()
   mount()
-  const list = document.querySelector('.session-timeline') as HTMLElement
-  await userEvent.click(await within(list).findByRole('button', { name: '在终端继续：Unrelated session title' }))
+  await userEvent.click(await screen.findByRole('button', { name: '在终端继续：Unrelated session title' }))
   expect(await screen.findByRole('status')).toHaveTextContent('已在 Otty 打开')
   expect(api.sessionMessages).not.toHaveBeenCalled()
 })
 
-test('List automatically continues the shared native cursor and deduplicates repeated sessions', async () => {
+test('Tree automatically continues the shared native cursor and deduplicates repeated sessions', async () => {
   vi.stubGlobal('IntersectionObserver', class {
     callback: (entries: Array<{ isIntersecting: boolean }>) => void
     constructor(callback: (entries: Array<{ isIntersecting: boolean }>) => void) { this.callback = callback }
@@ -220,8 +213,8 @@ test('List automatically continues the shared native cursor and deduplicates rep
     next_cursor: filters.cursor ? null : 'native-next', search_scope: null, scanned_count: 2, relations: [],
   }))
   mount()
-  expect(await screen.findByRole('button', { name: '查看会话：下一页的会话' })).toBeInTheDocument()
-  expect(document.querySelectorAll('.session-timeline .session-row')).toHaveLength(2)
+  expect(await screen.findByRole('button', { name: '下一页的会话' })).toBeInTheDocument()
+  expect(document.querySelectorAll('.session-tree__row')).toHaveLength(2)
   expect(api.sessions).toHaveBeenLastCalledWith('codex', expect.objectContaining({ cursor: 'native-next', limit: 100 }))
   expect(api.sessionMessages).not.toHaveBeenCalled()
 })
@@ -235,11 +228,11 @@ test('typing opens body results in a listbox without replacing the timeline, sel
     next_cursor: null, truncated: false,
   })
   mount()
-  await screen.findByRole('button', { name: '查看会话：Unrelated session title' })
+  await screen.findByRole('button', { name: 'Unrelated session title' })
   await userEvent.type(screen.getByRole('combobox', { name: '搜索会话正文' }), 'needle')
   await waitFor(() => expect(api.sessions).toHaveBeenLastCalledWith('codex', expect.objectContaining({ query: 'needle' })))
   const result = await screen.findByRole('option', { name: /Unrelated session title/ })
-  expect(document.querySelector('.session-timeline .session-row')).toHaveTextContent('First prompt')
+  expect(document.querySelector('.session-tree__row')).toHaveTextContent('Unrelated session title')
   expect(result.querySelector('mark')).toHaveTextContent('needle')
   await userEvent.click(result)
   expect(await screen.findByText('已定位首处正文命中')).toBeInTheDocument()
@@ -301,7 +294,7 @@ test('a failed conversation and its relations do not block the session browser',
   api.sessionMessages.mockRejectedValue(error)
   api.sessionRelations.mockRejectedValue(error)
   mount()
-  await userEvent.click(await screen.findByRole('button', { name: '查看会话：Unrelated session title' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Unrelated session title' }))
   await waitFor(() => expect(api.sessionRelations).toHaveBeenCalled())
   await waitFor(() => expect(document.querySelector('.session-detail .session-state.session-error')).toHaveTextContent('此会话暂时无法读取'))
   expect(document.querySelector('.sessions-connection')).toBeNull()
@@ -331,7 +324,7 @@ test.each([
 ])('a failed background query stays local: $queryKey', async ({ queryKey }) => {
   const { mount, client } = fixture()
   mount()
-  await screen.findByRole('button', { name: '查看会话：Unrelated session title' })
+  await screen.findByRole('button', { name: 'Unrelated session title' })
   const observer = new QueryObserver(client, { queryKey, retry: false, queryFn: async () => { throw new DashboardApiError('后台读取超时', { code: 'DASHBOARD_REQUEST_TIMEOUT', status: 504 }) } })
   const unsubscribe = observer.subscribe(() => {})
   try {
@@ -341,14 +334,15 @@ test.each([
   } finally { unsubscribe() }
 })
 
-test('Active is removed when presence becomes unavailable and does not disable resume', async () => {
+test('native status is removed when the shared server becomes unavailable and history stays accessible', async () => {
   const { api, mount, client } = fixture()
+  api.sessionActivity.mockResolvedValue({ store_id: 'local-store', available: true, sessions: [{ ...session, state: 'active' }], checked_at: session.last_active_at! })
   mount()
-  expect(await screen.findByRole('img', { name: '会话活跃' })).toBeInTheDocument()
-  api.sessionActivity.mockResolvedValue({ store_id: 'local-store', available: false, open_session_ids: [], checked_at: '2026-10-23T08:00:05Z' })
+  expect(await screen.findByRole('img', { name: 'Working' })).toBeInTheDocument()
+  api.sessionActivity.mockResolvedValue({ store_id: 'local-store', available: false, sessions: [], checked_at: '2026-10-23T08:00:05Z' })
   await client.invalidateQueries({ queryKey: ['dashboard', 'session-browser', 'codex', 'local-store', 'activity'] })
-  await waitFor(() => expect(screen.queryByRole('img', { name: '会话活跃' })).not.toBeInTheDocument())
-  await userEvent.click(screen.getByRole('button', { name: '查看会话：Unrelated session title' }))
+  await waitFor(() => expect(screen.queryByRole('img', { name: 'Working' })).not.toBeInTheDocument())
+  await userEvent.click(screen.getByRole('button', { name: 'Unrelated session title' }))
   expect(await within(screen.getByRole('region', { name: '会话预览' })).findByRole('button', { name: '在终端继续：Unrelated session title' })).toBeEnabled()
 })
 
@@ -369,17 +363,43 @@ test('screenshot annotations are removed and keyboard can choose a floating resu
 
 test('floating result badges follow live activity changes despite collection caching', async () => {
   const { api, mount, client } = fixture()
-  api.sessionActivity.mockResolvedValue({ store_id: 'local-store', available: true, open_session_ids: [], checked_at: '2026-10-23T08:00:00Z' })
+  api.sessionActivity.mockResolvedValue({ store_id: 'local-store', available: true, sessions: [], checked_at: '2026-10-23T08:00:00Z' })
   mount()
   await waitFor(() => expect(screen.getByRole('combobox')).toBeEnabled())
   await userEvent.type(screen.getByRole('combobox'), 'needle')
   const option = await screen.findByRole('option', { name: /Unrelated session title/ })
   expect(option.querySelector('.session-origin')).toHaveTextContent('/workspace/projectmain')
-  expect(within(option).queryByRole('img', { name: '会话活跃' })).not.toBeInTheDocument()
-  api.sessionActivity.mockResolvedValue({ store_id: 'local-store', available: true, open_session_ids: ['session-1'], checked_at: '2026-10-23T08:00:05Z' })
+  expect(within(option).queryByRole('img', { name: 'Working' })).not.toBeInTheDocument()
+  api.sessionActivity.mockResolvedValue({ store_id: 'local-store', available: true, sessions: [{ ...session, state: 'active' }], checked_at: '2026-10-23T08:00:05Z' })
   await client.invalidateQueries({ queryKey: ['dashboard', 'session-browser', 'codex', 'local-store', 'activity'] })
-  expect(await within(option).findByRole('img', { name: '会话活跃' })).toBeInTheDocument()
+  expect(await within(option).findByRole('img', { name: 'Working' })).toBeInTheDocument()
   api.sessionActivity.mockRejectedValue(new Error('probe unavailable'))
   await client.invalidateQueries({ queryKey: ['dashboard', 'session-browser', 'codex', 'local-store', 'activity'] })
-  await waitFor(() => expect(within(option).queryByRole('img', { name: '会话活跃' })).not.toBeInTheDocument())
+  await waitFor(() => expect(within(option).queryByRole('img', { name: 'Working' })).not.toBeInTheDocument())
+})
+
+test('native status buttons promote matching sessions in Tree and toggle back to recency', async () => {
+  const { api, mount } = fixture()
+  const rows = [
+    { ...session, session_id: 'old-needs', title: '需要审批的旧会话', state: 'active', active_flags: ['waitingOnApproval' as const], last_active_at: '2026-10-20T08:00:00Z' },
+    { ...session, session_id: 'working', title: '正在执行', state: 'active', active_flags: [], last_active_at: '2026-10-21T08:00:00Z' },
+    { ...session, session_id: 'ready', title: '等待指令', state: 'idle', last_active_at: '2026-10-22T08:00:00Z' },
+    { ...session, session_id: 'inactive', title: '历史会话', state: 'notLoaded', last_active_at: '2026-10-23T08:00:00Z' },
+  ]
+  api.sessions.mockResolvedValue({ sessions: rows, next_cursor: null, search_scope: null, scanned_count: rows.length, relations: [] })
+  api.sessionActivity.mockResolvedValue({ store_id: 'local-store', available: true, sessions: rows.slice(0, 3), checked_at: session.last_active_at! })
+  mount()
+  const controls = await screen.findByRole('group', { name: '会话状态排序' })
+  const needs = await within(controls).findByRole('button', { name: 'Needs you 1' })
+  const listTitles = () => [...document.querySelectorAll('.session-tree__title')].map(element => element.textContent)
+  await waitFor(() => expect(listTitles()[0]).toBe('历史会话'))
+  await userEvent.click(needs)
+  expect(needs).toHaveAttribute('aria-pressed', 'true')
+  expect(listTitles()[0]).toBe('需要审批的旧会话')
+  expect(listTitles()).toHaveLength(4)
+  expect(document.querySelector('.session-tree__title')).toHaveTextContent('需要审批的旧会话')
+  await userEvent.click(within(controls).getByRole('button', { name: 'Working 1' }))
+  expect(document.querySelector('.session-tree__title')).toHaveTextContent('正在执行')
+  await userEvent.click(within(controls).getByRole('button', { name: 'Working 1' }))
+  expect(document.querySelector('.session-tree__title')).toHaveTextContent('历史会话')
 })

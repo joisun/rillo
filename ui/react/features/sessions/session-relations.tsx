@@ -8,8 +8,9 @@ import type { DashboardApi } from '@/lib/api/dashboard-api'
 import type { BrowserSession, SessionRef, SessionRelation } from '@/lib/api/types'
 import { isSessionMetadataQuery, queryKeys } from '@/lib/query/keys'
 import { sessionKey } from './session-format'
+import { collectSessionRelations } from './session-projection'
 
-export function SessionRelations({ api, session, onReadSession }: { api: DashboardApi; session: BrowserSession; onReadSession: (ref: SessionRef) => void }) {
+export function SessionRelations({ api, session, knownSessions, knownRelations = [], onReadSession }: { knownSessions?: Map<string, BrowserSession>; knownRelations?: SessionRelation[]; api: DashboardApi; session: BrowserSession; onReadSession: (ref: SessionRef) => void }) {
   const element = useRef<HTMLDetailsElement>(null)
   useEffect(() => {
     const outside = (event: PointerEvent) => { if (element.current && !element.current.contains(event.target as Node)) element.current.open = false }
@@ -31,9 +32,8 @@ export function SessionRelations({ api, session, onReadSession }: { api: Dashboa
   const link = useMutation({ mutationFn: () => api.linkSessions({ parent: { provider: session.provider, store_id: session.store_id, session_id: session.session_id }, child: { provider: source!.id, store_id: source!.store_id, session_id: childId.trim() }, source: 'session-browser' }),
     onSuccess: () => { setChildId(''); refreshRelations() } })
   const unlink = useMutation({ mutationFn: (relation: SessionRelation) => api.unlinkSessions({ parent: relation.parent, child: relation.child }), onSuccess: refreshRelations })
-  const items = [...(relations.data?.relations ?? [])]
-  if (session.native_parent && !items.some((relation) => relation.kind !== 'fork' && sessionKey(relation.child) === sessionKey(session))) items.push({ id: 'native-parent', kind: 'subagent', origin: 'native', parent: session.native_parent, child: session, source: 'native_parent', created_at: null })
-  if (session.forked_from && !items.some((relation) => relation.kind === 'fork' && sessionKey(relation.child) === sessionKey(session))) items.push({ id: 'native-fork', kind: 'fork', origin: 'native', parent: session.forked_from, child: session, source: 'forked_from', created_at: null })
+  const items = collectSessionRelations([session], [...knownRelations, ...(relations.data?.relations ?? [])])
+    .filter(relation => sessionKey(relation.parent) === sessionKey(session) || sessionKey(relation.child) === sessionKey(session))
   return <details className="session-relations" ref={element}>
     <summary>会话关系{items.length ? ` · ${items.length}` : ''}</summary>
     <div className="session-relations__content">
@@ -41,8 +41,8 @@ export function SessionRelations({ api, session, onReadSession }: { api: Dashboa
     {items.map((relation) => {
       const isChild = sessionKey(relation.child) === sessionKey(session)
       const target = isChild ? relation.parent : relation.child
-      const label = relation.kind === 'fork' ? (isChild ? 'fork 来源' : '派生 fork') : relation.origin === 'native' ? (isChild ? '原生父会话' : '原生 subagent') : (isChild ? '登记父会话' : '登记子会话')
-      return <div className="session-relations__row" key={relation.id}><span>{label}</span><button type="button" onClick={() => onReadSession(target)} title={sessionKey(target)}>{target.session_id}</button>
+      const label = relation.kind === 'fork' ? (isChild ? 'Fork 来源' : '派生 Fork') : relation.kind === 'subagent' ? (isChild ? 'Subagent 父会话' : 'Subagent 子会话') : (isChild ? '协作父会话' : '协作子会话')
+      return <div className="session-relations__row" key={relation.id}><span>{label}</span><button type="button" onClick={() => onReadSession(target)} title={sessionKey(target)}>{knownSessions?.get(sessionKey(target))?.title ?? target.session_id}</button>
         {relation.origin === 'registered' ? <Button size="xs" variant="quiet" isPending={unlink.isPending && unlink.variables?.id === relation.id} onPress={() => unlink.mutate(relation)}>解除登记</Button> : null}</div>
     })}
     <form className="session-relations__form" onSubmit={(event) => { event.preventDefault(); link.mutate() }}>

@@ -6,10 +6,9 @@ export interface SessionProvider {
 }
 
 export interface SessionActivityPage {
-  active_workspaces?: string[]
   store_id: string
   available: boolean
-  open_session_ids: string[]
+  sessions: BrowserSession[]
   checked_at: string
 }
 
@@ -29,6 +28,8 @@ export interface BrowserSession extends SessionRef {
   updated_at: string | null
   last_active_at: string | null
   state: string
+  active_flags?: ('waitingOnApproval' | 'waitingOnUserInput')[]
+  is_subagent?: boolean
   native_parent: SessionRef | null
   forked_from: SessionRef | null
 }

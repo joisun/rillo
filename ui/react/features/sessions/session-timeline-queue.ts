@@ -43,3 +43,5 @@ export function createTimelineRequestQueue(limit = MAX_TIMELINE_REQUESTS) {
     },
   }
 }
+
+export const sessionReadRequests = createTimelineRequestQueue()

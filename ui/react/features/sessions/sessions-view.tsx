@@ -1,26 +1,28 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight, Folder, FolderOpen, GitBranch, MessagesSquare, RefreshCw, Search } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { ChevronDown, ChevronRight, Folder, FolderOpen, GitBranch, MessagesSquare, PanelRightOpen, RefreshCw } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tab, TabList, TabPanel, Tabs } from '@/components/ui/tabs'
+import { DialogContent } from '@/components/ui/dialog'
+import { Drawer } from '@/components/ui/drawer'
 import type { DashboardApi } from '@/lib/api/dashboard-api'
 import type { BrowserSession, SessionBranchPage, SessionPage, SessionRef, SessionWorkspacePage } from '@/lib/api/types'
 import { queryKeys } from '@/lib/query/keys'
-import { persistSessionsGroup, persistSessionsView, readSessionsGroup, readSessionsView, type SessionGroupMode } from '@/lib/preferences/dashboard-preferences'
+import { persistSessionsGroup, readSessionsGroup, type SessionGroupMode } from '@/lib/preferences/dashboard-preferences'
 import { SessionDetail } from './session-detail'
 import { AutoPager } from './session-auto-pager'
 import { isSessionBlockingError, useSessionConnectionError } from './session-health'
-import { SessionActivity } from './session-activity'
+import { SessionAncestorSource } from './session-children'
+import { collectSessionFamily, indexSessionRelations, projectSessionTree } from './session-projection'
 import { SessionSearch } from './session-search'
 import { SessionOrigin } from './session-origin'
-import { activityDay, activityTime, sessionKey } from './session-format'
+import { sessionKey } from './session-format'
 import { SessionActivityView } from './session-activity-view'
-import { SessionResumeButton } from './session-resume-button'
 import './sessions.css'
 import type { TimelineLoadRequest } from './session-timeline-queue'
+import { compareSessions, sessionStatusGroup, sessionStatusOptions, sessionWithStatus, SessionStatusGroup } from './session-status'
 
 export function SessionsView({ api }: { api: DashboardApi }) {
   const client = useQueryClient()
@@ -31,6 +33,9 @@ export function SessionsView({ api }: { api: DashboardApi }) {
     const timer = window.setInterval(() => void reconnect(), 3000)
     return () => window.clearInterval(timer)
   }, [connectionError, client])
+  const [statusSort, setStatusSort] = useState<SessionStatusGroup | null>(null)
+  const [childPages, setChildPages] = useState<Record<string, SessionPage[]>>({})
+  const rememberChildren = useCallback((key: string, pages: SessionPage[]) => setChildPages(current => current[key] === pages ? current : { ...current, [key]: pages }), [])
   const [sourceId, setSourceId] = useState('')
   const [workspace, setWorkspace] = useState('')
   const [branch, setBranch] = useState('')
@@ -41,16 +46,23 @@ export function SessionsView({ api }: { api: DashboardApi }) {
   const [selection, setSelection] = useState<{ session: BrowserSession; query: string; at: string | null; itemId?: string; followRequest?: number } | null>(null)
   const [readingPosition, setReadingPosition] = useState<{ key: string; at: string; itemId: string } | null>(null)
   const followRequestSequence = useRef(0)
-  const [mode, setMode] = useState(readSessionsView)
-  const [readerExpanded, setReaderExpanded] = useState(false)
-  const [activityVisited, setActivityVisited] = useState(mode === 'activity')
+  const [readerOpen, setReaderOpen] = useState(false)
+  const [readerHost, setReaderHost] = useState<HTMLDivElement | null>(null)
+  const [ancestors, setAncestors] = useState<Record<string, BrowserSession>>({})
+  const [unavailableAncestors, setUnavailableAncestors] = useState<Set<string>>(() => new Set())
+  const ancestorUnavailable = useCallback((key: string) => setUnavailableAncestors(current => current.has(key) ? current : new Set([...current, key])), [])
+  const rememberAncestor = useCallback((session: BrowserSession) => setAncestors(current => current[sessionKey(session)] === session ? current : { ...current, [sessionKey(session)]: session }), [])
   const [timelineRequest, setTimelineRequest] = useState<TimelineLoadRequest | null>(null)
   const timelineRequestSequence = useRef(0)
-  const initialPreview = useRef('')
   const [readError, setReadError] = useState('')
   const [reading, setReading] = useState(false)
   const readRequest = useRef<AbortController | null>(null)
-  useEffect(() => persistSessionsView(mode), [mode])
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    url.searchParams.delete('sessions')
+    window.localStorage.removeItem('tasks-recorder.sessions-view')
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+  }, [])
   useEffect(() => persistSessionsGroup(groupPreference), [groupPreference])
   useEffect(() => () => readRequest.current?.abort(), [])
   const providers = useQuery({ queryKey: queryKeys.sessionProviders, queryFn: () => api.sessionProviders(), retry: false })
@@ -65,8 +77,9 @@ export function SessionsView({ api }: { api: DashboardApi }) {
     enabled: Boolean(provider?.capabilities.live_presence),
     refetchInterval: 5000, retry: false, gcTime: 0,
   })
-  const openIds = useMemo(() => new Set(!activity.isError && activity.data?.available
-    && activity.data.store_id === provider?.store_id ? activity.data.open_session_ids : []), [activity.data, activity.isError, provider?.store_id])
+  const nativeActivity = !activity.isError && activity.data?.store_id === provider?.store_id ? activity.data : undefined
+  const nativeStatuses = useMemo(() => new Map((nativeActivity?.sessions ?? []).map(session => [sessionKey(session), session])), [nativeActivity?.sessions])
+  const withStatus = (session: BrowserSession) => sessionWithStatus(session, nativeActivity, nativeStatuses)
   const directories = useInfiniteQuery({
     queryKey: queryKeys.sessionWorkspaces(providerId, false),
     initialPageParam: null as string | null,
@@ -95,26 +108,37 @@ export function SessionsView({ api }: { api: DashboardApi }) {
     gcTime: 60_000,
     staleTime: 3000, refetchInterval: 15_000, refetchOnWindowFocus: true,
   })
-  const sessions = useMemo(() => [...new Map((results.data?.pages ?? []).flatMap((page) => page.sessions)
-    .map((session) => [sessionKey(session), session])).values()], [results.data])
-  const activeWorkspaces = useMemo(() => new Set([
-    ...(!activity.isError && activity.data?.available && activity.data.store_id === provider?.store_id ? activity.data.active_workspaces ?? [] : []),
-    ...sessions.filter(session => openIds.has(session.session_id) || session.state === 'active').map(session => session.workspace).filter((path): path is string => Boolean(path)),
-  ]), [activity.data, activity.isError, provider?.store_id, sessions, openIds])
+  const rootSessions = useMemo(() => {
+    const rows = (results.data?.pages ?? []).flatMap(page => page.sessions)
+    return [...new Map(rows.map(session => [sessionKey(session), sessionWithStatus(session, nativeActivity, nativeStatuses)])).values()]
+      .sort((left, right) => compareSessions(left, right, statusSort))
+  }, [results.data, nativeActivity?.available, nativeActivity?.store_id, nativeStatuses, workspace, branch, statusSort])
+  const baseRelations = useMemo(() => (results.data?.pages ?? []).flatMap(page => page.relations), [results.data])
+  const family = useMemo(() => collectSessionFamily(rootSessions, baseRelations, childPages, ancestors), [rootSessions, baseRelations, childPages, ancestors])
+  const relations = family.relations
+  const sessions = useMemo(() => family.sessions.map(session => sessionWithStatus(session, nativeActivity, nativeStatuses))
+    .sort((left, right) => compareSessions(left, right, statusSort)), [family.sessions, nativeActivity?.available, nativeActivity?.store_id, nativeStatuses, statusSort])
+  const relationIndex = useMemo(() => indexSessionRelations(relations), [relations])
+  const knownSessions = useMemo(() => new Map([...sessions, ...(selection ? [selection.session] : [])].map(session => [sessionKey(session), session])), [sessions, selection?.session])
+  const activeSessions = (nativeActivity?.sessions ?? []).filter(session => session.state === 'active')
+  const activeWorkspaces = new Set(activeSessions.map(session => session.workspace))
+  const displayedSessions = useMemo(() => {
+    const pending = projectSessionTree(sessions, relations)
+    const displayed: BrowserSession[] = []
+    while (pending.length) {
+      const node = pending.shift()!
+      if (node.session) displayed.push(node.session)
+      pending.push(...node.children)
+    }
+    return displayed
+  }, [sessions, relations])
+  const statusCounts = new Map(sessionStatusOptions.map(option => [option.id, displayedSessions.filter(session => sessionStatusGroup(session) === option.id).length]))
   useEffect(() => {
     if ((directoryQuery || catalogPickerOpen) && catalog.hasNextPage && !catalog.isFetching && !catalog.isError) void catalog.fetchNextPage()
   }, [directoryQuery, catalogPickerOpen, catalog.hasNextPage, catalog.isFetching, catalog.isError, catalog.fetchNextPage])
   useEffect(() => {
     if (branch && !sessions.length && results.hasNextPage && !results.isFetching && !results.isError) void results.fetchNextPage()
   }, [branch, sessions.length, results.hasNextPage, results.isFetching, results.isError, results.fetchNextPage])
-  useEffect(() => {
-    if (mode !== 'activity' || !provider || !sessions.length || !window.matchMedia('(min-width: 981px)').matches) return
-    const key = `${provider.id}:${provider.store_id}:${workspace}:${branch}`
-    if (initialPreview.current === key) return
-    initialPreview.current = key
-    setSelection((current) => current ?? { session: sessions[0], query: '', at: null })
-  }, [mode, provider, workspace, branch, sessions])
-  const relations = useMemo(() => (results.data?.pages ?? []).flatMap((page) => page.relations), [results.data])
   const groups = useMemo(() => {
     if (isBranch) {
       const byName = new Map<string, { name: string; ids: Set<string>; paths: Set<string>; latest: string }>()
@@ -127,7 +151,7 @@ export function SessionsView({ api }: { api: DashboardApi }) {
       }
       return [...byName.values()].sort((left, right) => right.latest.localeCompare(left.latest))
         .filter(group => group.name.toLocaleLowerCase().includes(directoryQuery.toLocaleLowerCase()))
-        .map(group => ({ key: group.name, label: group.name, children: [...group.paths], count: group.ids.size, active: [...group.ids].some(id => openIds.has(id)) }))
+        .map(group => ({ key: group.name, label: group.name, children: [...group.paths], count: group.ids.size, active: activeSessions.some(session => session.branch === group.name) }))
     }
     const byPath = new Map<string, { path: string; count: number; branches: Set<string>; latest: string }>()
     for (const group of (directories.data?.pages ?? []).flatMap((page) => page.workspaces)) {
@@ -138,7 +162,7 @@ export function SessionsView({ api }: { api: DashboardApi }) {
     return [...byPath.values()].sort((left, right) => right.latest.localeCompare(left.latest))
       .filter((group) => group.path.toLocaleLowerCase().includes(directoryQuery.toLocaleLowerCase()))
       .map(group => ({ key: group.path, label: group.path, children: [...group.branches].sort(), count: group.count, active: activeWorkspaces.has(group.path) }))
-  }, [isBranch, branches.data, directories.data, directoryQuery, openIds, activeWorkspaces])
+  }, [isBranch, branches.data, directories.data, directoryQuery, nativeActivity])
   const pickerItems = groups.flatMap(group => [
     { key: group.key, label: group.label, parent: group.label, branch: isBranch ? group.key : '', path: isBranch ? '' : group.key, child: false, isPath: !isBranch },
     ...group.children.map(child => ({ key: JSON.stringify(isBranch ? [group.key, child] : [child, group.key]), label: child, parent: group.label, branch: isBranch ? group.key : child, path: isBranch ? child : group.key, child: true, isPath: isBranch })),
@@ -152,6 +176,7 @@ export function SessionsView({ api }: { api: DashboardApi }) {
     setWorkspace(path)
     setBranch('')
     setSelection(null)
+    setReaderOpen(false)
     setTimelineRequest(null)
   }
 
@@ -184,6 +209,7 @@ export function SessionsView({ api }: { api: DashboardApi }) {
     setReading(false)
     setReadError('')
     setTimelineRequest(null)
+    setReaderOpen(true)
     setSelection({ session, query, at: null, followRequest: ++followRequestSequence.current })
   }
 
@@ -196,7 +222,7 @@ export function SessionsView({ api }: { api: DashboardApi }) {
     setReadError('')
     try {
       const result = await api.readSession(ref, controller.signal)
-      if (!controller.signal.aborted) setSelection({ session: result.session, query: '', at: null })
+      if (!controller.signal.aborted) { setSelection({ session: result.session, query: '', at: null }); setReaderOpen(true) }
     } catch (error) {
       if (!controller.signal.aborted) setReadError(`会话不可用：${error instanceof Error ? error.message : String(error)}`)
     } finally {
@@ -205,11 +231,12 @@ export function SessionsView({ api }: { api: DashboardApi }) {
   }
 
   return (
-    <Tabs className="sessions-workspace" aria-label="会话浏览器" data-detail-open={Boolean(selection)} data-seeking={Boolean(selection?.at)} data-reader-expanded={readerExpanded} data-mode={mode} selectedKey={mode} onSelectionChange={(key) => { const next = key === 'list' ? 'list' : 'activity'; setMode(next); if (next === 'activity') setActivityVisited(true) }}>
+    <div className="sessions-workspace" data-detail-open={Boolean(selection && readerOpen)}>
+      {family.missingParents.map(reference => <SessionAncestorSource key={sessionKey(reference)} api={api} reference={reference} onData={rememberAncestor} onUnavailable={ancestorUnavailable} />)}
       <header className="sessions-toolbar" inert={Boolean(connectionError)}>
         <div className="sessions-toolbar__search">
           <SessionSearch key={providerId + ':' + workspace + ':' + branch} api={api} provider={providerId} workspace={workspace} branch={branch}
-            enabled={Boolean(provider?.capabilities.full_text_search)} openIds={openIds}
+            enabled={Boolean(provider?.capabilities.full_text_search)} activity={nativeActivity} statuses={nativeStatuses}
             onSelect={selectSession} />
         </div>
         <div className="sessions-toolbar__controls">
@@ -218,7 +245,7 @@ export function SessionsView({ api }: { api: DashboardApi }) {
           {(providers.data?.providers.length ?? 0) > 1 ? (
             <Select aria-label="会话来源" selectedKey={providerId} onSelectionChange={(key) => { setSourceId(String(key)); chooseWorkspace('') }}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent>{providers.data?.providers.map((item) => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
           ) : provider?.name ? <span className="session-source">{provider.name}</span> : null}
-          <Button aria-label="刷新会话" isIconOnly size="xs" variant="quiet" isDisabled={!provider || results.isFetching || catalog.isFetching} onPress={() => { void Promise.all([results.refetch(), catalog.refetch(), activity.refetch(), client.invalidateQueries({ queryKey: queryKeys.sessionBrowser, predicate: (query) => ['timeline', 'children', 'relations'].some((key) => query.queryKey.includes(key)) })]) }}><RefreshCw /></Button>
+          <Button aria-label="刷新会话" isIconOnly size="xs" variant="quiet" isDisabled={!provider || results.isFetching || catalog.isFetching} onPress={() => { void Promise.all([results.refetch(), catalog.refetch(), activity.refetch(), client.invalidateQueries({ queryKey: queryKeys.sessionBrowser, predicate: (query) => ['timeline', 'children', 'relations', 'read'].some((key) => query.queryKey.includes(key)) })]) }}><RefreshCw /></Button>
         </div>
       </header>
       {connectionError ? <div className="sessions-connection" role="alert"><MessagesSquare /><strong>暂时无法连接本机会话</strong><span>正在自动重连</span><Button size="sm" variant="secondary" onPress={() => void reconnect()}>立即重试</Button></div> : null}
@@ -244,7 +271,7 @@ export function SessionsView({ api }: { api: DashboardApi }) {
                 </div>
                 {group.children.length ? <ul className="session-directory-tree__children" aria-label={`${group.label} ${childrenLabel}`} hidden={collapsed}>
                   {group.children.map(child => <li key={child}><button type="button" className="session-directory" aria-pressed={scope === group.key && childScope === child} onClick={() => chooseScope(group.key, child)}>
-                    {isBranch ? <Folder /> : <GitBranch />}<span title={child}><strong className={isBranch ? 'session-path' : undefined}><bdi dir="ltr">{child}</bdi></strong></span>{isBranch && activeWorkspaces.has(child) ? <span className="session-directory__active" role="img" aria-label="项目活跃" /> : null}
+                    {isBranch ? <Folder /> : <GitBranch />}<span title={child}><strong className={isBranch ? 'session-path' : undefined}><bdi dir="ltr">{child}</bdi></strong></span>{activeSessions.some(session => session.workspace === (isBranch ? child : group.key) && session.branch === (isBranch ? group.key : child)) ? <span className="session-directory__active" role="img" aria-label="项目活跃" /> : null}
                   </button></li>)}
                 </ul> : null}
               </li>})}
@@ -253,40 +280,27 @@ export function SessionsView({ api }: { api: DashboardApi }) {
           </div>
         </aside>
         <div className="sessions-main">
-          <header className="sessions-main__toolbar"><TabList className="sessions-view-tabs segmented-control" aria-label="会话视图"><Tab id="list">List</Tab><Tab id="activity">Tree</Tab></TabList></header>
-        <TabPanel className="session-timeline" id="list" shouldForceMount hidden={mode !== 'list'}>
-          <div className="session-timeline__list">
-            {!results.isPending && !results.isError && !results.hasNextPage && sessions.length === 0 ? <div className="session-state"><Search /><strong>这里还没有会话</strong></div> : null}
-            {sessions.map((session, index) => {
-              const day = activityDay(session.last_active_at)
-              const showDay = index === 0 || activityDay(sessions[index - 1].last_active_at) !== day
-              return <div key={sessionKey(session)}>
-                {showDay ? <h3 className="session-timeline__day">{day}</h3> : null}
-                <div className="session-row" data-selected={selection ? sessionKey(selection.session) === sessionKey(session) : false}>
-                <button type="button" className="session-row__select" aria-label={`查看会话：${session.title}`} aria-pressed={selection ? sessionKey(selection.session) === sessionKey(session) : false} onClick={() => selectSession(session)}>
-                  <span className="session-row__time">{activityTime(session.last_active_at)}</span>
-                  <div className="session-row__body"><div className="session-row__title"><strong title={session.title}>{session.title}</strong><SessionActivity state={session.state} isOpen={openIds.has(session.session_id)} /><SessionOrigin workspace={null} branch={session.branch} /></div><div className="session-row__workspace-row"><SessionOrigin workspace={session.workspace} branch={null} /></div><span className="session-row__preview">{session.preview || '打开查看对话'}</span></div>
-                </button>
-                <SessionResumeButton api={api} session={session} />
-                </div>
-              </div>
-            })}
-            <AutoPager enabled={mode === 'list' && Boolean(results.hasNextPage) && !results.isError} loading={results.isFetching} onMore={() => results.fetchNextPage()} />
-          </div>
-        </TabPanel>
-        <TabPanel className="sessions-activity-panel" id="activity" shouldForceMount hidden={mode !== 'activity'}>
-          {activityVisited ? <SessionActivityView key={`${providerId}:${workspace}:${branch}`} api={api} sessions={sessions} relations={relations} openIds={openIds} presenceSource={{ provider: providerId, store_id: provider?.store_id ?? '' }} selection={selection?.session ?? null} at={selection?.at ?? null} itemId={selection?.itemId} readingPosition={readingPosition} timelineRequest={timelineRequest} hasMore={mode === 'activity' && Boolean(results.hasNextPage) && !results.isError} loadingMore={results.isFetching} onMore={() => results.fetchNextPage()}
+          <header className="sessions-main__toolbar">
+            <div className="session-status-sort" role="group" aria-label="会话状态排序">
+              {nativeActivity?.available ? sessionStatusOptions.map(option => <button type="button" key={option.id} data-status={option.id} aria-pressed={statusSort === option.id} aria-label={`${option.label} ${statusCounts.get(option.id) ?? 0}`} title={`${option.description}；点击优先排列，再次点击恢复最近消息排序。计数为当前范围已载入的会话。`} onClick={() => setStatusSort(current => current === option.id ? null : option.id)}><span className="session-status-sort__dot" aria-hidden="true" />{option.label}<span className="session-status-sort__count">{statusCounts.get(option.id) ?? 0}</span></button>) : <span className="session-status-sort__unavailable" role="status">{activity.isPending ? '读取状态…' : '状态不可用'}</span>}
+            </div>
+            <Button className="session-sheet-toggle" aria-label="展开会话面板" isIconOnly size="xs" variant="quiet" isDisabled={!selection || readerOpen} onPress={() => setReaderOpen(true)}><PanelRightOpen /></Button>
+          </header>
+          <section className="sessions-activity-panel">
+          <SessionActivityView key={`${providerId}:${workspace}:${branch}`} api={api} sessions={sessions} relations={relations} relationIndex={relationIndex} knownSessions={knownSessions} onChildren={rememberChildren} ancestorState={family.missingParents.length === 0 ? 'complete' : family.missingParents.some(ref => !unavailableAncestors.has(sessionKey(ref))) ? 'pending' : 'unavailable'} activity={nativeActivity} statuses={nativeStatuses} statusSort={statusSort} selection={selection?.session ?? null} at={selection?.at ?? null} itemId={selection?.itemId} readingPosition={readingPosition} timelineRequest={timelineRequest} hasMore={Boolean(results.hasNextPage) && !results.isError} loadingMore={results.isFetching} onMore={() => results.fetchNextPage()}
             onSelect={selectSession} onReadSession={(ref) => void onReadSession(ref)} onSeek={(session, at, resumeFollowing, itemId) => {
-              readRequest.current?.abort(); setReading(false); setReadError(''); setReaderExpanded(false)
+              readRequest.current?.abort(); setReading(false); setReadError(''); setReaderOpen(true)
               const followRequest = resumeFollowing ? ++followRequestSequence.current : undefined
               setSelection((current) => current && sessionKey(current.session) === sessionKey(session) && current.at === at && current.itemId === itemId && !current.query && !resumeFollowing ? current : { session, query: '', at, itemId, followRequest: followRequest ?? current?.followRequest })
-            }} /> : null}
-        </TabPanel>
+            }} />
+          </section>
         </div>
-        {selection ? <SessionDetail key={sessionKey(selection.session)} api={api} session={selection.session} query={selection.query} at={selection.at} itemId={selection.itemId} followRequest={selection.followRequest} isOpen={selection.session.provider === providerId && selection.session.store_id === provider?.store_id && openIds.has(selection.session.session_id)} onReadingPosition={(at, itemId) => { const key = sessionKey(selection.session); setReadingPosition(current => current?.key === key && current.at === at && current.itemId === itemId ? current : { key, at, itemId }) }} onReadSession={(ref) => void onReadSession(ref)} onLoadTimeline={() => { setMode('activity'); setActivityVisited(true); setTimelineRequest({ session: selection.session, sequence: ++timelineRequestSequence.current }) }} onExpand={() => setReaderExpanded(true)} onBack={() => setSelection(null)} /> : (
-          <section className="session-detail session-detail--empty" aria-label="会话预览"><MessagesSquare /><p>悬停时间轴，浏览对应消息</p></section>
-        )}
+        <div className="session-reader-sheet-host" ref={setReaderHost}>
+          {selection && readerHost ? <Drawer container={readerHost} keepMounted initialFocus={false} isOpen={readerOpen} onOpenChange={setReaderOpen} modal={false} isDismissable={false} placement="right" swipeToDismiss={false} className="session-reader-sheet">
+            <DialogContent className="session-reader-sheet__content" aria-label="会话面板"><SessionDetail key={sessionKey(selection.session)} api={api} session={withStatus(selection.session)} knownSessions={knownSessions} knownRelations={relations} query={selection.query} at={selection.at} itemId={selection.itemId} followRequest={selection.followRequest} onReadingPosition={(at, itemId) => { const key = sessionKey(selection.session); setReadingPosition(current => current?.key === key && current.at === at && current.itemId === itemId ? current : { key, at, itemId }) }} onReadSession={(ref) => void onReadSession(ref)} onLoadTimeline={() => { setTimelineRequest({ session: selection.session, sequence: ++timelineRequestSequence.current }) }} onBack={() => setReaderOpen(false)} /></DialogContent>
+          </Drawer> : null}
+        </div>
       </div>
-    </Tabs>
+    </div>
   )
 }
