@@ -7,6 +7,7 @@ import { delimiter, isAbsolute, join } from 'node:path'
 import { promisify } from 'node:util'
 
 import { TaskRecorderError } from '../../mcp/src/errors.mjs'
+import { createGhosttyRouter } from './terminal-launcher/ghostty.mjs'
 
 const execFileAsync = promisify(nodeExecFile)
 
@@ -21,12 +22,12 @@ const TERMINALS = Object.freeze([
   {
     id: 'otty',
     label: 'Otty',
-    description: '在新的 Otty window 中继续会话',
+    description: '优先定位已有会话，否则在现有窗口新建标签页',
   },
   {
     id: 'ghostty',
     label: 'Ghostty',
-    description: '在新的 Ghostty window 中继续会话',
+    description: '优先定位已有会话，否则在现有窗口新建标签页',
   },
 ])
 
@@ -132,10 +133,13 @@ export function createTerminalLauncher({
   rmImpl = rm,
   execFileImpl = execFileAsync,
   delayImpl = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  clock = Date.now,
   randomId = randomUUID,
   appPaths = APP_PATHS,
 } = {}) {
-  let ottyLaunchQueue = Promise.resolve()
+  let launchQueue = Promise.resolve()
+  const pendingOtty = new Map()
+  const ghostty = createGhosttyRouter({ runtimeDirectory, execFileImpl })
 
   async function resolveExecutable(name) {
     return firstExecutable(executableCandidates(name, { env, homeDirectory }), accessImpl)
@@ -172,65 +176,82 @@ export function createTerminalLauncher({
     ))
   }
 
-  async function launchOtty({ executable, runtimePath, runtimeId, sessionId, workspace, title, codexHome }) {
-    let existingWindows = []
+  async function ottySnapshot(executable) {
     try {
-      existingWindows = await listOttyWindows(executable)
-    } catch {
-      // `otty open` also starts Otty, so a missing control socket is valid on cold launch.
+      const panes = parseOttyPanes(await execFileImpl(executable, ['pane', 'list', '--json'], { timeout: 5000 }))
+      return { panes, running: true }
+    } catch (error) {
+      if (error.code !== 3) throw error
+      return { panes: [], running: false }
     }
-    const existingIds = new Set(existingWindows.map(({ id }) => id))
-    await execFileImpl(executable, [
-      'open', workspace,
-      '--title', title,
-      '--json',
-    ], { timeout: 5_000 })
-
-    let resumedWindow = null
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      let candidates = []
-      try {
-        candidates = (await listOttyWindows(executable))
-          .filter(({ id }) => !existingIds.has(id))
-      } catch {
-        // Otty's control socket can take a moment to become available on cold launch.
-      }
-      if (candidates.length === 1) {
-        resumedWindow = candidates[0]
-        break
-      }
-      if (candidates.length > 1) {
-        throw new Error('More than one Otty window appeared during resume')
-      }
-      if (attempt < 19) await delayImpl(25)
-    }
-    if (!resumedWindow) throw new Error('Unable to resolve the resumed Otty window')
-
-    const panes = parseOttyPanes(await execFileImpl(executable, [
-      'pane', 'list', '--window', resumedWindow.id, '--json',
-    ], { timeout: 5_000 }))
-    if (panes.length !== 1) throw new Error('The resumed Otty window does not have one target pane')
-    await execFileImpl(executable, [
-      'pane', 'send-keys', '--pane', panes[0].id,
-      resumeShellCommand({ runtimePath, runtimeId, sessionId, codexHome }),
-      'key:Enter', '--json',
-    ], { timeout: 5_000 })
-    await execFileImpl(executable, [
-      'window', 'rename', '--window', resumedWindow.id, title, '--json',
-    ], { timeout: 5_000 })
-    await execFileImpl(executable, [
-      'window', 'focus', resumedWindow.id, '--json',
-    ], { timeout: 5_000 })
-    return { focused: true, window_title: title }
   }
 
-  function enqueueOttyLaunch(operation) {
-    const launch = ottyLaunchQueue.then(operation, operation)
-    ottyLaunchQueue = launch.catch(() => undefined)
+  async function focusOtty(executable, { key, runtimeId, sessionId }) {
+    const snapshot = await ottySnapshot(executable)
+    let matches = snapshot.panes.filter(pane => pane.agent?.toLowerCase() === runtimeId && pane.agent_session_id === sessionId)
+    const pending = pendingOtty.get(key)
+    if (!matches.length && pending) {
+      matches = snapshot.panes.filter(pane => pane.id === pending.pane && (!pane.agent_session_id || pane.agent_session_id === sessionId) && (pane.agent?.toLowerCase() === runtimeId || clock() - pending.at < 10000))
+    }
+    if (matches.length > 1) {
+      const live = matches.filter(pane => pane.agent_state && pane.agent_state !== 'unknown')
+      if (live.length === 1) matches = live
+    }
+    if (matches.length > 1) throw taskError('TERMINAL_SESSION_AMBIGUOUS', '多个 Otty pane 对应此会话，请在 Otty 中选择目标。')
+    if (!matches.length) return null
+    await execFileImpl(executable, ['pane', 'focus', '--pane', matches[0].id, '--json'], { timeout: 5000 })
+    return { action: 'focused', pane_id: matches[0].id, tab_id: matches[0].tab_id, window_id: matches[0].window_id }
+  }
+
+  async function launchOtty({ executable, command, workspace, title, key }) {
+    let windows = []
+    try { windows = await listOttyWindows(executable) }
+    catch (error) { if (error.code !== 3) throw error }
+    const window = windows.find(item => item.focused) ?? windows[0]
+    let tabId, windowId = window?.id
+    if (window) {
+      const created = JSON.parse((await execFileImpl(executable, ['tab', 'new', '--window', window.id, '--cwd', workspace, '--title', title, '--json'], { timeout: 5000 })).stdout)
+      if (created.ok !== true || typeof created.data?.id !== 'string' || !created.data.id) throw new Error('Otty did not return the created tab')
+      tabId = created.data.id
+    } else {
+      await execFileImpl(executable, ['open', workspace, '--title', title, '--json'], { timeout: 5000 })
+      for (let attempt = 0; attempt < 20; attempt++) {
+        let candidates = []
+        try { candidates = await listOttyWindows(executable) }
+        catch (error) { if (error.code !== 3) throw error }
+        if (candidates.length === 1) { windowId = candidates[0].id; break }
+        if (candidates.length > 1) throw new Error('More than one Otty window appeared during resume')
+        if (attempt < 19) await delayImpl(25)
+      }
+      if (!windowId) throw new Error('Unable to resolve the new Otty window')
+    }
+    const panes = parseOttyPanes(await execFileImpl(executable, ['pane', 'list', ...(tabId ? ['--tab', tabId] : ['--window', windowId]), '--json'], { timeout: 5000 }))
+    if (panes.length !== 1) throw new Error('The new Otty tab does not have one target pane')
+    await execFileImpl(executable, ['pane', 'send-text', '--pane', panes[0].id, '--no-escape', command, '--json'], { timeout: 5000 })
+    await execFileImpl(executable, ['pane', 'send-keys', '--pane', panes[0].id, 'key:Enter', '--json'], { timeout: 5000 })
+    pendingOtty.set(key, { pane: panes[0].id, at: clock() })
+    if (pendingOtty.size > 256) pendingOtty.delete(pendingOtty.keys().next().value)
+    await execFileImpl(executable, ['pane', 'focus', '--pane', panes[0].id, '--json'], { timeout: 5000 })
+    return { action: window ? 'new_tab' : 'new_window', pane_id: panes[0].id, tab_id: panes[0].tab_id, window_id: panes[0].window_id, focused: true }
+  }
+
+  function enqueueLaunch(operation) {
+    const launch = launchQueue.then(operation, operation)
+    launchQueue = launch.catch(() => undefined)
     return launch
   }
 
-  async function launch({ terminal = DEFAULT_RESUME_TERMINAL, runtimeId = 'codex', sessionId, workspace, title, codexHome }) {
+  async function launch(input) {
+    return enqueueLaunch(async () => {
+      try { return await launchOnce(input) }
+      catch (error) {
+        if (error instanceof TaskRecorderError) throw error
+        throw taskError('TERMINAL_LAUNCH_FAILED', '无法定位或打开目标终端，请检查终端的控制权限。', { terminal: input.terminal ?? DEFAULT_RESUME_TERMINAL, cause: error.code ?? error.message })
+      }
+    })
+  }
+
+  async function launchOnce({ terminal = DEFAULT_RESUME_TERMINAL, runtimeId = 'codex', sessionId, workspace, title, codexHome, allowCreate = true }) {
     if (!['codex', 'opencode'].includes(runtimeId)) {
       throw taskError('RUNTIME_RESUME_UNSUPPORTED', 'This runtime cannot currently be resumed.', { runtime_id: runtimeId })
     }
@@ -255,6 +276,10 @@ export function createTerminalLauncher({
     if (typeof workspace !== 'string' || !isAbsolute(workspace)) {
       throw taskError('WORKSPACE_INVALID', 'Session Workspace must be an absolute path.')
     }
+    const key = JSON.stringify([runtimeId, runtimeId === 'codex' ? codexHome ?? env.CODEX_HOME ?? join(homeDirectory, '.codex') : null, normalizedSessionId])
+    const focused = terminal === 'otty' ? await focusOtty(adapter.executable, { key, runtimeId, sessionId: normalizedSessionId }) : terminal === 'ghostty' ? await ghostty.focus(key) : null
+    if (focused) return { terminal, terminal_label: terminalDefinition.label, session_id: normalizedSessionId, workspace, ...focused }
+    if (!allowCreate) throw taskError('SESSION_BROWSER_SESSION_ACTIVE', '会话正在执行，未找到可定位的终端 pane，未重复启动会话。')
     try {
       const workspaceStat = await statImpl(workspace)
       if (!workspaceStat.isDirectory()) throw new Error('not a directory')
@@ -271,15 +296,13 @@ export function createTerminalLauncher({
     let launchMetadata = {}
     try {
       if (terminal === 'otty') {
-        launchMetadata = await enqueueOttyLaunch(() => launchOtty({
+        launchMetadata = await launchOtty({
           executable: adapter.executable,
-          runtimePath,
-          runtimeId,
-          sessionId: normalizedSessionId,
+          command: resumeShellCommand({ runtimePath, runtimeId, sessionId: normalizedSessionId, codexHome }),
           workspace,
-          codexHome,
+          key,
           title: normalizeWindowTitle(title, runtimeId),
-        }))
+        })
       } else {
         await mkdirImpl(runtimeDirectory, { recursive: true, mode: 0o700 })
         scriptPath = join(runtimeDirectory, `resume-${randomId()}.command`)
@@ -292,16 +315,14 @@ export function createTerminalLauncher({
           codexHome,
         }), { encoding: 'utf8', mode: 0o700 })
         if (terminal === 'ghostty') {
-          await execFileImpl('/usr/bin/open', [
-            '-na', adapter.appPath,
-            '--args', `--working-directory=${workspace}`, '-e', scriptPath,
-          ], { timeout: 5_000 })
+          launchMetadata = await ghostty.create({ key, workspace, title: normalizeWindowTitle(title, runtimeId), command: `${shellQuote('/bin/zsh')} ${shellQuote(scriptPath)}` })
         } else {
           await execFileImpl('/usr/bin/open', ['-na', adapter.appPath, scriptPath], { timeout: 5_000 })
         }
       }
     } catch (error) {
       if (scriptPath) await rmImpl(scriptPath, { force: true }).catch(() => undefined)
+      if (error instanceof TaskRecorderError) throw error
       throw taskError('TERMINAL_LAUNCH_FAILED', `Unable to launch ${terminalDefinition.label}.`, {
         terminal,
         cause: error?.code ?? error?.message ?? 'launch failed',

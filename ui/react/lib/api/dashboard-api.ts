@@ -17,6 +17,7 @@ import type {
   RunLogResponse,
   RunResponse,
   RunResumeResponse,
+  TerminalResumeAction,
   RuntimeListResponse,
   RuntimeModelCatalogResponse,
   ScheduleListResponse,
@@ -71,7 +72,7 @@ export interface DashboardApi {
   linkSessions(input: { parent: SessionRef; child: SessionRef; source?: string }): Promise<{ relation: SessionRelation; created: boolean }>
   unlinkSessions(input: { parent: SessionRef; child: SessionRef }): Promise<{ removed: boolean }>
   sessionMessages(session: SessionRef, filters: SessionFilters, signal?: AbortSignal): Promise<SessionMessagesPage>
-  resumeSession(session: SessionRef): Promise<{ ok: boolean; terminal_label: string }>
+  resumeSession(session: SessionRef): Promise<{ ok: boolean; terminal_label: string; action?: TerminalResumeAction }>
   meta(): Promise<DashboardMeta>
   settings(): Promise<DashboardSettingsResponse>
   updateSettings(input: { resume_terminal: string }): Promise<DashboardSettingsResponse>

@@ -230,6 +230,7 @@ function browserFixture() {
   let state = 'idle'
   let nativeState = 'idle'
   let reads = 0
+  let focused = false
   const adapter = {
     id: 'codex', name: 'Codex', runtimeId: 'codex', storeId: 'local-store',
     resumeOptions: { codexHome: '/local/codex' },
@@ -243,9 +244,9 @@ function browserFixture() {
   const browser = createSessionBrowser({
     adapters: [adapter],
     settings: { get: async () => ({ settings: { resume_terminal: 'otty' } }) },
-    terminalLauncher: { launch: async (input) => { launches.push(input); return { terminal_label: 'Otty' } } },
+    terminalLauncher: { launch: async (input) => { launches.push(input); if (!input.allowCreate && !focused) throw Object.assign(new Error('active'), { code: 'SESSION_BROWSER_SESSION_ACTIVE' }); return { terminal_label: 'Otty', ...(focused ? { action: 'focused' } : {}) } } },
   })
-  return { browser, launches, get reads() { return reads }, setState(value) { state = value }, setNativeState(value) { nativeState = value } }
+  return { browser, launches, setFocused(value) { focused = value }, get reads() { return reads }, setState(value) { state = value }, setNativeState(value) { nativeState = value } }
 }
 
 test('resume works without Task/Run data and re-reads native facts before launching', async () => {
@@ -254,14 +255,18 @@ test('resume works without Task/Run data and re-reads native facts before launch
     store_id: 'local-store', workspace: '/untrusted', command: 'do-not-run',
   }), { ok: true, terminal_label: 'Otty' })
   assert.equal(current.reads, 1)
-  assert.deepEqual(current.launches, [{ runtimeId: 'codex', terminal: 'otty', sessionId: 'session-1', workspace: '/trusted/workspace', title: 'Native title', codexHome: '/local/codex' }])
+  assert.deepEqual(current.launches, [{ runtimeId: 'codex', terminal: 'otty', sessionId: 'session-1', workspace: '/trusted/workspace', title: 'Native title', codexHome: '/local/codex', allowCreate: true }])
   current.setState('active')
   await assert.rejects(current.browser.resume('codex', 'session-1', { store_id: 'local-store' }), { code: 'SESSION_BROWSER_SESSION_ACTIVE' })
-  assert.equal(current.launches.length, 1)
+  assert.equal(current.launches.length, 2)
+  assert.equal(current.launches.at(-1).allowCreate, false)
   current.setState('idle')
   current.setNativeState('active')
   await assert.rejects(current.browser.resume('codex', 'session-1', { store_id: 'local-store' }), { code: 'SESSION_BROWSER_SESSION_ACTIVE' })
-  assert.equal(current.launches.length, 1)
+  assert.equal(current.launches.length, 3)
+  current.setFocused(true)
+  assert.deepEqual(await current.browser.resume('codex', 'session-1', { store_id: 'local-store' }), { ok: true, terminal_label: 'Otty', action: 'focused' })
+  assert.equal(current.launches.at(-1).allowCreate, false)
 })
 
 test('invalid identity, provider and search parameters fail before native access', () => {

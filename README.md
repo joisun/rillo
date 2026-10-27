@@ -306,6 +306,10 @@ GET  /api/v1/runtimes/:id/models
 
 当前 React Dashboard 右上角的齿轮按钮打开设置弹窗，可选择 Session Resume terminal，选择后自动保存，下次恢复会话时生效。在 Run 详情中点击 Session ID，会使用所选终端恢复该会话；旁边的复制按钮用于复制完整 ID。当前 terminal adapter 支持 Terminal.app、Otty 与 Ghostty；browser 永远不能提交 shell command。Resume 只提交会话引用或可信 Run ID；服务重新读取对应 workspace。Live Session 另可提交 bounded guidance text 与 public Turn revision。
 
+选择 Otty 或 Ghostty 后，服务先聚焦该会话已有的 pane。没有匹配 pane 时，优先在现有窗口新建 tab；没有窗口时才新建窗口并使用初始 tab。连续点击同一会话不会重复启动。Sessions 中正在执行的会话也可点击定位；若找不到对应 pane，服务返回提示，不重复启动会话。Terminal.app 保持打开新窗口的行为。
+
+Otty 使用原生 `agent_session_id` 匹配会话。Ghostty 需要 1.3.0 或以上及 macOS Automation 控制权限，原生接口不提供 agent Session ID。服务记录自己创建的 Ghostty pane，并在恢复前确认它仍存在，因此服务重启后也能定位这些 pane。以前手动打开的 Ghostty pane 无法按 Session ID 自动匹配。
+
 ## Compatibility
 
 当前服务使用 API v5，Dashboard 与插件必须一起更新。不再提供 Task 记录、归属、checkpoint、摘要或历史导入。旧 Task HTTP 路由返回 `410 TASKS_RETIRED`，旧客户端不应继续重试；Task import/migrate CLI 已退出运行路径。旧数据库与生成文件保留原样，查阅历史时请使用对应版本程序和独立副本。

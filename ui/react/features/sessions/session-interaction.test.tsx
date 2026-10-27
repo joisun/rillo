@@ -11,6 +11,7 @@ import { SessionDensity } from './session-density'
 import { SessionsView } from './sessions-view'
 import { SessionRelations } from './session-relations'
 import { AutoPager } from './session-auto-pager'
+import { SessionResumeButton } from './session-resume-button'
 
 const session: BrowserSession = { provider: 'codex', store_id: 'store', session_id: 'parent', title: '父会话', preview: '计划', workspace: '/workspace/project', branch: 'main', created_at: '2026-10-23T08:00:00Z', updated_at: '2026-10-23T09:00:00Z', last_active_at: '2026-10-23T09:00:00Z', state: 'idle', native_parent: null, forked_from: null }
 const firstAt = '2026-10-23T08:00:00.000Z'
@@ -53,13 +54,45 @@ function fixture() {
     sessionTimeline: vi.fn(async (_ref, filters: SessionFilters) => timelinePage(filters)),
     sessionMessages: vi.fn<DashboardApi['sessionMessages']>(async (_ref, filters: SessionFilters) => messagePage('正文', filters.at)),
     sessionRelations: vi.fn(async () => ({ relations: [] })),
-    readSession: vi.fn(async () => ({ session })), resumeSession: vi.fn(),
+    readSession: vi.fn(async () => ({ session })), resumeSession: vi.fn<DashboardApi['resumeSession']>(),
   }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } })
   function wrap(children: React.ReactNode) { return <QueryClientProvider client={client}>{children}</QueryClientProvider> }
   return { api, client, wrap }
 }
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
+
+test('active sessions can focus their terminal and repeated clicks wait for the current request', async () => {
+  const { api, wrap } = fixture()
+  let finish: (result: Awaited<ReturnType<DashboardApi['resumeSession']>>) => void = () => {}
+  api.resumeSession.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+  render(wrap(<SessionResumeButton api={api} session={{ ...session, state: 'active' }} />))
+  const button = screen.getByRole('button', { name: '在终端继续：父会话' })
+  expect(button).toBeEnabled()
+  await userEvent.click(button)
+  await userEvent.click(button)
+  expect(api.resumeSession).toHaveBeenCalledTimes(1)
+  await act(async () => finish({ ok: true, terminal_label: 'Otty', action: 'focused' }))
+  expect(await screen.findByText('已切换到 Otty 会话')).toHaveAttribute('role', 'status')
+})
+
+test.each([
+  ['new_tab', '已在 Ghostty 新建标签页'],
+  ['new_window', '已在 Ghostty 新建窗口'],
+] as const)('terminal resume reports %s without changing the selected conversation', async (action, feedback) => {
+  const { api, wrap } = fixture()
+  api.resumeSession.mockResolvedValue({ ok: true, terminal_label: 'Ghostty', action })
+  render(wrap(<SessionResumeButton api={api} session={session} />))
+  await userEvent.click(screen.getByRole('button', { name: '在终端继续：父会话' }))
+  expect(await screen.findByRole('status')).toHaveTextContent(feedback)
+})
+
+test('unavailable sessions keep terminal resume disabled', () => {
+  const { api, wrap } = fixture()
+  render(wrap(<SessionResumeButton api={api} session={{ ...session, state: 'unavailable' }} />))
+  expect(screen.getByRole('button', { name: '在终端继续：父会话' })).toBeDisabled()
+  expect(api.resumeSession).not.toHaveBeenCalled()
+})
 
 test('mouse hover selects the nearest real message without holding, and leaving cancels a pending selection', async () => {
   vi.useFakeTimers()

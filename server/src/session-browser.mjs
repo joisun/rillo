@@ -218,9 +218,6 @@ export function createSessionBrowser({ adapters, settings, terminalLauncher, lin
       const activity = await adapter.activity?.()
       const nativeState = activity?.available && activity.store_id === adapter.storeId
         ? activity.sessions.find(row => row.session_id === session.session_id)?.state : null
-      if (nativeState === 'active' || session.state === 'active') {
-        throw sessionBrowserError('SESSION_BROWSER_SESSION_ACTIVE', 'This session is active; return to its existing terminal', 409)
-      }
       const current = await settings.get()
       const launch = await terminalLauncher.launch({
         ...adapter.resumeOptions,
@@ -229,8 +226,9 @@ export function createSessionBrowser({ adapters, settings, terminalLauncher, lin
         sessionId: session.session_id,
         workspace: session.workspace,
         title: session.title,
+        allowCreate: nativeState !== 'active' && session.state !== 'active',
       })
-      return { ok: true, terminal_label: launch.terminal_label }
+      return { ok: true, terminal_label: launch.terminal_label, ...(launch.action ? { action: launch.action } : {}) }
     },
     close() {
       for (const adapter of sources.values()) adapter.close?.()

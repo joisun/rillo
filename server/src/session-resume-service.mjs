@@ -122,6 +122,7 @@ export function createSessionResumeService({
       job_id: target.job_id,
       terminal: launch.terminal,
       terminal_label: launch.terminal_label,
+      ...(launch.action ? { action: launch.action } : {}),
     }
   }
 

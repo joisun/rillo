@@ -40,7 +40,9 @@ function statusFor(error) {
     || error.code === 'RUNTIME_NOT_FOUND'
   ) return 404
   if (
-    error.code === 'CODEX_SESSION_NOT_FOUND'
+    error.code === 'SESSION_BROWSER_SESSION_ACTIVE'
+    || error.code === 'TERMINAL_SESSION_AMBIGUOUS'
+    || error.code === 'CODEX_SESSION_NOT_FOUND'
     || error.code === 'TERMINAL_UNAVAILABLE'
     || error.code === 'TERMINAL_LAUNCH_FAILED'
     || error.code === 'CODEX_UNAVAILABLE'

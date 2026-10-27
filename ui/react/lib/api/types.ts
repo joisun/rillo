@@ -320,7 +320,10 @@ export interface RunControlResponse {
   turn_revision: number
 }
 
+export type TerminalResumeAction = 'focused' | 'new_tab' | 'new_window'
+
 export interface RunResumeResponse {
+  action?: TerminalResumeAction
   ok?: boolean
   terminal?: string
   run_id?: string
