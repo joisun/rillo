@@ -153,7 +153,9 @@ queued → running → succeeded | failed | timed_out | canceled | interrupted
 8. Dashboard 通过 Run-specific SSE 更新；active Turn 可以追加指令或停止；terminal Run 的历史对话由 runtime adapter 使用可信 Run ID 和 session ID 从 CLI-owned session 按需读取；
 9. 需要继续工作时，terminal Run 可以从可信 snapshot 召回 session。
 
-macOS 上可以点击 Run「产出文件」中的文件名，用本机默认应用打开。相对路径以该 Run 执行时的 workspace 为准；仅支持 workspace 内已记录且仍存在的普通文件。已删除的文件不可点击，文件缺失或无法打开时会显示原因。
+点击 Run「产出文件」中的文件名，会在浏览器新标签页访问由 task-recorder 提供的临时文件预览，macOS 和 Linux 均支持，也可从另一台电脑访问服务器产物。HTML 可直接运行，并加载产物所在目录内的相对 CSS、JS、图片和数据资源；未识别的入口文件类型按下载处理。macOS 另保留「系统打开」，使用服务所在机器的默认应用打开文件。
+
+预览入口必须是该 Run 在 workspace 内记录的、仍存在的普通文件，临时链接有效期30分钟；过期或服务重启后，从运行记录重新点击文件名即可。资源限定在入口文件所在目录，不提供目录列表，拒绝隐藏文件、目录越界和符号链接逃逸；以 `/` 开头的站点根路径不会自动改写，需要产物使用目录内的相对资源路径。HTML 使用独立的沙箱来源，允许脚本交互，不授予 Dashboard 的存储或 API 权限。预览实时读取磁盘文件，不保存产物副本；同名文件被后续任务更新后，旧 Run 的入口也会读取更新后的内容。已删除的文件不可点击，文件缺失或过期会显示原因。
 
 一个 runtime 不可用不会让 Recorder 或其他 runtime 下线。登录或 provider 错误由实际 Run 记录为 typed failure，不会阻塞 service 启动与 runtime 列表加载。
 

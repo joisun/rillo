@@ -100,6 +100,7 @@ export interface DashboardApi {
   markScheduledRunReviewed(id: string): Promise<RunResponse>
   resumeScheduledRun(id: string): Promise<RunResumeResponse>
   openRunFile(id: string, path: string): Promise<{ opened: boolean; path: string }>
+  previewRunFileUrl(id: string, path: string): string
   steerRun(
     id: string,
     input: { expected_turn_revision: number; text: string },
@@ -281,6 +282,7 @@ export function createDashboardApi({
       `/api/v1/runs/${encodeURIComponent(id)}/files/open`,
       { method: 'POST', body: { path } },
     ),
+    previewRunFileUrl: (id, path) => `${baseUrl}/api/v1/runs/${encodeURIComponent(id)}/files/preview${queryString({ path })}`,
     steerRun: (id, { expected_turn_revision, text }) => request(
       `/api/v1/runs/${encodeURIComponent(id)}/steer`,
       { method: 'POST', body: { expected_turn_revision, text } },

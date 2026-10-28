@@ -1,5 +1,5 @@
 import { runtimeEvent } from '../runtime/runtime-event.mjs'
-import { openRunFile } from './run-file-opener.mjs'
+import { createRunFilePreviews, openRunFile } from './run-file-opener.mjs'
 import {
   captureWorkspaceSnapshot,
   diffWorkspaceSnapshots,
@@ -26,6 +26,7 @@ export function createRunService({
 
   const active = new Map()
   const sequences = new Map()
+  const filePreviews = createRunFilePreviews({ clock: () => clock().getTime() })
   let shuttingDown = false
 
   async function create(input) {
@@ -206,6 +207,7 @@ export function createRunService({
   }
 
   async function shutdown() {
+    filePreviews.clear()
     if (shuttingDown) return whenIdle()
     shuttingDown = true
     for (const { controller } of active.values()) controller.abort()
@@ -308,6 +310,8 @@ export function createRunService({
     stop,
     conversation,
     openFile: (id, path) => fileOpener(runStore.get(id), path),
+    previewFile: (id, path) => filePreviews.create(runStore.get(id), path),
+    readPreview: (token, path) => filePreviews.read(token, path),
     markReviewed: (id) => publicRun(runStore.markReviewed(id)),
     resumeTarget(id) {
       const run = runStore.get(id)

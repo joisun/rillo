@@ -2,6 +2,7 @@ import { createServer } from 'node:http'
 
 import { TaskRecorderError } from '../../mcp/src/errors.mjs'
 import { readJson, sendJson } from './http-utils.mjs'
+import { sendRunFile } from './api-server/run-file-response.mjs'
 
 const SCHEDULE_LOG_TAIL_MAX = 64 * 1024
 const RUN_INTERVENTION_TEXT_LIMIT = 16 * 1024
@@ -387,12 +388,19 @@ export function createApiServer({
         throw httpError('HOST_REJECTED', 'request host is not allowed', 403)
       }
       const requestOrigin = request.headers.host === expectedHost ? origin : publicOrigin
-      if (request.headers.origin && request.headers.origin !== requestOrigin) {
-        throw httpError('ORIGIN_REJECTED', 'request origin is not allowed', 403)
-      }
-
       const url = new URL(request.url, requestOrigin)
       const { pathname } = url
+      const previewResource = pathname.match(/^\/run-files\/([a-f0-9]{48})\/(.*)$/)
+      const readingPreview = previewResource && ['GET', 'HEAD'].includes(request.method)
+      if (request.headers.origin && request.headers.origin !== requestOrigin
+        && !(readingPreview && request.headers.origin === 'null')) {
+        throw httpError('ORIGIN_REJECTED', 'request origin is not allowed', 403)
+      }
+      if (readingPreview && runService?.readPreview) {
+        const resource = await runService.readPreview(previewResource[1], safeSegment(previewResource[2]))
+        await sendRunFile(response, resource, { origin: requestOrigin, token: previewResource[1], head: request.method === 'HEAD' })
+        return
+      }
 
       if (request.method === 'GET' && pathname === '/') {
         response.writeHead(200, {
@@ -585,6 +593,19 @@ export function createApiServer({
         requireJson(request)
         const input = exactBody(await readJson(request, { limit: 8192 }), new Set(['path']), 'Run file open')
         sendJson(response, 200, await runService.openFile(safeSegment(runFile[1]), input.path))
+        return
+      }
+      const runPreview = pathname.match(/^\/api\/v1\/runs\/([^/]+)\/files\/preview$/)
+      if (request.method === 'GET' && runPreview && runService?.previewFile) {
+        if ([...url.searchParams.keys()].some(key => key !== 'path') || url.searchParams.getAll('path').length !== 1) {
+          throw httpError('RUN_FILE_PATH_INVALID', '预览请求必须只包含一个文件路径', 400)
+        }
+        const grant = await runService.previewFile(safeSegment(runPreview[1]), url.searchParams.get('path'))
+        response.writeHead(303, {
+          Location: `${requestOrigin}/run-files/${grant.token}/${encodeURIComponent(grant.filename)}`,
+          'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer',
+        })
+        response.end()
         return
       }
       const runAction = pathname.match(/^\/api\/v1\/runs\/([^/]+)\/(cancel|review|resume)$/)

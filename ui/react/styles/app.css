@@ -2511,20 +2511,25 @@
 }
 
 .run-detail__file-open {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
   width: 100%;
   min-width: 0;
   justify-content: flex-start;
   padding-inline: 3px;
   text-align: left;
+  text-decoration: none;
 }
-.run-detail__file-open:not(:disabled):hover code {
+.run-detail__file-open:hover code {
   color: var(--accent-strong);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.run-detail__file-open:disabled code { color: var(--text-muted); }
+.run-detail__files .run-detail__file-deleted { color: var(--text-muted); }
+.run-detail__file-actions { display: flex; align-items: center; gap: 7px; }
 
-.run-detail__files span {
+.run-detail__file-actions > span {
   color: var(--text-muted);
   font: 500 8px ui-monospace, SFMono-Regular, Menlo, monospace;
   text-transform: uppercase;

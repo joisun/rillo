@@ -187,6 +187,10 @@ React Sessions仅提供Tree，会话树与正文搜索共用目录、选择和�
 
 React Run detail 使用 `POST /api/v1/runs/:id/files/open`，JSON body 只允许 `{ path }`。接口沿用客户端IP、Host、same-Origin 与 JSON 请求保护。RunService 从 ledger 读取 immutable snapshot 和 file_changes；客户端不得传 workspace、command 或 application。
 
+文件名在两平台均链接到`GET /api/v1/runs/:id/files/preview?path=...`。入口复用file opener的Run记录及workspace/realpath校验，返回303重定向到`/run-files/:token/:filename`；临时token使用24字节随机值，仅在RunService内存保存30分钟，最多64个，shutdown清空。GET/HEAD资源以入口所在目录为根，校验realpath边界与普通文件类型，拒绝隐藏路径、符号链接越界和未知类型的附属资源；不提供目录列表。静态资源按扩展名返回MIME，未知类型的已记录入口按attachment下载，文件流直接从打开的handle传输，不将正文装入JSON或持久化。不保存历史快照，目录内相对URL保持可用，站点根路径不重写。
+
+预览与现有API共用客户端IP及Host校验。HTML响应使用CSP sandbox且不授予allow-same-origin，脚本仅能读取当前token目录及HTTPS资源；不允许提交表单或作为iframe嵌入。资源响应设置no-store、nosniff、no-referrer和Access-Control-Allow-Origin:*，仅有效token的GET/HEAD路径接受沙箱的Origin:null，供模块、字体及fetch读取资源。Dashboard API的Origin及无CORS策略保持独立。React使用原生target=_blank与noopener noreferrer链接，避免异步window.open被浏览器拦截；已删除文件不生成链接。macOS系统打开作为独立操作保留，Linux只提供浏览器访问。
+
 file opener 要求 path 精确匹配该 Run 的非删除文件记录，相对路径以 snapshot.workspace 解析；路径规范化及 realpath 后均须处于该 workspace 内，且目标必须为普通文件。macOS 通过 argv array、`shell: false` 调用 `/usr/bin/open`，参数为编码后的本地 file URL，使用系统默认应用。未记录、已删除、缺失、越界、非普通文件、非 macOS 或 opener 失败均返回可展示的 typed error；不回写 Run，也不执行 shell 拼接命令。
 
 ## Schedule clock

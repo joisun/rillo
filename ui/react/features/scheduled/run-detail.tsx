@@ -186,15 +186,17 @@ export function RunDetail({ api, run }: { api: DashboardApi; run: RunRecord }) {
               <li key={`${file.kind}-${file.path}`}
                 title={['delete', 'deleted', 'removed'].includes(file.kind) ? '文件已删除，无法打开' : file.path}>
                 <FileText aria-hidden="true" />
-                <Button
-                  className="run-detail__file-open"
-                  aria-label={`打开文件 ${file.path}`}
-                  isDisabled={!localActions || fileOpen.isPending || ['delete', 'deleted', 'removed'].includes(file.kind)}
-                  size="xs"
-                  variant="quiet"
-                  onPress={() => fileOpen.mutate(file.path)}
-                ><code>{file.path}</code></Button>
-                <span>{file.kind}</span>
+                {['delete', 'deleted', 'removed'].includes(file.kind) ? <code className="run-detail__file-deleted">{file.path}</code> : (
+                  <a className="run-detail__file-open" href={api.previewRunFileUrl(run.id, file.path)}
+                    aria-label={`访问文件 ${file.path}`} target="_blank" rel="noopener noreferrer"><code>{file.path}</code></a>
+                )}
+                <div className="run-detail__file-actions" title={localActions ? '系统打开会使用服务所在机器的默认应用' : undefined}>
+                  {localActions && !['delete', 'deleted', 'removed'].includes(file.kind) ? (
+                    <Button aria-label={`系统打开文件 ${file.path}`}
+                      isDisabled={fileOpen.isPending} size="xs" variant="quiet" onPress={() => fileOpen.mutate(file.path)}>系统打开</Button>
+                  ) : null}
+                  <span>{file.kind}</span>
+                </div>
               </li>
             ))}
           </ul>
