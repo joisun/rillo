@@ -19,9 +19,11 @@ macOS `launchd` 与 Linux `systemd --user` 均只管理一个 `taskd` 常驻服�
 
 `server/control.mjs` 按真实平台选择 macOS LaunchAgent 或 `server/control/systemd.mjs`，Windows 不进入安装路径。Linux controller 写入用户级 `tasks-recorder.service`，确认 Node.js 24、用户 manager、端口占用与预构建资产；启用后只重启一次服务。ExecStart 固定为可信 Node 与 taskd 绝对路径，禁用 shell/环境展开，转义 systemd 百分号 specifier 与路径引号。unit 固定 HOME、与 Node executable 一致的 PATH，以及显式 CODEX_HOME，不持久化 API key。日志和 unit 使用用户私有权限。卸载停止并禁用本 unit，删除 unit 后 reload manager；数据和日志保留，不调用 sudo、不改系统 unit 或 lingering。
 
-installer 按 Darwin/Linux 选择不同命名的自包含 archive，校验平台对应的 SHA256 后再切换 current；runtime 本身为同一份跨平台 JavaScript，Node.js 由用户安装。Linux 优先使用 sha256sum，macOS 可使用 shasum。两平台均检查 Node.js 24+、loopback 配置及预构建入口，服务卸载失败时不继续删除程序文件。CI 同时运行 macos-latest 和 ubuntu-latest；Release 输出两种 service archive 和原有 adapter archive。
+installer 按 Darwin/Linux 选择不同命名的自包含 archive，校验平台对应的 SHA256 后再切换 current；runtime 本身为同一份跨平台 JavaScript，Node.js 由用户安装。Linux 优先使用 sha256sum，macOS 可使用 shasum。两平台均检查 Node.js 24+、服务配置及预构建入口；健康检查固定走本机地址，展示地址可使用server_public_url。服务卸载失败时不继续删除程序文件。CI 同时运行 macos-latest 和 ubuntu-latest；Release 输出两种 service archive 和原有 adapter archive。
 
-Linux 按 Web 服务使用，不启动浏览器、桌面终端或 tmux；`tasks-recorder open` 仅返回 URL，远程使用通过 SSH loopback 转发访问。terminalLauncher.supported=false 时 providers 的 resume=false，settings 返回 local_actions_supported=false。Sessions 不显示终端启动按钮，Scheduled 保留 Session ID 复制并禁用服务器本机文件打开操作，终端选择设置不出现；桌面操作 API 仍返回 typed unsupported。macOS 操作保持原有实现。状态读取通过已有 Codex Unix socket；没有共享服务器时只标记状态不可用，不启动任何 daemon 或使用进程反查。
+Linux 按 Web 服务使用，不启动浏览器、桌面终端或 tmux；`tasks-recorder open` 仅返回配置的公开访问地址，未配置时返回本机地址。默认可通过 SSH loopback 转发访问，也可显式配置原生网络访问。terminalLauncher.supported=false 时 providers 的 resume=false，settings 返回 local_actions_supported=false。Sessions 不显示终端启动按钮，Scheduled 保留 Session ID 复制并禁用服务器本机文件打开操作，终端选择设置不出现；桌面操作 API 仍返回 typed unsupported。macOS 操作保持原有实现。状态读取通过已有 Codex Unix socket；没有共享服务器时只标记状态不可用，不启动任何 daemon 或使用进程反查。
+
+server_listen_host只接受127.0.0.1或0.0.0.0，省略时沿用server_host；已有server_host保持本机值，旧插件无需理解新增配置。网络模式必须配置server_public_url和非空server_allowed_clients，后者只接受完整IP。serverBaseUrl与AGENT_TASKS_SERVER_URL保持loopback，供CLI/MCP及controller健康检查使用；serverPublicUrl只用于浏览器地址、允许的Host及同源Origin检查。createApiServer直接提供页面、API和SSE，无第二个代理进程。请求以socket.remoteAddress检查客户端，忽略X-Forwarded-For；本机始终允许，网络客户端必须明确列入配置。Origin必须对应当前Host，未声明的Host、跨Origin及未允许的客户端均返回403。
 
 ## Non-negotiable invariants
 
@@ -177,13 +179,13 @@ codex-rollout-timing仅在可展示消息缺少原生时间时启用。路径来
 
 可选activity()与live_presence返回store_id、available、sessions及checked_at。sessions为现有共享app-server中已加载会话的规范化元数据，保留state和active_flags；通过CODEX_HOME/app-server-control/app-server-control.sock进行WebSocket连接，分页调用thread/loaded/list，再以最多4并发thread/read(includeTurns:false)读取状态。只发送initialize、initialized与这两个只读查询；不调用resume/start，不启动或终止共享服务器。快照缓存3秒并合并并发；thread/status/changed等原生事件立即失效缓存并发布revision，前端同时每5秒补查。连接失败撤下旧状态并返回available:false，不使用lsof、进程扫描、文件描述符或日志更新时间推断。历史查询仍使用独立stdio连接，不能作为实时状态来源。Unix socket状态读取无macOS平台分支；其覆盖范围是所连接共享服务器，不声称全机发现。
 
-React Sessions仅提供Tree，会话树与正文搜索共用目录、选择和阅读面板。侧栏提供Workspace/Branch两种分组；branch_groups能力控制分支入口，group偏好保存在URL及localStorage。Workspace以workspace为一级、branch为二级，Branch按相反顺序呈现，两者共用可折叠目录树。选择一级节点仅保留该维度限制，选择二级节点同时保留branch与workspace；切换分组保留筛选、搜索与当前正文，自动展开选中父节点，折叠不改变筛选。窄屏选择器提供对应的两级选项。列表和正文搜索的查询键均包含完整branch与workspace，仅在用户改变筛选时清空预览。目录、会话和更早消息通过IntersectionObserver在滚动边缘自动翻页；正文搜索保留已展示结果并连续请求后续批次，不依赖滚动位置，空搜索页也自动继续。目录计数仅为已观测数量。正文搜索debounce 300ms，在ComboBox/Popover/ListBox浮层展示，选择后按该query定位。搜索使用独立sessionSearch查询键，即使query为空也不与主列表共用查询，避免禁用的搜索observer覆盖列表queryFn、分页大小或缓存生命周期。会话树沿用sessionList查询及原生cursor，底层list接口不受展示视图删除影响。活跃状态独立每5秒刷新，不轮询正文搜索。整页错误仅由来源、根列表、目录或分支目录查询触发，每3秒重试空闲的失败查询，不反复中断慢请求。正文、时间线、子会话、关系与搜索的503/504或超时只影响对应区域，不参与整页重连；搜索失败显示原因，正文失败保留可用内容及其他会话入口。SSE实时状态独立于原生会话查询结果。共享Codex连接按实例处理关闭，旧连接延迟失败不能关闭新连接。内容仅在查询内存中；REST仍沿用loopback、Origin、JSON与脱敏边界。
+React Sessions仅提供Tree，会话树与正文搜索共用目录、选择和阅读面板。侧栏提供Workspace/Branch两种分组；branch_groups能力控制分支入口，group偏好保存在URL及localStorage。Workspace以workspace为一级、branch为二级，Branch按相反顺序呈现，两者共用可折叠目录树。选择一级节点仅保留该维度限制，选择二级节点同时保留branch与workspace；切换分组保留筛选、搜索与当前正文，自动展开选中父节点，折叠不改变筛选。窄屏选择器提供对应的两级选项。列表和正文搜索的查询键均包含完整branch与workspace，仅在用户改变筛选时清空预览。目录、会话和更早消息通过IntersectionObserver在滚动边缘自动翻页；正文搜索保留已展示结果并连续请求后续批次，不依赖滚动位置，空搜索页也自动继续。目录计数仅为已观测数量。正文搜索debounce 300ms，在ComboBox/Popover/ListBox浮层展示，选择后按该query定位。搜索使用独立sessionSearch查询键，即使query为空也不与主列表共用查询，避免禁用的搜索observer覆盖列表queryFn、分页大小或缓存生命周期。会话树沿用sessionList查询及原生cursor，底层list接口不受展示视图删除影响。活跃状态独立每5秒刷新，不轮询正文搜索。整页错误仅由来源、根列表、目录或分支目录查询触发，每3秒重试空闲的失败查询，不反复中断慢请求。正文、时间线、子会话、关系与搜索的503/504或超时只影响对应区域，不参与整页重连；搜索失败显示原因，正文失败保留可用内容及其他会话入口。SSE实时状态独立于原生会话查询结果。共享Codex连接按实例处理关闭，旧连接延迟失败不能关闭新连接。内容仅在查询内存中；REST沿用客户端IP、Host、Origin、JSON与脱敏边界。
 
 热力/children队列最多4个在途请求，后台任务最多占3个，为显式定位或展开保留位置；排队时用户请求先执行，离屏通过AbortSignal取消等待和HTTP读取并停止继续翻页。共享浏览连接上的HTTP取消不宣称能够中止已经发出的原生RPC；正文搜索把Query取消传到fetch及服务端，停止本次rg或原生回退搜索的专用app-server，终止旧查询。自动分页每次加载后重新验证IntersectionObserver，不沿用插入新内容前的旧可见状态。
 
 ## Run output files
 
-React Run detail 使用 `POST /api/v1/runs/:id/files/open`，JSON body 只允许 `{ path }`。接口沿用 loopback Host、same-Origin 与 JSON 请求保护。RunService 从 ledger 读取 immutable snapshot 和 file_changes；客户端不得传 workspace、command 或 application。
+React Run detail 使用 `POST /api/v1/runs/:id/files/open`，JSON body 只允许 `{ path }`。接口沿用客户端IP、Host、same-Origin 与 JSON 请求保护。RunService 从 ledger 读取 immutable snapshot 和 file_changes；客户端不得传 workspace、command 或 application。
 
 file opener 要求 path 精确匹配该 Run 的非删除文件记录，相对路径以 snapshot.workspace 解析；路径规范化及 realpath 后均须处于该 workspace 内，且目标必须为普通文件。macOS 通过 argv array、`shell: false` 调用 `/usr/bin/open`，参数为编码后的本地 file URL，使用系统默认应用。未记录、已删除、缺失、越界、非普通文件、非 macOS 或 opener 失败均返回可展示的 typed error；不回写 Run，也不执行 shell 拼接命令。
 

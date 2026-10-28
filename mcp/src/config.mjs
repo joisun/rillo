@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import { isIP } from 'node:net'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 
@@ -205,10 +206,10 @@ export async function resolveAppConfig({
   )
   const codexPath = configuredCodexPath(fileConfig.codex_path)
 
-  const configuredHost = fileConfig.server_host ?? '127.0.0.1'
+  const configuredHost = fileConfig.server_listen_host ?? fileConfig.server_host ?? '127.0.0.1'
   const configuredPort = fileConfig.server_port ?? 43127
-  if (configuredHost !== '127.0.0.1') {
-    throw new TaskRecorderError('CONFIG_INVALID', 'server_host must be 127.0.0.1')
+  if (!['127.0.0.1', '0.0.0.0'].includes(configuredHost)) {
+    throw new TaskRecorderError('CONFIG_INVALID', 'server_listen_host must be 127.0.0.1 or 0.0.0.0')
   }
   if (!Number.isInteger(configuredPort) || configuredPort < 1 || configuredPort > 65535) {
     throw new TaskRecorderError('CONFIG_INVALID', 'server_port must be an integer between 1 and 65535')
@@ -216,7 +217,7 @@ export async function resolveAppConfig({
 
   let serverUrl
   try {
-    serverUrl = new URL(env.AGENT_TASKS_SERVER_URL ?? `http://${configuredHost}:${configuredPort}`)
+    serverUrl = new URL(env.AGENT_TASKS_SERVER_URL ?? `http://127.0.0.1:${configuredPort}`)
   } catch (error) {
     throw new TaskRecorderError('CONFIG_INVALID', 'taskd URL is invalid', { cause: error.message })
   }
@@ -232,6 +233,25 @@ export async function resolveAppConfig({
     throw new TaskRecorderError('CONFIG_INVALID', 'taskd URL must be an http://127.0.0.1 origin')
   }
   const serverPort = Number(serverUrl.port || 80)
+  const serverAllowedClients = fileConfig.server_allowed_clients ?? []
+  if (!Array.isArray(serverAllowedClients) || serverAllowedClients.some(value => typeof value !== 'string' || !isIP(value))) {
+    throw new TaskRecorderError('CONFIG_INVALID', 'server_allowed_clients must contain exact IP addresses')
+  }
+  let serverPublicUrl = null
+  if (fileConfig.server_public_url !== undefined) {
+    let publicUrl
+    try { publicUrl = new URL(fileConfig.server_public_url) } catch {
+      throw new TaskRecorderError('CONFIG_INVALID', 'server_public_url must be an http origin')
+    }
+    if (publicUrl.protocol !== 'http:' || publicUrl.username || publicUrl.password
+      || publicUrl.pathname !== '/' || publicUrl.search || publicUrl.hash || publicUrl.hostname === '0.0.0.0' || publicUrl.port === '0') {
+      throw new TaskRecorderError('CONFIG_INVALID', 'server_public_url must be a concrete http origin without a path or credentials')
+    }
+    serverPublicUrl = publicUrl.origin
+  }
+  if (configuredHost === '0.0.0.0' && (!serverPublicUrl || !serverAllowedClients.length)) {
+    throw new TaskRecorderError('CONFIG_INVALID', 'network access requires server_public_url and server_allowed_clients')
+  }
   return {
     projectRoot: normalizedProjectRoot,
     dataDirectory,
@@ -253,8 +273,10 @@ export async function resolveAppConfig({
     schedulerLogMaxFiles,
     schedulerLogMaxAgeMs,
     codexPath,
-    serverHost: serverUrl.hostname,
+    serverHost: configuredHost,
     serverPort,
     serverBaseUrl: serverUrl.origin,
+    serverPublicUrl,
+    serverAllowedClients,
   }
 }

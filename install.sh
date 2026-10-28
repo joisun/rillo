@@ -212,7 +212,7 @@ TASKS_RECORDER_PREBUILT=1 exec node "$runtime/server/cli.mjs" "$@"
 EOF
 chmod 755 "$wrapper_path"
 
-dashboard_url="$(node -e 'const fs=require("node:fs"); const p=JSON.parse(fs.readFileSync(process.argv[1], "utf8")); if ((p.server_host ?? "127.0.0.1") !== "127.0.0.1") process.exit(2); process.stdout.write(`http://127.0.0.1:${p.server_port ?? 43127}`)' "$config_path")" || die 'config server_host must be 127.0.0.1'
+dashboard_url="$(node -e 'const fs=require("node:fs"); const p=JSON.parse(fs.readFileSync(process.argv[1], "utf8")); if (!["127.0.0.1", "0.0.0.0"].includes(p.server_host ?? "127.0.0.1")) process.exit(2); process.stdout.write(`http://127.0.0.1:${p.server_port ?? 43127}`)' "$config_path")" || die 'config server_host must be 127.0.0.1 or 0.0.0.0'
 
 if [ "$start_service" -eq 1 ]; then
   "$wrapper_path" install >/dev/null
@@ -235,6 +235,7 @@ if [ "$start_service" -eq 1 ]; then
 fi
 
 printf 'Installed Tasks Recorder %s.\n' "$installed_version"
+dashboard_url="$(node -e 'const fs=require("node:fs"); const p=JSON.parse(fs.readFileSync(process.argv[1], "utf8")); process.stdout.write(p.server_public_url || process.argv[2])' "$config_path" "$dashboard_url")"
 printf 'Dashboard: %s\n' "$dashboard_url"
 printf 'Open Dashboard: tasks-recorder open\n'
 if [ ":${PATH}:" != *":$bin_directory:"* ]; then

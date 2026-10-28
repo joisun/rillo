@@ -355,6 +355,8 @@ export function createApiServer({
   hub,
   host = '127.0.0.1',
   port,
+  publicUrl = null,
+  allowedClients = [],
   dashboardHtml,
   dashboardSettings = null,
   sessionResume = null,
@@ -368,19 +370,28 @@ export function createApiServer({
   schedulerClock = null,
   clock = () => new Date(),
 }) {
-  let expectedHost = `${host}:${port}`
+  const localHost = host === '0.0.0.0' ? '127.0.0.1' : host
+  let expectedHost = `${localHost}:${port}`
   let origin = `http://${expectedHost}`
+  const publicOrigin = publicUrl ? new URL(publicUrl).origin : null
+  const publicHost = publicUrl ? new URL(publicUrl).host : null
+  const clients = new Set(allowedClients)
 
   const server = createServer(async (request, response) => {
     try {
-      if (request.headers.host !== expectedHost) {
+      const client = request.socket.remoteAddress?.replace(/^::ffff:/, '')
+      if (client !== '127.0.0.1' && client !== '::1' && !clients.has(client)) {
+        throw httpError('CLIENT_REJECTED', 'request client is not allowed', 403)
+      }
+      if (request.headers.host !== expectedHost && request.headers.host !== publicHost) {
         throw httpError('HOST_REJECTED', 'request host is not allowed', 403)
       }
-      if (request.headers.origin && request.headers.origin !== origin) {
+      const requestOrigin = request.headers.host === expectedHost ? origin : publicOrigin
+      if (request.headers.origin && request.headers.origin !== requestOrigin) {
         throw httpError('ORIGIN_REJECTED', 'request origin is not allowed', 403)
       }
 
-      const url = new URL(request.url, origin)
+      const url = new URL(request.url, requestOrigin)
       const { pathname } = url
 
       if (request.method === 'GET' && pathname === '/') {
@@ -855,9 +866,9 @@ export function createApiServer({
         server.listen(port, host, resolve)
       })
       const address = server.address()
-      expectedHost = `${host}:${address.port}`
+      expectedHost = `${localHost}:${address.port}`
       origin = `http://${expectedHost}`
-      return { host, port: address.port, url: origin }
+      return { host, port: address.port, url: publicOrigin ?? origin }
     },
     async close() {
       server.closeIdleConnections?.()

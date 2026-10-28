@@ -162,7 +162,7 @@ export function createTaskdController({
     await writePlist()
     await run('launchctl', ['bootout', domain, paths.plistPath], { allowFailure: true })
     await run('launchctl', ['bootstrap', domain, paths.plistPath])
-    return { label: LAUNCH_AGENT_LABEL, plistPath: paths.plistPath, url: config.serverBaseUrl }
+    return { label: LAUNCH_AGENT_LABEL, plistPath: paths.plistPath, url: config.serverPublicUrl ?? config.serverBaseUrl }
   }
 
   async function start() {
@@ -185,7 +185,7 @@ export function createTaskdController({
       label: LAUNCH_AGENT_LABEL,
       loaded: launchd.code === 0,
       ready: health?.service === 'tasks-recorder' && health.ready !== false,
-      url: config.serverBaseUrl,
+      url: config.serverPublicUrl ?? config.serverBaseUrl,
       plistPath: paths.plistPath,
     }
   }

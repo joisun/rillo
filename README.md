@@ -33,7 +33,7 @@ tasks-recorder status
 普通安装不需要 clone repository、`npm install` 或 `npm ci`。更谨慎的固定版本安装方式：
 
 ```bash
-version=v0.11.1
+version=v0.12.0
 curl -fsSLO "https://raw.githubusercontent.com/joisun/tasks-recorder/${version}/install.sh"
 less install.sh
 bash install.sh --version "$version"
@@ -47,7 +47,21 @@ Linux 使用 `systemd --user` 管理一个 `tasks-recorder.service`，安装、�
 
 Linux 安装需要 Release 包含 `tasks-recorder-linux.tar.gz`；macOS 使用 `tasks-recorder-macos.tar.gz`。两个包均为自包含的 JavaScript runtime 与预构建 Dashboard，不捆绑 Node.js。安装后无需 `npm install`。Linux 日志位于 `~/.local/state/tasks-recorder/`，用户 unit 位于 `~/.config/systemd/user/tasks-recorder.service`。
 
-远程使用时，服务仍只监听服务器的 `127.0.0.1`。在访问网页的电脑上建立 SSH 转发（以下为默认端口示例，替换登录地址）：
+默认服务仅监听服务器的 `127.0.0.1`。需要直接从网络访问时，在服务器的 `~/.config/tasks-recorder/config.json` 中配置以下字段，再执行 `tasks-recorder stop` 和 `tasks-recorder start`。以下地址是示例，分别替换为服务器地址与允许访问的客户端 IP：
+
+```json
+{
+  "output_dir": ".",
+  "server_listen_host": "0.0.0.0",
+  "server_port": 43127,
+  "server_public_url": "http://10.10.20.62:43127",
+  "server_allowed_clients": ["10.0.15.18"]
+}
+```
+
+浏览器打开 `server_public_url` 即可，页面、API 和 SSE 均由 task-recorder 原生提供，无需反向代理。`server_allowed_clients` 只接受完整 IP，不支持通配符或 CIDR；未列出的网络客户端返回 `403 CLIENT_REJECTED`。本机 CLI/MCP 和健康检查继续使用 `127.0.0.1`，已有 `server_host` 保持原值，旧插件也可继续连接。网络模式必须同时配置公开访问地址与允许的客户端，默认安装不会开放网络访问。
+
+也可保留默认本机监听，并使用 SSH 转发（以下为默认端口示例，替换登录地址）：
 
 ```bash
 ssh -N -L 43127:127.0.0.1:43127 user@server
@@ -151,7 +165,7 @@ Live Session 断线后自动重连，也可点击“重新连接”；连接恢�
 
 Live Session 只干预当前 active Turn，不在 Dashboard 内创建第二轮对话。Run 结束后，页面会重新读取 authoritative terminal Run，并通过 Codex 原生分页接口从本机 Codex-owned session 临时取得 user/assistant messages（旧 CLI 回退为有容量上限的 `thread/read`）；Tasks Recorder 不复制或持久化这份 transcript。已结束 Run 可点击 Session ID 在 Terminal 中恢复并继续对话；Session ID 在创建时立即保存，超时、取消、连接异常或服务重启后仍可恢复已创建的会话。历史对话读取失败时可点击“重新读取”。
 
-实时 message、guidance、reasoning 与 tool payload 不写入 SQLite 或普通日志。OpenCode Run 的受限 stdout/stderr 会记录服务诊断、工具标题或脱敏命令摘要，不记录工具参数和输出正文。历史读取只向 loopback browser 返回可展示的 `userMessage` / `agentMessage`，不返回 reasoning、tool arguments/results 或 command output；本机 Codex session 被删除后，页面明确回退到 Run `final_message`。Run ledger 只保留既有 terminal facts；browser 不接触 runtime `turnId`、executable、argv 或 shell command。Run SSE 是 bounded memory replay，缓冲过期时页面明确 reset，并仍可读取 terminal facts。
+实时 message、guidance、reasoning 与 tool payload 不写入 SQLite 或普通日志。OpenCode Run 的受限 stdout/stderr 会记录服务诊断、工具标题或脱敏命令摘要，不记录工具参数和输出正文。历史读取只向通过访问检查的 browser 返回可展示的 `userMessage` / `agentMessage`，不返回 reasoning、tool arguments/results 或 command output；本机 Codex session 被删除后，页面明确回退到 Run `final_message`。Run ledger 只保留既有 terminal facts；browser 不接触 runtime `turnId`、executable、argv 或 shell command。Run SSE 是 bounded memory replay，缓冲过期时页面明确 reset，并仍可读取 terminal facts。
 
 ## Sessions
 
@@ -403,8 +417,8 @@ npm run package:release
 
 ## Security and privacy
 
-- `taskd` 只监听 `127.0.0.1`，并验证 `Host` 与 browser `Origin`；不要反向代理到 LAN 或公网。
-- 威胁模型信任同一 OS user 下的本机 process，因此不使用 auth token。
+- `taskd` 默认只监听 `127.0.0.1`；显式启用网络访问时，使用配置的客户端 IP 列表限制访问，并验证 `Host` 与对应的 browser `Origin`。页面、API 和 SSE 使用同一套检查，不提供跨域 CORS 放行。
+- 本机模式信任同一 OS user 下的 process；网络模式额外信任 `server_allowed_clients` 中客户端及其使用者，不使用 auth token。该模式用于可信网络，原生 HTTP 不提供 TLS。
 - Runtime invocation 使用明确 executable、argv array、可信 Workspace 和 `shell: false`。
 - 除 Scheduled Run 既有的 bounded final_message 外，SQLite 与 Tasks Recorder logs 不保存 prompt、reasoning、assistant message、tool output、token 或 transcript 正文；历史对话只从 CLI-owned session 按需读取并在页面内存中展示。
 - 不再安装记录 hooks；外部关系登记不可用时不阻塞终端工作，不建立补传队列。

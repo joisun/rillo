@@ -19,7 +19,7 @@ function usageError() {
 }
 
 export async function defaultDashboardOpener(url, { platform = process.platform } = {}) {
-  if (platform === 'linux') return { opened: false, url, message: 'Open this URL in your browser; use SSH port forwarding for a remote service.' }
+  if (platform === 'linux') return { opened: false, url, message: 'Open this URL in your browser.' }
   await new Promise((resolve, reject) => {
     const child = spawn('/usr/bin/open', [url], { stdio: 'ignore' })
     child.once('error', reject)
@@ -71,7 +71,7 @@ export async function runCli(argv, {
 
   if (command.type === 'open-dashboard') {
     const config = await configResolver({ projectRoot, env, homeDirectory })
-    return dashboardOpener(config.serverBaseUrl)
+    return dashboardOpener(config.serverPublicUrl ?? config.serverBaseUrl)
   }
 
   if (command.type === 'scheduler') {

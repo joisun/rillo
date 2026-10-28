@@ -48,7 +48,7 @@ export function createSystemdController({ projectRoot, config, homeDirectory, no
   async function status() {
     const state = await systemctl(['is-active', unitName], { allowFailure: true })
     const health = await probeHealth(config.serverBaseUrl)
-    return { label: unitName, loaded: state.code === 0, ready: health?.service === 'tasks-recorder' && health.ready !== false, url: config.serverBaseUrl, unitPath: paths.unitPath }
+    return { label: unitName, loaded: state.code === 0, ready: health?.service === 'tasks-recorder' && health.ready !== false, url: config.serverPublicUrl ?? config.serverBaseUrl, unitPath: paths.unitPath }
   }
 
   async function install() {
@@ -66,7 +66,7 @@ export function createSystemdController({ projectRoot, config, homeDirectory, no
     await systemctl(['daemon-reload'])
     await systemctl(['enable', paths.unitPath])
     await systemctl(['restart', unitName])
-    return { label: unitName, unitPath: paths.unitPath, url: config.serverBaseUrl }
+    return { label: unitName, unitPath: paths.unitPath, url: config.serverPublicUrl ?? config.serverBaseUrl }
   }
 
   async function start() {
