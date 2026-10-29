@@ -1,3 +1,8 @@
+import { createSessionMessageStore } from './session-message-store.mjs'
+import { createSessionMessaging } from './runtime/session-messaging.mjs'
+import { createCodexMessageProvider } from './runtime/session-messaging/providers/codex.mjs'
+import { createClaudeMessageProvider } from './runtime/session-messaging/providers/claude.mjs'
+import { createTerminalMessageTransport } from './runtime/session-messaging/terminal.mjs'
 import { execFile } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { constants } from 'node:fs'
@@ -143,6 +148,7 @@ export async function startTaskd({
   let schedulerMonitor = null
   let schedulerService = null
   let schedulerClock = null
+  let messaging = null
   let runtimeRegistry = null
   let runtimeEnvironment = null
   let sessionBrowser = null
@@ -391,6 +397,18 @@ export async function startTaskd({
       terminalLauncher,
       links,
     })
+    const messageTerminal = createTerminalMessageTransport({ enabled: async () => process.platform === 'darwin' && (await dashboardSettings.get()).settings.resume_terminal === 'otty' })
+    messaging = createSessionMessaging({
+      store: createSessionMessageStore({ databasePath: join(dataDirectory, 'session-messages.sqlite') }),
+      providers: [
+        createCodexMessageProvider({ resolveLaunch: () => runtimeRegistry.resolve('codex'),
+          readSession: async ref => (await sessionBrowser.read(ref.provider, ref.session_id, ref)).session, terminal: messageTerminal }),
+        createClaudeMessageProvider({
+          resolveLaunch: () => runtimeResolver.resolve({ id: 'claude', launch: { overrideEnv: 'CLAUDE_BIN', executableNames: ['claude'] }, versionProbe: { args: ['--version'], timeout_ms: 5000 } }),
+          terminal: messageTerminal,
+        }),
+      ],
+    })
     api = createApi({
       serviceStatus,
       hub,
@@ -402,6 +420,7 @@ export async function startTaskd({
       dashboardSettings,
       sessionResume,
       sessionBrowser,
+      messaging,
       schedulerService,
       scheduledRunLogs,
       runtimeRegistry,
@@ -417,6 +436,7 @@ export async function startTaskd({
       async close() {
         if (closed) return
         closed = true
+        await messaging?.close?.()
         sessionBrowser?.close?.()
         hub.close()
         try {
@@ -427,6 +447,7 @@ export async function startTaskd({
       },
     }
   } catch (error) {
+    await messaging?.close?.()
     sessionBrowser?.close?.()
     hub.close()
     try { await api?.close() } catch {}

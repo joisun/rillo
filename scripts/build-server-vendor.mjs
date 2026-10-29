@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { randomUUID } from 'node:crypto'
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -13,6 +13,7 @@ export async function buildServerVendor({
   for (const [name, contents] of [
     ['yaml', "export { parseDocument, stringify } from 'yaml'\n"],
     ['ws', "export { default } from 'ws'\n"],
+    ['claude-sdk', "export { query } from '@anthropic-ai/claude-agent-sdk'\n"],
   ]) {
     const outputPath = join(projectRoot, 'server', 'vendor', `${name}.mjs`)
     const temporaryPath = `${outputPath}.${process.pid}.${randomUUID()}.tmp`
@@ -44,6 +45,12 @@ export async function buildServerVendor({
       await rm(temporaryPath, { force: true }).catch(() => undefined)
     }
   }
+  const licensePath = join(projectRoot, 'server', 'vendor', 'CLAUDE_SDK_LICENSE.md')
+  const temporaryLicense = `${licensePath}.${randomUUID()}.tmp`
+  try {
+    await writeFile(temporaryLicense, await readFile(join(projectRoot, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'LICENSE.md')))
+    await rename(temporaryLicense, licensePath)
+  } finally { await rm(temporaryLicense, { force: true }) }
   return join(projectRoot, 'server', 'vendor', 'yaml.mjs')
 }
 

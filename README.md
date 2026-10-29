@@ -206,6 +206,8 @@ Live Session 只干预当前 active Turn，不在 Dashboard 内创建第二轮�
 | `session_read`、`session_messages` | 读取会话元数据、分页正文，可在单个会话中搜索或按时间定位 |
 | `session_children`、`session_relations` | 查询子会话及委派、subagent、fork 关系 |
 | `session_link`、`session_unlink` | 登记或解除手动委派关系 |
+| `session_control_sources`、`session_control_capabilities` | 查询消息数据源、通道优先级和目标当前轮次 |
+| `session_send`、`session_interrupt`、`session_delivery` | 排队、执行中追加、打断、打断后发送及查询投递回执 |
 
 修改、删除、启停需传入 `schedule_get` 返回的最新 `etag`，字段名为 `expected_etag`。发生 `SCHEDULE_VERSION_CONFLICT` 后重新读取并核对修改，工具不会自动覆盖。`schedule_create` 创建启用状态的任务，默认只读 sandbox、禁用 skills 和 integrations；`cadence` 支持 once、hourly、daily、weekly、monthly，周期时间使用服务所在机器的时区，weekly 的 weekdays 为周一 1 至周日 7。workspace 必须是服务器上存在的绝对路径。
 
@@ -484,6 +486,62 @@ bash scripts/verify-release-install.sh release "$(node -p 'require("./package.js
 ```
 
 验证使用临时 HOME、空任务目录和随机端口，实际执行目录中的安装脚本，再检查 Dashboard、健康接口、SSE 和运行版本；结束后清理临时文件与进程，不注册后台服务。Release workflow 将 macOS 构建的同一批文件交给 Ubuntu 运行此检查，通过后才发布 GitHub Release。
+
+## 向原生会话发送消息
+
+消息控制由 `SessionMessaging → provider adapter → transport` 分层实现。先用 `session_control_sources` 取得准确的 provider/store_id，再用 `session_control_capabilities` 核对会话和当前 `active_turn_id`。消息来源与正文浏览来源分开，Claude 消息控制不表示已经支持 Claude 的全部 Sessions 浏览功能。
+
+```json
+{
+  "session": { "provider": "codex", "store_id": "来源返回的准确 ID", "session_id": "实际会话 UUID" },
+  "request_id": "review-followup-001",
+  "mode": "queue",
+  "text": "当前工作结束后，检查剩余测试并汇报。"
+}
+```
+
+以上参数调用 `session_send`。`mode` 支持：
+
+| 模式 | 行为 |
+| --- | --- |
+| `queue` | 排队输入，不表示已经执行完成 |
+| `steer` | 向当前轮次补充文本，必须传 `expected_turn_id` |
+| `interrupt` | 先打断指定轮次、确认其结束，再排队新文本，必须传 `expected_turn_id` |
+
+仅停止而不发送，使用 `session_interrupt({session, request_id, expected_turn_id})`。一次操作最多 16000 字符。`request_id` 为 1–128 个字母、数字或 `._:-`，同一 ID 只允许绑定同一目标和内容。
+
+通道按操作排序，只在明确未接受时降级：
+
+| Provider / 操作 | 优先级与边界 |
+| --- | --- |
+| Codex queue | 现有 app-server 原生队列 → `codex queue` → 已启用的 Otty 队列 |
+| Codex steer / stop | 原生 `turn/steer` / `turn/interrupt`；CLI 不支持的动作不会伪装成 queue |
+| Claude queue | SDK 受控连接 → stream-json CLI → 已启用的 Otty 队列 |
+| Claude steer / stop | SDK 或 stream-json CLI，只控制服务已持有的 worker；不凭 resume 接管外部活跃进程 |
+
+Codex 连接现有共享 app-server，不为控制目标另起 app-server。队列协议启用原生 experimentalApi；CLI 始终传 Session UUID，并固定该数据源的 CODEX_HOME。Claude 恢复空闲会话前核对原生 agent 目录，不能确认运行归属时不另起 worker。SDK 使用 claude_code preset，CLI/SDK 均不添加绕过权限参数；非交互 resume 的权限规则由 Claude CLI 决定。
+
+Otty 仅在 macOS 且 `resume_terminal` 已选择 otty 时作为最后的 queue 通道，按 agent 类型、完整 session_id、workspace 唯一匹配 pane；等待用户回答、多个匹配或 IPC 权限拒绝时不注入文本，不自动开启终端权限，也不盲发 Ctrl-C。终端队列回执只证明终端接受，不证明模型已收到。
+
+发送返回 `delivery`，使用 `session_delivery({request_id})` 查询：
+
+| status | 含义 |
+| --- | --- |
+| `pending` | 已登记，尚未开始投递；服务重启后可用原参数与 ID 重试 |
+| `sending` | 正在向一个通道投递 |
+| `accepted` | 指定通道已接受，具体级别见 kind；不是模型执行完成 |
+| `rejected` | 明确未完成投递，查看 error 与 attempts |
+| `unknown` | 可能已接受，不能换 ID 或通道盲目重发 |
+
+回执保存在 `~/.config/tasks-recorder/session-messages.sqlite`，只记录内容指纹、目标、原生消息 ID 与通道尝试，不复制对话正文，也不重建 Codex 队列。服务重启将未确认的在途请求标记 unknown。原生消息 ID 可用于核对队列或最近历史；队列中找不到并不代表未接受，证据不足仍保持 unknown。一次请求串行尝试多个通道；同一会话的不同请求也串行，重复 ID 共用原回执。
+
+Claude 优先依据带原始输入 UUID 的回复流帧或用户回显确认，不把 stdin 写入成功当作原生接受。长时间排队、旧 CLI 不提供对应确认或断线时，回执可能先为 unknown；连接仍在且后续收到匹配确认时，查询回执可核对为 accepted。仅凭队列文本相同不会确认。Claude 必须支持 `agents --json` 的活动目录核对，否则跳过恢复 worker；不会在旧 CLI 上凭猜测启动第二个进程。
+
+`interrupt` 不清空已有队列，新文本遵循 provider 的原生顺序；若已打断但后续投递失败，回执保留 `interrupted_turn_id`。原生 Codex 使用 expectedTurnId；Claude 的 turn ID 表示服务持有 worker 的当前输入，不承诺原生 Codex 同等的跨客户端原子控制。
+
+Claude 受控 worker 随服务关闭，空闲 60 秒释放，最多 8 个；这不改变 accepted 与执行完成的区分。构建固定使用 Anthropic Agent SDK 0.3.312，随包保留其 [LICENSE](server/vendor/CLAUDE_SDK_LICENSE.md)，不捆绑 Claude CLI 可执行文件。
+
+REST 入口为 `/api/v1/session-control/sources`、`capabilities`、`send`、`interrupt` 和 `deliveries/:request_id`，沿用现有 Host、Origin、客户端 IP 与 JSON 字段白名单校验。MCP 不接受自定义可执行文件、shell 命令或任意工作目录。
 
 ## Security and privacy
 

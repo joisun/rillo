@@ -362,6 +362,7 @@ export function createApiServer({
   dashboardSettings = null,
   sessionResume = null,
   sessionBrowser = null,
+  messaging = null,
   schedulerService = null,
   scheduledRunLogs = null,
   runtimeRegistry = null,
@@ -457,6 +458,28 @@ export function createApiServer({
       if (request.method === 'GET' && pathname === '/api/v1/runtimes' && runtimeRegistry) {
         sendJson(response, 200, { runtimes: await runtimeRegistry.list() })
         return
+      }
+      if (pathname.startsWith('/api/v1/session-control/')) {
+        if (!messaging) throw httpError('SESSION_MESSAGE_UNAVAILABLE', '会话消息服务不可用', 503)
+        if (request.method === 'GET' && pathname === '/api/v1/session-control/sources') {
+          sendJson(response, 200, await messaging.sources()); return
+        }
+        if (request.method === 'GET' && pathname === '/api/v1/session-control/capabilities') {
+          sendJson(response, 200, await messaging.capabilities(Object.fromEntries(url.searchParams))); return
+        }
+        const delivery = pathname.match(/^\/api\/v1\/session-control\/deliveries\/([^/]+)$/)
+        if (request.method === 'GET' && delivery) {
+          sendJson(response, 200, await messaging.delivery({ request_id: safeSegment(delivery[1]) })); return
+        }
+        if (request.method === 'POST' && ['/api/v1/session-control/send', '/api/v1/session-control/interrupt'].includes(pathname)) {
+          requireJson(request)
+          const stop = pathname.endsWith('/interrupt')
+          const input = exactBody(await readJson(request, { limit: 128 * 1024 }), new Set(stop
+            ? ['session', 'request_id', 'expected_turn_id'] : ['session', 'request_id', 'mode', 'text', 'expected_turn_id']), 'Session message')
+          const result = await messaging[stop ? 'interrupt' : 'send'](input)
+          hub.publish()
+          sendJson(response, 200, result); return
+        }
       }
       if (pathname.startsWith('/api/v1/session-browser/')) {
         if (!sessionBrowser) throw httpError('SESSION_BROWSER_UNAVAILABLE', 'Session browser is unavailable', 503)

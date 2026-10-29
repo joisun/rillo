@@ -23214,6 +23214,11 @@ function createSessionClient({ baseUrl, fetchImpl = globalThis.fetch, timeoutMs 
     }
   }
   return {
+    controlSources: () => compatibleRequest("/api/v1/session-control/sources"),
+    controlCapabilities: (input) => compatibleRequest(queryPath("/api/v1/session-control/capabilities", input)),
+    sendSessionMessage: (input) => compatibleRequest("/api/v1/session-control/send", { method: "POST", body: input }),
+    interruptSession: (input) => compatibleRequest("/api/v1/session-control/interrupt", { method: "POST", body: input }),
+    sessionDelivery: ({ request_id }) => compatibleRequest(`/api/v1/session-control/deliveries/${encodeURIComponent(request_id)}`),
     runtimes: () => compatibleRequest("/api/v1/runtimes"),
     listSchedules: () => compatibleRequest("/api/v1/schedules"),
     getSchedule: ({ schedule_id }) => compatibleRequest(`/api/v1/schedules/${encodeURIComponent(schedule_id)}`),
@@ -31180,7 +31185,7 @@ var EMPTY_COMPLETION_RESULT = {
 };
 
 // mcp/src/tools.mjs
-var SERVER_INSTRUCTIONS = `Query native sessions and manage scheduled automation through these tools. Use runtime_list before choosing a schedule agent. Read schedule_get before changing a schedule and pass its latest etag as expected_etag; on SCHEDULE_VERSION_CONFLICT read again and reconsider the change, never silently overwrite. schedule_create creates an enabled task; cadence uses the service machine timezone. Reuse the same idempotency_key when retrying schedule_run. Session search covers user and assistant text, not just previews. Follow next_cursor even when a search page has no matches; do not claim that a partial page is the complete result. Use session_sources to obtain the exact provider and store_id before registering relations. SessionRef is {provider, store_id, session_id}; for Codex session_id is thread.id. After a delegated child session exists, register its actual identity with session_link. Never guess a session ID from an execution, agent key, PID, worktree, or title. Use session_unlink only to remove an explicitly registered relation; native subagent/fork relations are read-only. No Task, heartbeat, attribution, checkpoint or automatic summary recording is needed. Never edit local databases directly.`;
+var SERVER_INSTRUCTIONS = `Query native sessions and manage scheduled automation through these tools. Use runtime_list before choosing a schedule agent. Read schedule_get before changing a schedule and pass its latest etag as expected_etag; on SCHEDULE_VERSION_CONFLICT read again and reconsider the change, never silently overwrite. schedule_create creates an enabled task; cadence uses the service machine timezone. Reuse the same idempotency_key when retrying schedule_run. Session search covers user and assistant text, not just previews. Follow next_cursor even when a search page has no matches; do not claim that a partial page is the complete result. Use session_sources to obtain the exact provider and store_id before registering relations. SessionRef is {provider, store_id, session_id}; for Codex session_id is thread.id. After a delegated child session exists, register its actual identity with session_link. Never guess a session ID from an execution, agent key, PID, worktree, or title. Use session_unlink only to remove an explicitly registered relation; native subagent/fork relations are read-only. For messaging, discover session_control_sources and session_control_capabilities first; reuse the same request_id for the same target, text and mode. queue schedules input, steer supplements a turn, and interrupt stops the expected turn before sending; steer and interrupt require the observed expected_turn_id. accepted does not mean completed. On unknown, query session_delivery; never switch IDs or transports to resend blindly. No Task, heartbeat, attribution, checkpoint or automatic summary recording is needed. Never edit local databases directly.`;
 var sessionRef = external_exports.object({
   provider: external_exports.string().min(1),
   store_id: external_exports.string().min(1),
@@ -31233,7 +31238,7 @@ function handler(operation) {
   return async (input) => {
     try {
       const structuredContent = await operation(input);
-      return { content: [{ type: "text", text: JSON.stringify(structuredContent) }], structuredContent };
+      return { content: [{ type: "text", text: JSON.stringify(structuredContent) }], structuredContent, ...["unknown", "rejected"].includes(structuredContent?.delivery?.status) ? { isError: true } : {} };
     } catch (error51) {
       const known = error51 instanceof TaskRecorderError;
       const structuredContent = {
@@ -31273,7 +31278,14 @@ function createTasksRecorderServer({ service }) {
   }, handler((input) => service.unlink(input)));
   const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
   const write = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+  const messageRequest = { session: sessionRef, request_id: external_exports.string().regex(/^[A-Za-z0-9._:-]{1,128}$/).describe("Stable unique ID. Reuse only for the exact same operation; an unknown receipt must not be retried with a new ID.") };
+  const expectedTurn = external_exports.string().min(1).max(256);
   const tools = [
+    ["session_control_sources", "Discover exact Codex/Claude provider and store IDs for messaging and transport priorities. Messaging support is separate from transcript browsing.", {}, "controlSources", readOnly],
+    ["session_control_capabilities", "Inspect target identity, available operation priorities and active_turn_id before steering or interrupting. Claude control requires an owned worker or an explicitly enabled terminal queue.", sessionRef.shape, "controlCapabilities", readOnly],
+    ["session_send", "Send text to an existing native session. queue submits for subsequent processing; steer supplements the active turn; interrupt stops the expected turn then queues text. steer/interrupt require expected_turn_id. accepted is not completed; unknown must not trigger blind retries. Only definite non-acceptance permits transport fallback.", { ...messageRequest, text: external_exports.string().min(1).max(16e3), mode: external_exports.enum(["queue", "steer", "interrupt"]).optional(), expected_turn_id: expectedTurn.optional() }, "sendSessionMessage", { ...write, openWorldHint: true }],
+    ["session_interrupt", "Interrupt exactly the expected active turn without sending text. Does not approve pending permission requests.", { ...messageRequest, expected_turn_id: expectedTurn }, "interruptSession", { ...write, destructiveHint: true, openWorldHint: true }],
+    ["session_delivery", "Read the persisted delivery receipt for request_id. accepted means accepted by the named native or terminal transport, not that generation completed. unknown is not safe to resend.", { request_id: messageRequest.request_id }, "sessionDelivery", readOnly],
     ["runtime_list", "List installed agent runtimes and their availability before creating a schedule.", {}, "runtimes", readOnly],
     ["schedule_list", "List scheduled tasks, current etags, execution summaries and invalid Markdown definitions.", {}, "listSchedules", readOnly],
     ["schedule_get", "Read a scheduled task including its prompt and latest etag before an edit, delete, pause or resume.", scheduleId, "getSchedule", readOnly],

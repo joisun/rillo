@@ -177,7 +177,7 @@ Codex timeline的from/to均省略时，scope=session，主读thread/items/list�
 
 workspaces返回每个目录可选的去重branch_names，直接从同一100条原生元数据页聚合，不增加索引扫描；跨页分支名由前端去重，未知分支不生成子节点。新增GET /api/v1/session-browser/:provider/branches返回分支名、已观测会话数、去重workspace_paths、session_ids与next_cursor；只读取同一来源的100条元数据页，与目录及列表复用缓存。branch参数按完整名称精确筛选列表与原生正文搜索结果，不向原生接口发送未经支持的分支过滤参数。过滤后的空页保留原生cursor，前端自动继续；分支目录跨页按会话ID去重，绿点由已载入会话ID与live presence匹配。没有分支元数据的会话仍可在全部会话中访问。React Aria空结果占位使用display:contents，分页观察器跳过无布局尺寸的占位，转而观察真实分页标记。
 
-API v5 的 MCP 通过 mcp/src/session-client.mjs 转发已有 HTTP 接口，提供原生会话查询、正文搜索、关系查询及登记，和定时任务 CRUD、启停、立即执行、执行记录与 runtime 查询。完整工具表见 README。修改类工具保留 expected_etag 并发检查，schedule_run 要求幂等键。查询保留游标和搜索范围，不保存另一份对话正文。Task lifecycle、attribution、checkpoint、summary、projection、spool 不再进入运行链路。旧 Task 路由统一 410 TASKS_RETIRED，正常请求还校验客户端 API version；旧插件不能静默继续写入。
+API v5 的 MCP 通过 mcp/src/session-client.mjs 转发已有 HTTP 接口，提供原生会话查询、正文搜索、关系查询及登记，和定时任务 CRUD、启停、立即执行、执行记录与 runtime 查询。新增会话消息控制使用独立 provider/transport 链和持久化回执，详见下文“原生会话消息控制”；完整工具表见 README。修改类工具保留 expected_etag 并发检查，schedule_run 要求幂等键。查询保留游标和搜索范围，不保存另一份对话正文。Task lifecycle、attribution、checkpoint、summary、projection、spool 不再进入运行链路。旧 Task 路由统一 410 TASKS_RETIRED，正常请求还校验客户端 API version；旧插件不能静默继续写入。
 
 MCP 的 session_messages 保持默认 page 分页，并增加 head/tail/all 历史读取模式。head/all 请求 REST messages 的 order=asc，由 Codex 原生 thread/items/list 或 thread/turns/list 正向翻页；tail 使用 desc，所有输出批次内部均按时间正序排列。历史读取游标包含 provider/store/session/mode 作用域、原生页游标与页内偏移，不保存正文。单次聚合限制为 50 页、25 秒与 max_chars；完整性依据历史是否读完及原生/聚合截断标记，不把局部内容称为全部。原生消息方向通过响应 order 校验，旧服务必须先升级，禁止静默把最近页当作开头。
 
@@ -282,3 +282,15 @@ Run SSE 每 15 秒发送 comment 保活，关闭 response 时同时清理 timer 
 OpenCode 不支持 OS sandbox 或独立禁用 Skills/MCP。定义与执行边界都拒绝非 `danger-full-access`、禁用扩展能力以及显式 Fast mode/network policy；模型为 provider/model，reasoning 字段保存原生 variant。权限询问和交互问题结束 Run 并保留 Session；不自动扩大工具权限。取消和超时先调用原生 abort，再结束自己创建的进程组。
 
 历史读取使用原生消息接口，最多 100 条、1 MiB 文本；已结束 Run 的 Session ID 是 Terminal Resume 入口，恢复前验证 Session，再用已解析的 executable 与 `--session` 参数启动。Session ID、workspace 与 runtime ID 均取自可信 Run，不接受浏览器构造命令。服务 stdout/stderr 写入有大小上限的私有 Run 日志；stdout 只追加工具名、OpenCode 给出的标题或脱敏命令摘要，不记录工具参数或结果正文。provider 错误在 Run final message 中保留有上限的可读原因，并使用稳定错误码区分类别。
+
+## 原生会话消息控制
+
+`server/src/runtime/session-messaging.mjs` 负责验证完整 SessionRef、请求去重、会话级串行与通道调度；`session-messaging/providers` 各 provider 实现原生能力，通用调用失败不能直接当作未发送。每个操作筛选并顺序调用支持该动作的 transport，仅 delivery=not_sent 且 fallback=true 才降级。未知异常、写入后超时及断线保持 unknown。
+
+Codex 使用明确授权方法列表的共享 app-server 客户端；状态读取客户端默认仍是只读。原生 queue/steer/interrupt 优先，CLI queue 仅是 queue 的备用实现。Claude SDK 和 stream-json CLI 通过相同的受控 worker 语义接入；恢复前验证 transcript 的 sessionId/cwd、数据源与原生 agent 目录，不创建与外部活跃进程并发的 worker。Otty 最后通道仅做明确匹配的 queue，不承担无条件打断。
+
+`session-messages.sqlite` 由 taskd 独占，保存请求指纹、投递阶段及回执，不保存消息正文。初始化时 sending 变为 unknown；同一请求 ID 的目标、文本和操作不可改变。只读核对能证明原生接受时更新回执；未找到记录不构成失败证据。MCP/HTTP 都使用同一控制服务，工具列表及示例见 README。
+
+Claude 从用户回显或回复流的 user_message_uuid/user_message_uuids 确认对应输入，忽略迟到的重复回显，同一轮消费的合并输入一起结束；打断必须收到指定受控轮次的 aborted_streaming/aborted_tools 结果，普通结束不视为打断成功。没有对应消息 ID 证明时保留 unknown，不凭队列文本推断。
+
+Claude SDK 随 server vendor 构建并保留 Anthropic LICENSE；原生 CLI 仍由可执行文件 resolver 定位。关闭时先释放控制连接、等待在途投递记录收敛，再关闭回执数据库；空闲 worker 定时释放。

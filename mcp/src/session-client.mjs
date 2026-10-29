@@ -130,6 +130,11 @@ export function createSessionClient({ baseUrl, fetchImpl = globalThis.fetch, tim
   }
 
   return {
+    controlSources: () => compatibleRequest('/api/v1/session-control/sources'),
+    controlCapabilities: input => compatibleRequest(queryPath('/api/v1/session-control/capabilities', input)),
+    sendSessionMessage: input => compatibleRequest('/api/v1/session-control/send', { method: 'POST', body: input }),
+    interruptSession: input => compatibleRequest('/api/v1/session-control/interrupt', { method: 'POST', body: input }),
+    sessionDelivery: ({ request_id }) => compatibleRequest(`/api/v1/session-control/deliveries/${encodeURIComponent(request_id)}`),
     runtimes: () => compatibleRequest('/api/v1/runtimes'),
     listSchedules: () => compatibleRequest('/api/v1/schedules'),
     getSchedule: ({ schedule_id }) => compatibleRequest(`/api/v1/schedules/${encodeURIComponent(schedule_id)}`),

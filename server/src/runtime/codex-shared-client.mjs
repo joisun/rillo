@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import WebSocket from '../../vendor/ws.mjs'
 
 // This connection observes the existing daemon. It never starts or owns that server.
-export function createCodexSharedClient({ dataRoot, requestTimeoutMs = 5000 }) {
+export function createCodexSharedClient({ dataRoot, requestTimeoutMs = 5000, allowedMethods = ['initialize', 'thread/loaded/list', 'thread/read'] }) {
   const socket = new WebSocket(`ws+unix:${join(dataRoot, 'app-server-control', 'app-server-control.sock')}:/`, {
     handshakeTimeout: requestTimeoutMs,
     maxPayload: 8 * 1024 * 1024,
@@ -44,7 +44,7 @@ export function createCodexSharedClient({ dataRoot, requestTimeoutMs = 5000 }) {
     if (!request) return
     pending.delete(message.id)
     clearTimeout(request.timer)
-    if (message.error) request.reject(new Error('CODEX_SHARED_SERVER_REQUEST_FAILED'))
+    if (message.error) request.reject(Object.assign(new Error('CODEX_SHARED_SERVER_REQUEST_FAILED'), { rpcCode: message.error.code }))
     else request.resolve(message.result)
   })
 
@@ -52,7 +52,7 @@ export function createCodexSharedClient({ dataRoot, requestTimeoutMs = 5000 }) {
     started,
     get closed() { return closed },
     request(method, params = {}) {
-      if (!['initialize', 'thread/loaded/list', 'thread/read'].includes(method)) throw new Error('CODEX_SHARED_SERVER_READ_ONLY')
+      if (!allowedMethods.includes(method)) throw new Error('CODEX_SHARED_SERVER_READ_ONLY')
       if (closed) return Promise.reject(new Error('CODEX_SHARED_SERVER_CLOSED'))
       const id = ++nextId
       return new Promise((resolve, reject) => {

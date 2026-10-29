@@ -23,6 +23,7 @@
     "package:release": "node scripts/package-release.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.312",
     "@base-ui/react": "1.7.0",
     "@modelcontextprotocol/sdk": "1.30.0",
     "@streamdown/cjk": "1.0.2",
