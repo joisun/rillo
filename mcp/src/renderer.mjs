@@ -9,10 +9,10 @@ import {
 } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { TaskRecorderError } from './errors.mjs'
+import { RilloError } from './errors.mjs'
 
-const START_MARKER = '<!-- tasks-recorder:start -->'
-const END_MARKER = '<!-- tasks-recorder:end -->'
+const START_MARKER = '<!-- rillo:start -->'
+const END_MARKER = '<!-- rillo:end -->'
 const LOCK_RETRY_MS = 25
 const LOCK_ATTEMPTS = 40
 
@@ -93,7 +93,7 @@ function taskEndDate(task) {
 function mermaidLine(task) {
   const tags = STATUS_TAGS[task.status]
   if (tags === undefined) {
-    throw new TaskRecorderError('TASK_STATUS_INVALID', `unsupported task status: ${task.status}`)
+    throw new RilloError('TASK_STATUS_INVALID', `unsupported task status: ${task.status}`)
   }
   const metadata = tags ? `${tags}, ${task.id}` : task.id
   return `    ${displayTitle(task)} :${metadata}, ${task.start_date}, ${taskEndDate(task)}`
@@ -129,7 +129,7 @@ function generateMermaid(tasks, title) {
 }
 
 function defaultDocument(heading) {
-  return `# ${heading}\n\n此文件由 tasks-recorder 从 SQLite 自动生成；marker 外内容可手工维护。\n\n${START_MARKER}\n${END_MARKER}\n`
+  return `# ${heading}\n\n此文件由 rillo 从 SQLite 自动生成；marker 外内容可手工维护。\n\n${START_MARKER}\n${END_MARKER}\n`
 }
 
 function markerCount(content, marker) {
@@ -138,18 +138,18 @@ function markerCount(content, marker) {
 
 function replaceGeneratedBlock(content, generated, filePath) {
   if (markerCount(content, START_MARKER) !== 1 || markerCount(content, END_MARKER) !== 1) {
-    throw new TaskRecorderError(
+    throw new RilloError(
       'PROJECTION_MARKER_INVALID',
-      `${filePath} must contain exactly one tasks-recorder marker pair`,
+      `${filePath} must contain exactly one rillo marker pair`,
       { filePath },
     )
   }
   const start = content.indexOf(START_MARKER)
   const end = content.indexOf(END_MARKER)
   if (start > end) {
-    throw new TaskRecorderError(
+    throw new RilloError(
       'PROJECTION_MARKER_INVALID',
-      `${filePath} has reversed tasks-recorder markers`,
+      `${filePath} has reversed rillo markers`,
       { filePath },
     )
   }
@@ -176,7 +176,7 @@ async function acquireLock(lockPath, now) {
     } catch (error) {
       if (error.code !== 'EEXIST') throw error
       if (attempt === LOCK_ATTEMPTS - 1) {
-        throw new TaskRecorderError(
+        throw new RilloError(
           'PROJECTION_LOCKED',
           'timed out waiting for the projection render lock',
           { lockPath },
@@ -185,7 +185,7 @@ async function acquireLock(lockPath, now) {
       await delay(LOCK_RETRY_MS)
     }
   }
-  throw new TaskRecorderError('PROJECTION_LOCKED', 'could not acquire the projection render lock')
+  throw new RilloError('PROJECTION_LOCKED', 'could not acquire the projection render lock')
 }
 
 async function ignoreMissingUnlink(filePath) {
@@ -199,7 +199,7 @@ async function ignoreMissingUnlink(filePath) {
 export async function renderProjections({ loadSnapshot, outputDir, now = new Date() }) {
   const timestamp = now instanceof Date ? now : new Date(now)
   if (Number.isNaN(timestamp.valueOf())) {
-    throw new TaskRecorderError('CLOCK_INVALID', 'now must be a valid date')
+    throw new RilloError('CLOCK_INVALID', 'now must be a valid date')
   }
   await mkdir(outputDir, { recursive: true })
 
@@ -215,7 +215,7 @@ export async function renderProjections({ loadSnapshot, outputDir, now = new Dat
     lockHandle = await acquireLock(lockPath, timestamp)
     const snapshot = await loadSnapshot()
     if (!snapshot || !Array.isArray(snapshot.tasks)) {
-      throw new TaskRecorderError('SNAPSHOT_INVALID', 'loadSnapshot must return a tasks array')
+      throw new RilloError('SNAPSHOT_INVALID', 'loadSnapshot must return a tasks array')
     }
 
     const currentTasks = snapshot.tasks.filter(({ status }) => status !== 'done')

@@ -1,8 +1,8 @@
-# Tasks Recorder
+# Rillo
 
-Tasks Recorder 是运行在本机的 coding-agent 会话与自动化控制台。Sessions 直接浏览 CLI 保存的会话，按 workspace、分支和时间查找对话，以主子会话树和消息热力时间轴展示，支持侧边 sheet 阅读。侧栏支持 Workspace / Branch 分组，同名分支可以汇总多个项目的会话。
+Rillo 是运行在本机的 coding-agent 会话与自动化控制台。Sessions 直接浏览 CLI 保存的会话，按 workspace、分支和时间查找对话，以主子会话树和消息热力时间轴展示，支持侧边 sheet 阅读。侧栏支持 Workspace / Branch 分组，同名分支可以汇总多个项目的会话。
 
-它还支持由 Markdown 定义 Scheduled Task。到期后，常驻的 `taskd` 直接调用本机 code-agent CLI，并把 session ID、结果、文件变更和日志引用写入统一 Run ledger；对话正文仍由本机 agent CLI 持有。
+它还支持由 Markdown 定义 Scheduled Task。到期后，常驻的 `daemon` 直接调用本机 code-agent CLI，并把 session ID、结果、文件变更和日志引用写入统一 Run ledger；对话正文仍由本机 agent CLI 持有。
 
 当前状态：
 
@@ -13,6 +13,8 @@ Tasks Recorder 是运行在本机的 coding-agent 会话与自动化控制台。
 - runtime registry 已按 multi-CLI contract 设计，后续 runtime 只增加 adapter，不增加第二套调度链路；
 - 所有数据都保存在本机，不需要 cloud account 或 auth token。
 
+当前为 Rillo 更名后的本地构建。GitHub 仓库已更名为 `joisun/rillo`；本次源码尚未推送，Rillo 0.15.0 尚未公开发布。下列下载与 Git marketplace 命令需等新源码推送和正式发布后再使用，当前 latest 仍是旧名称的历史版本。本地迁移与旧标识保留原因见[更名与安装迁移](docs/migrations/rillo-rename.md)。
+
 ## Quick start
 
 要求 macOS 或提供 systemd 用户服务的 Linux、Node.js 24+、`curl`、`tar`，以及 `sha256sum` 或 `shasum`。
@@ -20,21 +22,21 @@ Tasks Recorder 是运行在本机的 coding-agent 会话与自动化控制台。
 安装 latest GitHub Release：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/joisun/tasks-recorder/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/joisun/rillo/main/install.sh | bash
 ```
 
 安装完成后打开 Dashboard，或检查服务：
 
 ```bash
-tasks-recorder open
-tasks-recorder status
+rillo open
+rillo status
 ```
 
 普通安装不需要 clone repository、`npm install` 或 `npm ci`。更谨慎的固定版本安装方式：
 
 ```bash
-version=v0.14.0
-curl -fsSLO "https://raw.githubusercontent.com/joisun/tasks-recorder/${version}/install.sh"
+version=v0.15.0
+curl -fsSLO "https://raw.githubusercontent.com/joisun/rillo/${version}/install.sh"
 less install.sh
 bash install.sh --version "$version"
 ```
@@ -43,11 +45,11 @@ installer 会在解包前验证 Release 中的 `SHA256SUMS`，但不会探测、
 
 ## Linux Web service
 
-Linux 使用 `systemd --user` 管理一个 `tasks-recorder.service`，安装、启停、状态和卸载沿用相同的 `tasks-recorder` 命令，不需要 root。安装时需要可用的用户级 systemd manager；installer 不修改系统服务或用户 lingering 策略。退出登录后是否继续运行取决于该机器的用户 manager 配置。
+Linux 使用 `systemd --user` 管理一个 `rillo.service`，安装、启停、状态和卸载沿用相同的 `rillo` 命令，不需要 root。安装时需要可用的用户级 systemd manager；installer 不修改系统服务或用户 lingering 策略。退出登录后是否继续运行取决于该机器的用户 manager 配置。
 
-Linux 安装需要 Release 包含 `tasks-recorder-linux.tar.gz`；macOS 使用 `tasks-recorder-macos.tar.gz`。两个包均为自包含的 JavaScript runtime 与预构建 Dashboard，不捆绑 Node.js。安装后无需 `npm install`。Linux 日志位于 `~/.local/state/tasks-recorder/`，用户 unit 位于 `~/.config/systemd/user/tasks-recorder.service`。
+Linux 安装需要 Release 包含 `rillo-linux.tar.gz`；macOS 使用 `rillo-macos.tar.gz`。两个包均为自包含的 JavaScript runtime 与预构建 Dashboard，不捆绑 Node.js。安装后无需 `npm install`。Linux 日志位于 `~/.local/state/rillo/`，用户 unit 位于 `~/.config/systemd/user/rillo.service`。
 
-默认服务仅监听服务器的 `127.0.0.1`。需要直接从网络访问时，在服务器的 `~/.config/tasks-recorder/config.json` 中配置以下字段，再执行 `tasks-recorder stop` 和 `tasks-recorder start`。以下地址是示例，分别替换为服务器地址与允许访问的客户端 IP：
+默认服务仅监听服务器的 `127.0.0.1`。需要直接从网络访问时，在服务器的 `~/.config/rillo/config.json` 中配置以下字段，再执行 `rillo stop` 和 `rillo start`。以下地址是示例，分别替换为服务器地址与允许访问的客户端 IP：
 
 ```json
 {
@@ -59,7 +61,7 @@ Linux 安装需要 Release 包含 `tasks-recorder-linux.tar.gz`；macOS 使用 `
 }
 ```
 
-浏览器打开 `server_public_url` 即可，页面、API 和 SSE 均由 task-recorder 原生提供，无需反向代理。`server_allowed_clients` 只接受完整 IP，不支持通配符或 CIDR；未列出的网络客户端返回 `403 CLIENT_REJECTED`。本机 CLI/MCP 和健康检查继续使用 `127.0.0.1`，已有 `server_host` 保持原值，旧插件也可继续连接。网络模式必须同时配置公开访问地址与允许的客户端，默认安装不会开放网络访问。
+浏览器打开 `server_public_url` 即可，页面、API 和 SSE 均由 rillo 原生提供，无需反向代理。`server_allowed_clients` 只接受完整 IP，不支持通配符或 CIDR；未列出的网络客户端返回 `403 CLIENT_REJECTED`。本机 CLI/MCP 和健康检查继续使用 `127.0.0.1`，已有 `server_host` 保持原值，旧插件也可继续连接。网络模式必须同时配置公开访问地址与允许的客户端，默认安装不会开放网络访问。
 
 也可保留默认本机监听，并使用 SSH 转发（以下为默认端口示例，替换登录地址）：
 
@@ -67,7 +69,7 @@ Linux 安装需要 Release 包含 `tasks-recorder-linux.tar.gz`；macOS 使用 `
 ssh -N -L 43127:127.0.0.1:43127 user@server
 ```
 
-随后在该电脑打开 `http://127.0.0.1:43127/?view=sessions`。Linux 上的 `tasks-recorder open` 输出访问地址，不启动服务器上的桌面应用。
+随后在该电脑打开 `http://127.0.0.1:43127/?view=sessions`。Linux 上的 `rillo open` 输出访问地址，不启动服务器上的桌面应用。
 
 会话树、正文、搜索、关系与 Scheduled 均通过 Web 使用。点击对话标题右侧的复制按钮取得 Session ID，然后在服务器上的对应 workspace 与相同 `CODEX_HOME` 下执行：
 
@@ -84,8 +86,8 @@ Service 与 agent adapter 独立安装。只安装你实际使用的 adapter。
 ### Codex
 
 ```bash
-codex plugin marketplace add joisun/tasks-recorder
-codex plugin add tasks-recorder@tasks-recorder
+codex plugin marketplace add joisun/rillo
+codex plugin add rillo@rillo
 ```
 
 安装或更新后新开一个 conversation，使 MCP 工具生效。插件不再安装生命周期记录 hooks。
@@ -93,8 +95,8 @@ codex plugin add tasks-recorder@tasks-recorder
 ### Claude Code
 
 ```bash
-claude plugin marketplace add joisun/tasks-recorder
-claude plugin install tasks-recorder@tasks-recorder
+claude plugin marketplace add joisun/rillo
+claude plugin install rillo@rillo
 ```
 
 按 Claude Code 的提示 reload plugin；若出现 MCP approval，只批准 plugin cache 内的 `dist/mcp-server.mjs`。
@@ -103,22 +105,22 @@ claude plugin install tasks-recorder@tasks-recorder
 
 ```text
 adapters/
-├── codex/tasks-recorder/
-└── claude/tasks-recorder/
+├── codex/rillo/
+└── claude/rillo/
 ```
 
 ## How it works
 
-Tasks Recorder 只有一个长期运行的 service 和一个写入边界：
+Rillo 只有一个长期运行的 service 和一个写入边界：
 
 ```text
 Sessions
-CLI-owned sessions ◀──adapter── taskd ──HTTP──▶ Dashboard
+CLI-owned sessions ◀──adapter── daemon ──HTTP──▶ Dashboard
                                   │
 MCP session_link ──HTTP──────────▶ │──▶ session-links.sqlite
 
 Automation
-Schedule.md ──watch──▶ taskd Scheduler ──▶ Runtime Registry
+Schedule.md ──watch──▶ daemon Scheduler ──▶ Runtime Registry
                           │                       │
                           │                       └──▶ codex app-server
                           │                                  │
@@ -127,7 +129,7 @@ Schedule.md ──watch──▶ taskd Scheduler ──▶ Runtime Registry
                                       └── SSE ──▶ Dashboard
 ```
 
-macOS 使用 `launchd`，Linux 使用 `systemd --user`，两者都只负责让同一个 `taskd` 常驻。每个 Schedule 不再创建 LaunchAgent，也没有独立 runner、Unix socket、claim、heartbeat 或 completion spool。
+macOS 使用 `launchd`，Linux 使用 `systemd --user`，两者都只负责让同一个 `daemon` 常驻。每个 Schedule 不再创建 LaunchAgent，也没有独立 runner、Unix socket、claim、heartbeat 或 completion spool。
 
 ### Session ownership
 
@@ -145,15 +147,15 @@ queued → running → succeeded | failed | timed_out | canceled | interrupted
 
 1. 读取 Markdown definition，并生成 immutable execution snapshot；
 2. 先在 `scheduler.sqlite` 创建 durable `queued` Run；
-3. taskd 创建一个共享 Runtime Environment，从显式 override、process `PATH`、Homebrew、fnm/nvm/mise 等 user toolchain 与 platform candidates 中解析 executable；
-4. runtime status、model discovery 和 Run 都复用该环境；`taskd` 使用 argv array、`shell: false` 和同源 child `PATH` 直接启动 CLI；
+3. daemon 创建一个共享 Runtime Environment，从显式 override、process `PATH`、Homebrew、fnm/nvm/mise 等 user toolchain 与 platform candidates 中解析 executable；
+4. runtime status、model discovery 和 Run 都复用该环境；`daemon` 使用 argv array、`shell: false` 和同源 child `PATH` 直接启动 CLI；
 5. Codex active Run 使用独立的 `codex app-server --listen stdio://`；runtime adapter 把 protocol notification 转为统一、bounded event；
 6. `RunService` 在执行边界同时做 bounded、in-memory Workspace snapshot，与 runtime file-change evidence 合并；这样 nested tool 写文件但 app-server 未发 `fileChange` item 时也不会漏掉产出；
 7. Run ledger 保存 terminal state、session ID、final message、Workspace-relative file changes 与 bounded log path；
 8. Dashboard 通过 Run-specific SSE 更新；active Turn 可以追加指令或停止；terminal Run 的历史对话由 runtime adapter 使用可信 Run ID 和 session ID 从 CLI-owned session 按需读取；
 9. 需要继续工作时，terminal Run 可以从可信 snapshot 召回 session。
 
-点击 Run「产出文件」中的文件名，会在浏览器新标签页访问由 task-recorder 提供的临时文件预览，macOS 和 Linux 均支持，也可从另一台电脑访问服务器产物。HTML 可直接运行，并加载产物所在目录内的相对 CSS、JS、图片和数据资源；未识别的入口文件类型按下载处理。macOS 另保留「系统打开」，使用服务所在机器的默认应用打开文件。
+点击 Run「产出文件」中的文件名，会在浏览器新标签页访问由 rillo 提供的临时文件预览，macOS 和 Linux 均支持，也可从另一台电脑访问服务器产物。HTML 可直接运行，并加载产物所在目录内的相对 CSS、JS、图片和数据资源；未识别的入口文件类型按下载处理。macOS 另保留「系统打开」，使用服务所在机器的默认应用打开文件。
 
 预览入口必须是该 Run 在 workspace 内记录的、仍存在的普通文件，临时链接有效期30分钟；过期或服务重启后，从运行记录重新点击文件名即可。资源限定在入口文件所在目录，不提供目录列表，拒绝隐藏文件、目录越界和符号链接逃逸；以 `/` 开头的站点根路径不会自动改写，需要产物使用目录内的相对资源路径。HTML 使用独立的沙箱来源，允许脚本交互，不授予 Dashboard 的存储或 API 权限。预览实时读取磁盘文件，不保存产物副本；同名文件被后续任务更新后，旧 Run 的入口也会读取更新后的内容。已删除的文件不可点击，文件缺失或过期会显示原因。
 
@@ -161,11 +163,11 @@ queued → running → succeeded | failed | timed_out | canceled | interrupted
 
 ### Live Session control
 
-打开一个正在运行的 Codex Run，Run Review 会显示 Live Session：assistant message delta 与安全的 activity 摘要按发生顺序更新。输入追加指令后，Dashboard 只提交 Run ID、`expected_turn_revision` 和最多 16 KiB 的 text；`taskd` 使用私有 `turnId` 调用 `turn/steer`。Stop 同样只提交 Run ID 与 revision，并映射到 `turn/interrupt`。
+打开一个正在运行的 Codex Run，Run Review 会显示 Live Session：assistant message delta 与安全的 activity 摘要按发生顺序更新。输入追加指令后，Dashboard 只提交 Run ID、`expected_turn_revision` 和最多 16 KiB 的 text；`daemon` 使用私有 `turnId` 调用 `turn/steer`。Stop 同样只提交 Run ID 与 revision，并映射到 `turn/interrupt`。
 
 Live Session 断线后自动重连，也可点击“重新连接”；连接恢复会补读任务状态，避免错过结束事件。最近 500 条实时消息保留在窗口内，发送期间继续输入的文字不会被清空。Scheduled 列表、执行历史和详情会随服务端事件更新，连接恢复后会同步补读。
 
-Live Session 只干预当前 active Turn，不在 Dashboard 内创建第二轮对话。Run 结束后，页面会重新读取 authoritative terminal Run，并通过 Codex 原生分页接口从本机 Codex-owned session 临时取得 user/assistant messages（旧 CLI 回退为有容量上限的 `thread/read`）；Tasks Recorder 不复制或持久化这份 transcript。已结束 Run 可点击 Session ID 在 Terminal 中恢复并继续对话；Session ID 在创建时立即保存，超时、取消、连接异常或服务重启后仍可恢复已创建的会话。历史对话读取失败时可点击“重新读取”。
+Live Session 只干预当前 active Turn，不在 Dashboard 内创建第二轮对话。Run 结束后，页面会重新读取 authoritative terminal Run，并通过 Codex 原生分页接口从本机 Codex-owned session 临时取得 user/assistant messages（旧 CLI 回退为有容量上限的 `thread/read`）；Rillo 不复制或持久化这份 transcript。已结束 Run 可点击 Session ID 在 Terminal 中恢复并继续对话；Session ID 在创建时立即保存，超时、取消、连接异常或服务重启后仍可恢复已创建的会话。历史对话读取失败时可点击“重新读取”。
 
 实时 message、guidance、reasoning 与 tool payload 不写入 SQLite 或普通日志。OpenCode Run 的受限 stdout/stderr 会记录服务诊断、工具标题或脱敏命令摘要，不记录工具参数和输出正文。历史读取只向通过访问检查的 browser 返回可展示的 `userMessage` / `agentMessage`，不返回 reasoning、tool arguments/results 或 command output；本机 Codex session 被删除后，页面明确回退到 Run `final_message`。Run ledger 只保留既有 terminal facts；browser 不接触 runtime `turnId`、executable、argv 或 shell command。Run SSE 是 bounded memory replay，缓冲过期时页面明确 reset，并仍可读取 terminal facts。
 
@@ -273,11 +275,11 @@ macOS 点击 **在终端继续**，使用右上角设置中的恢复终端。Lin
 
 ## Scheduled Tasks
 
-Schedule definition 是 source of truth；SQLite 只记录 Run facts。默认目录为 `~/.config/tasks-recorder/schedules`。
+Schedule definition 是 source of truth；SQLite 只记录 Run facts。默认目录为 `~/.config/rillo/schedules`。
 
 ```markdown
 ---
-type: tasks-recorder/schedule
+type: rillo/schedule
 id: 8b4a8b25-3d1e-4e43-8f5f-9cbef95b9275
 title: Daily repository review
 enabled: true
@@ -305,7 +307,7 @@ Review the repository health and summarize actionable risks.
 - 每项也可设为 `inherit`，沿用本机 Codex 配置；
 - Web Search 与 Codex core tools 不属于 `integrations`，不会被该开关关闭；文件和网络权限仍由 `sandbox` 独立控制。
 
-Dashboard 新建的 Codex Schedule 默认使用 `disabled / disabled`，以获得最小、可预测的自动化上下文。已有 Markdown 未声明 `capabilities` 时保持兼容，按 `inherit / inherit` 读取。每个 Run 会把 policy 写入 immutable execution snapshot；执行期间不会改写全局 Codex 配置，也不需要重启 `taskd`。
+Dashboard 新建的 Codex Schedule 默认使用 `disabled / disabled`，以获得最小、可预测的自动化上下文。已有 Markdown 未声明 `capabilities` 时保持兼容，按 `inherit / inherit` 读取。每个 Run 会把 policy 写入 immutable execution snapshot；执行期间不会改写全局 Codex 配置，也不需要重启 `daemon`。
 
 支持 `once`、`hourly`、`daily`、`weekly` 与 `monthly` cadence。Dashboard 的 Create/Edit/Pause/Resume 会 atomic rewrite Markdown，并用 SHA-256 `etag` 做 compare-and-set；Delete 把 definition 移到 `.trash/`。行级一次性 Run action 在执行期间会切换为 Stop；它与只控制周期调度的 Schedule pause/resume 是两套独立操作。
 
@@ -334,10 +336,10 @@ OpenCode Run 使用独立、带随机认证密码的 loopback `opencode serve`�
 
 OpenCode 不提供 Codex 的操作系统沙箱，首版必须使用 `sandbox: danger-full-access`，并显式继承 `capabilities: { skills: inherit, integrations: inherit }`。Editor 会展示并要求确认这一权限范围。`fast_mode` 与 `network_access` 不适用于 OpenCode；工具权限仍由本机 OpenCode 配置控制。收到权限询问或交互问题时，任务分别以 `RUNTIME_PERMISSION_REQUIRED` / `RUNTIME_INPUT_REQUIRED` 结束，保留 Session 以便人工继续，不会在后台无限等待。
 
-历史读取最多最近 100 条原生消息、1 MiB 可展示文本，仅包含 user/assistant 文本。OpenCode 自己管理会话持久化；Tasks Recorder 不保存第二份完整对话。本适配仅增加定时任务执行器，不包含 OpenCode 工作记录插件。
+历史读取最多最近 100 条原生消息、1 MiB 可展示文本，仅包含 user/assistant 文本。OpenCode 自己管理会话持久化；Rillo 不保存第二份完整对话。本适配仅增加定时任务执行器，不包含 OpenCode 工作记录插件。
 
 
-filesystem watcher 提供低延迟刷新，周期性 rescan 保证最终收敛。修改 Definitions directory 时，现有 definitions 会在同一个操作中安全迁移并切换 watcher，不需要重启 `taskd`。
+filesystem watcher 提供低延迟刷新，周期性 rescan 保证最终收敛。修改 Definitions directory 时，现有 definitions 会在同一个操作中安全迁移并切换 watcher，不需要重启 `daemon`。
 
 Runtime 与 model 由以下 API 动态获取：
 
@@ -352,13 +354,13 @@ GET  /api/v1/runtimes/:id/models
 ## Data and configuration
 
 ```text
-~/.local/share/tasks-recorder/
+~/.local/share/rillo/
 ├── current -> releases/<version>
 └── releases/<version>/                 # immutable program files
 
-~/.local/bin/tasks-recorder             # management CLI
+~/.local/bin/rillo             # management CLI
 
-~/.config/tasks-recorder/
+~/.config/rillo/
 ├── config.json
 ├── session-links.sqlite                # explicit collaboration links only
 ├── scheduler.sqlite                    # unified Run ledger
@@ -366,14 +368,14 @@ GET  /api/v1/runtimes/:id/models
 │   ├── *.md                            # Schedule source of truth
 │   ├── .trash/                         # recoverable delete/migration backup
 │   └── logs/                           # bounded per-Run stdout/stderr
-└── logs/tasks-recorder.ndjson           # privacy-bounded service log
+└── logs/rillo.ndjson           # privacy-bounded service log
 
-~/Library/Logs/tasks-recorder/
-├── taskd.stdout.log
-└── taskd.stderr.log
+~/Library/Logs/rillo/
+├── daemon.stdout.log
+└── daemon.stderr.log
 ```
 
-会话关系数据库是 `~/.config/tasks-recorder/session-links.sqlite`；Scheduled Run ledger 是 `~/.config/tasks-recorder/scheduler.sqlite`。历史 `tasks.sqlite` 与生成文件继续保留，但不再作为运行时数据源。
+会话关系数据库是 `~/.config/rillo/session-links.sqlite`；Scheduled Run ledger 是 `~/.config/rillo/scheduler.sqlite`。历史 `tasks.sqlite` 与生成文件继续保留，但不再作为运行时数据源。
 
 默认配置：
 
@@ -387,7 +389,7 @@ GET  /api/v1/runtimes/:id/models
 }
 ```
 
-`codex_path` 是可选的用户 override，不是 capability flag。未配置时 registry 从 `CODEX_BIN`、process `PATH`、Homebrew、fnm/nvm/mise 等常见 user toolchain 和受支持的 platform candidates 中解析 executable；只有通过 executable validation 的候选才消耗 bounded version-probe budget。taskd 的单一 Runtime Environment 同时生成 resolver candidates 与 child `PATH`，避免 GUI/launchd 精简 PATH 下出现“能够探测但无法执行”。一次 unavailable 不会进入长期 cache，下一次读取可直接恢复；installer 不写入 `codex_path`。
+`codex_path` 是可选的用户 override，不是 capability flag。未配置时 registry 从 `CODEX_BIN`、process `PATH`、Homebrew、fnm/nvm/mise 等常见 user toolchain 和受支持的 platform candidates 中解析 executable；只有通过 executable validation 的候选才消耗 bounded version-probe budget。daemon 的单一 Runtime Environment 同时生成 resolver candidates 与 child `PATH`，避免 GUI/launchd 精简 PATH 下出现“能够探测但无法执行”。一次 unavailable 不会进入长期 cache，下一次读取可直接恢复；installer 不写入 `codex_path`。
 
 当前 React Dashboard 右上角的齿轮按钮打开设置弹窗，可选择 Session Resume terminal，选择后自动保存，下次恢复会话时生效。在 Run 详情中点击 Session ID，会使用所选终端恢复该会话；旁边的复制按钮用于复制完整 ID。当前 terminal adapter 支持 Terminal.app、Otty 与 Ghostty；browser 永远不能提交 shell command。Resume 只提交会话引用或可信 Run ID；服务重新读取对应 workspace。Live Session 另可提交 bounded guidance text 与 public Turn revision。
 
@@ -402,29 +404,29 @@ Otty 使用原生 `agent_session_id` 匹配会话。Ghostty 需要 1.3.0 或以�
 ## Operations
 
 ```bash
-tasks-recorder open
-tasks-recorder status
-tasks-recorder stop
-tasks-recorder start
-tasks-recorder scheduler status
+rillo open
+rillo status
+rillo stop
+rillo start
+rillo scheduler status
 ```
 
 更新 latest Release：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/joisun/tasks-recorder/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/joisun/rillo/main/install.sh | bash
 ```
 
 只卸载 LaunchAgent、保留程序和数据：
 
 ```bash
-tasks-recorder uninstall
+rillo uninstall
 ```
 
-完整卸载程序但保留 `~/.config/tasks-recorder` 数据：
+完整卸载程序但保留 `~/.config/rillo` 数据：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/joisun/tasks-recorder/main/install.sh | bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/joisun/rillo/main/install.sh | bash -s -- --uninstall
 ```
 
 ## Troubleshooting
@@ -434,16 +436,16 @@ curl -fsS http://127.0.0.1:43127/health/ready
 curl -fsS http://127.0.0.1:43127/api/v1/meta
 curl -fsS http://127.0.0.1:43127/api/v1/status
 curl -fsS http://127.0.0.1:43127/api/v1/runtimes
-tail -n 100 ~/Library/Logs/tasks-recorder/taskd.stderr.log
-tail -n 100 ~/.config/tasks-recorder/logs/tasks-recorder.ndjson
+tail -n 100 ~/Library/Logs/rillo/daemon.stderr.log
+tail -n 100 ~/.config/rillo/logs/rillo.ndjson
 ```
 
-- `SERVICE_UNAVAILABLE`：先检查 `tasks-recorder status` 与 `/health/ready`。
-- Dashboard 打不开：检查 `server_port` 是否被占用以及 `taskd.stderr.log`。
+- `SERVICE_UNAVAILABLE`：先检查 `rillo status` 与 `/health/ready`。
+- Dashboard 打不开：检查 `server_port` 是否被占用以及 `daemon.stderr.log`。
 - Runtime 为 `unavailable`：运行对应 CLI 的 `--version` 后重新打开 editor 或调用 `POST /api/v1/runtimes/refresh`；失败结果不会被长期缓存。registry 会自动补充 Homebrew、fnm/nvm/mise 等 GUI-missing toolchain directories，也可显式配置 `CODEX_BIN` / `codex_path`。
 - Model 使用 fallback：手动运行解析到的 `codex debug models`；fallback 不会阻止保存或 Run。
 - Run 失败：在 Run Review 查看 stable error code、退出码、provider 错误详情与 stdout/stderr。模型在地区不可用时显示 `RUNTIME_MODEL_UNAVAILABLE` 和 provider 返回的原文；已有 Session ID 可点击后在 Terminal 继续对话。
-- 历史对话不可用：确认对应 `thread_id` 仍存在于本机 Codex session inventory；Tasks Recorder 不保存第二份 transcript，因此 session 被 Codex 清理后只显示 Run `final_message`。
+- 历史对话不可用：确认对应 `thread_id` 仍存在于本机 Codex session inventory；Rillo 不保存第二份 transcript，因此 session 被 Codex 清理后只显示 Run `final_message`。
 - Schedule definition 不可用：按页面给出的 source path 修复 YAML、duplicate UUID、unknown field、cadence 或 symlink 问题；watcher 会自动重试。
 - 插件仍显示旧 Task 工具：更新插件后新开 agent conversation。当前不再自动记录 Task 或要求 hooks trust。
 - Resume 不可用：Run 必须有本机 session transcript 与有效 Workspace，并且对应 terminal / CLI 仍可用。
@@ -451,18 +453,18 @@ tail -n 100 ~/.config/tasks-recorder/logs/tasks-recorder.ndjson
 ## Develop from source
 
 ```bash
-git clone https://github.com/joisun/tasks-recorder.git
-cd tasks-recorder
+git clone https://github.com/joisun/rillo.git
+cd rillo
 npm ci
 ```
 
-先运行 API v5 的 `taskd`，再启动 source Dashboard：
+先运行 API v5 的 `daemon`，再启动 source Dashboard：
 
 ```bash
 npm run dev:ui:react
 ```
 
-打开 <http://127.0.0.1:43128>。`ui/react` 变化会自动 rebuild/refresh，默认 API 来自 `43127`；后端变更需要重启对应服务。API v5 前端不能代理旧版服务；隔离开发时用 `TASKS_RECORDER_DEV_PORT` 和 `TASKS_RECORDER_DEV_UPSTREAM` 指向独立端口。该页面的 mutation 会修改所连接服务的数据。
+打开 <http://127.0.0.1:43128>。`ui/react` 变化会自动 rebuild/refresh，默认 API 来自 `43127`；后端变更需要重启对应服务。API v5 前端不能代理旧版服务；隔离开发时用 `RILLO_DEV_PORT` 和 `RILLO_DEV_UPSTREAM` 指向独立端口。该页面的 mutation 会修改所连接服务的数据。
 
 发布前验证：
 
@@ -477,8 +479,8 @@ npm run test:ui
 本地安装 source service：
 
 ```bash
-npm run taskd -- install
-npm run taskd -- status
+npm run daemon -- install
+npm run daemon -- status
 ```
 
 构建 release artifacts：
@@ -543,7 +545,7 @@ Otty 仅在 macOS 且 `resume_terminal` 已选择 otty 时作为最后的 queue 
 | `rejected` | 明确未完成投递，查看 error 与 attempts |
 | `unknown` | 可能已接受，不能换 ID 或通道盲目重发 |
 
-回执保存在 `~/.config/tasks-recorder/session-messages.sqlite`，只记录内容指纹、目标、原生消息 ID 与通道尝试，不复制对话正文，也不重建 Codex 队列。服务重启将未确认的在途请求标记 unknown。原生消息 ID 可用于核对队列或最近历史；队列中找不到并不代表未接受，证据不足仍保持 unknown。一次请求串行尝试多个通道；同一会话的不同请求也串行，重复 ID 共用原回执。
+回执保存在 `~/.config/rillo/session-messages.sqlite`，只记录内容指纹、目标、原生消息 ID 与通道尝试，不复制对话正文，也不重建 Codex 队列。服务重启将未确认的在途请求标记 unknown。原生消息 ID 可用于核对队列或最近历史；队列中找不到并不代表未接受，证据不足仍保持 unknown。一次请求串行尝试多个通道；同一会话的不同请求也串行，重复 ID 共用原回执。
 
 Claude 优先依据带原始输入 UUID 的回复流帧或用户回显确认，不把 stdin 写入成功当作原生接受。长时间排队、旧 CLI 不提供对应确认或断线时，回执可能先为 unknown；连接仍在且后续收到匹配确认时，查询回执可核对为 accepted。仅凭队列文本相同不会确认。Claude 必须支持 `agents --json` 的活动目录核对，否则跳过恢复 worker；不会在旧 CLI 上凭猜测启动第二个进程。
 
@@ -555,14 +557,14 @@ REST 入口为 `/api/v1/session-control/sources`、`capabilities`、`send`、`in
 
 ## Security and privacy
 
-- `taskd` 默认只监听 `127.0.0.1`；显式启用网络访问时，使用配置的客户端 IP 列表限制访问，并验证 `Host` 与对应的 browser `Origin`。页面、API 和 SSE 使用同一套检查，不提供跨域 CORS 放行。
+- `daemon` 默认只监听 `127.0.0.1`；显式启用网络访问时，使用配置的客户端 IP 列表限制访问，并验证 `Host` 与对应的 browser `Origin`。页面、API 和 SSE 使用同一套检查，不提供跨域 CORS 放行。
 - 本机模式信任同一 OS user 下的 process；网络模式额外信任 `server_allowed_clients` 中客户端及其使用者，不使用 auth token。该模式用于可信网络，原生 HTTP 不提供 TLS。
 - Runtime invocation 使用明确 executable、argv array、可信 Workspace 和 `shell: false`。
-- 除 Scheduled Run 既有的 bounded final_message 外，SQLite 与 Tasks Recorder logs 不保存 prompt、reasoning、assistant message、tool output、token 或 transcript 正文；历史对话只从 CLI-owned session 按需读取并在页面内存中展示。
+- 除 Scheduled Run 既有的 bounded final_message 外，SQLite 与 Rillo logs 不保存 prompt、reasoning、assistant message、tool output、token 或 transcript 正文；历史对话只从 CLI-owned session 按需读取并在页面内存中展示。
 - 不再安装记录 hooks；外部关系登记不可用时不阻塞终端工作，不建立补传队列。
 - Installer 在执行 runtime 前验证 artifact checksum，并拒绝 archive path traversal。
 - Session Resume 接受原生会话引用，Run Resume 只接受 Run ID；服务重新读取原生数据或 ledger，不接受 browser 提交的 Workspace 或任意 command。
 
 ## License
 
-Tasks Recorder 采用 [GPL-2.0-only](LICENSE)。默认 Dashboard bundle 使用 React 与 React DOM；随 release 打包的 Legacy 回滚界面使用 SVAR React Gantt。第三方许可见 [ui/THIRD_PARTY_NOTICES.md](ui/THIRD_PARTY_NOTICES.md)；service bundle 见 [server/THIRD_PARTY_NOTICES.md](server/THIRD_PARTY_NOTICES.md)。
+Rillo 采用 [GPL-2.0-only](LICENSE)。默认 Dashboard bundle 使用 React 与 React DOM；随 release 打包的 Legacy 回滚界面使用 SVAR React Gantt。第三方许可见 [ui/THIRD_PARTY_NOTICES.md](ui/THIRD_PARTY_NOTICES.md)；service bundle 见 [server/THIRD_PARTY_NOTICES.md](server/THIRD_PARTY_NOTICES.md)。

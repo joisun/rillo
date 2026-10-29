@@ -6,13 +6,15 @@ import { validateCadence } from './cadence.mjs'
 import { SchedulerError } from './scheduler-errors.mjs'
 import { isCodexModelSlug, isCodexReasoningLevel } from './codex-model-selection.mjs'
 
-const DEFINITION_TYPE = 'tasks-recorder/schedule'
+const DEFINITION_TYPE = 'rillo/schedule'
+// Read existing user Markdown without rewriting it during installation. New writes use Rillo.
+const LEGACY_DEFINITION_TYPES = new Set(['tasks-recorder/schedule', 'task-recorder/schedule', 'tasks_recorder/schedule', 'task_recorder/schedule'])
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/
 const DURATION = /^(\d+)(s|m|h)$/
 const AGENT = /^[a-z][a-z0-9-]{0,63}$/
 const FRONT_MATTER = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)([\s\S]*)$/
-const MARKER = /^type:\s*["']?tasks-recorder\/schedule["']?\s*(?:#.*)?$/m
+const MARKER = /^type:\s*["']?(?:rillo|tasks?[-_]recorder)\/schedule["']?\s*(?:#.*)?$/m
 const FIELDS = new Set([
   'type', 'id', 'title', 'enabled', 'workspace', 'agent', 'schedule', 'capabilities',
   'sandbox', 'model', 'reasoning', 'fast_mode', 'network_access', 'timeout', 'session_id',
@@ -184,7 +186,7 @@ export function parseScheduleDefinition(source, {
   }
   const frontMatter = object(document.toJS({ maxAliasCount: 0 }), 'front matter')
   exactFields(frontMatter, FIELDS, 'front matter')
-  if (frontMatter.type !== DEFINITION_TYPE) {
+  if (frontMatter.type !== DEFINITION_TYPE && !LEGACY_DEFINITION_TYPES.has(frontMatter.type)) {
     fail('SCHEDULE_DEFINITION_INVALID', `type must be ${DEFINITION_TYPE}`, { field: 'type' })
   }
   const id = string(frontMatter.id, 'id', 128)

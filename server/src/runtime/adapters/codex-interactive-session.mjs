@@ -183,7 +183,7 @@ function createSession({
       if (settled) return completion
       onSpawn({ pid: spawned.pid })
       await client.request('initialize', {
-        clientInfo: { name: 'tasks-recorder', title: 'Tasks Recorder', version: 'source' },
+        clientInfo: { name: 'rillo', title: 'Rillo', version: 'source' },
       })
       const threadConfig = capabilities.skills === 'disabled'
         ? skillsThreadConfig(await client.request('skills/list', {

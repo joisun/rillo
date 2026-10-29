@@ -76,7 +76,7 @@ function insertLegacyRun(db, run) {
 }
 
 test('migrates v3 Runs to the unified v4 ledger without inventing dispatch Runs', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'tasks-recorder-v4-migration-'))
+  const root = await mkdtemp(join(tmpdir(), 'rillo-v4-migration-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   const databasePath = join(root, 'scheduler.sqlite')
   const db = new DatabaseSync(databasePath)
@@ -127,7 +127,7 @@ test('migrates v3 Runs to the unified v4 ledger without inventing dispatch Runs'
 })
 
 test('v4 migration rolls back atomically when legacy Run JSON is malformed', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'tasks-recorder-v4-rollback-'))
+  const root = await mkdtemp(join(tmpdir(), 'rillo-v4-rollback-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   const databasePath = join(root, 'scheduler.sqlite')
   const db = new DatabaseSync(databasePath)
@@ -162,7 +162,7 @@ test('v4 migration rolls back atomically when legacy Run JSON is malformed', asy
 })
 
 test('initializes an empty scheduler database directly as the v4 Run ledger', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'tasks-recorder-v4-empty-'))
+  const root = await mkdtemp(join(tmpdir(), 'rillo-v4-empty-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   const databasePath = join(root, 'scheduler.sqlite')
 

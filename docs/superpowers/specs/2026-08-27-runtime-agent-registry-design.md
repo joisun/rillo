@@ -4,11 +4,11 @@
 
 **Status:** Implemented on `feature/scheduled-tasks`; validation in progress
 
-**Scope:** Replace the current Scheduled execution chain with an OpenDesign-style local runtime registry and a single `taskd` orchestration path.
+**Scope:** Replace the current Scheduled execution chain with an OpenDesign-style local runtime registry and a single `daemon` orchestration path.
 
 ## Summary
 
-Tasks Recorder will use one long-lived local daemon, `taskd`, as the control plane for Schedule definitions, runtime discovery, Run lifecycle, Codex process supervision, durable Run facts, and Dashboard events.
+Rillo will use one long-lived local daemon, `daemon`, as the control plane for Schedule definitions, runtime discovery, Run lifecycle, Codex process supervision, durable Run facts, and Dashboard events.
 
 The implementation will copy the proven mechanism used by OpenDesign:
 
@@ -19,7 +19,7 @@ The implementation will copy the proven mechanism used by OpenDesign:
 - runtime-specific output is normalized into a common event stream;
 - the daemon owns cancellation, timeout, finalization, and persistence.
 
-Tasks Recorder retains only one product-specific addition: durable Schedule semantics. Schedule definitions remain Markdown files, and `taskd` computes due occurrences using wall-clock time plus the Run ledger. The macOS LaunchAgent keeps `taskd` alive; it no longer creates one LaunchAgent and one runner process per Schedule.
+Rillo retains only one product-specific addition: durable Schedule semantics. Schedule definitions remain Markdown files, and `daemon` computes due occurrences using wall-clock time plus the Run ledger. The macOS LaunchAgent keeps `daemon` alive; it no longer creates one LaunchAgent and one runner process per Schedule.
 
 The first delivered adapter is Codex. The registry contract is multi-CLI from the start so Claude Code, OpenCode, Cursor Agent, ACP runtimes, or other local agents can be added as definitions rather than new control planes.
 
@@ -27,31 +27,31 @@ The first delivered adapter is Codex. The registry contract is multi-CLI from th
 
 The OpenDesign mechanism was evaluated at `nexu-io/open-design` commit `4076a7713556d9404123fb4b9c0b120cb24a7726`. Its relevant architecture is `Web → daemon → runtime registry → spawned CLI/ACP process`; executable resolution, model discovery, Run launch, stream parsing, cancel, resume, and persistence are centralized behind runtime definitions.
 
-The current Tasks Recorder path is materially more complex:
+The current Rillo path is materially more complex:
 
 ```text
 Dashboard
-  → taskd HTTP API
+  → daemon HTTP API
   → manual dispatch ledger
   → launchctl kickstart
   → per-Schedule LaunchAgent
   → scheduled-runner Node process
   → runner lock
   → Unix socket claim
-  → taskd Run creation
+  → daemon Run creation
   → scheduled-runner reads config again
   → Codex child process
   → heartbeat / logs / completion evidence
   → Unix socket or spool replay
-  → taskd SQLite
+  → daemon SQLite
   → SSE invalidation
   → Dashboard refetch
 ```
 
 Two observed failures demonstrate the cost of those boundaries:
 
-1. a source Dashboard connected to an older installed `taskd`, so `/api/v1/schedules` returned `ROUTE_NOT_FOUND`;
-2. a source `taskd` could execute the installed Codex CLI, but `codex_path: null` prevented creation of the model catalog and made `/api/v1/codex/models` disappear.
+1. a source Dashboard connected to an older installed `daemon`, so `/api/v1/schedules` returned `ROUTE_NOT_FOUND`;
+2. a source `daemon` could execute the installed Codex CLI, but `codex_path: null` prevented creation of the model catalog and made `/api/v1/codex/models` disappear.
 
 Both are architecture failures, not isolated UI defects. Runtime availability, model discovery, and real execution do not currently share one capability source.
 
@@ -70,8 +70,8 @@ Provide a local automation system whose behavior is easy to predict:
 
 ### Facts
 
-- `taskd` is already installed as a macOS `launchd` KeepAlive service.
-- `taskd` is already the sole SQLite writer and the loopback HTTP/SSE server.
+- `daemon` is already installed as a macOS `launchd` KeepAlive service.
+- `daemon` is already the sole SQLite writer and the loopback HTTP/SSE server.
 - the local code-agent CLI owns its agent loop, authentication, tools, and provider access;
 - Schedule definitions are now file-native Markdown;
 - local Schedule cadence is minute-granularity;
@@ -84,7 +84,7 @@ Provide a local automation system whose behavior is easy to predict:
 - CLI execution must use argument arrays with `shell: false`;
 - probes must not run in the target project;
 - the browser remains a semantic client, not a local process launcher;
-- taskd restart, sleep/wake, duplicate ticks, and repeated HTTP requests must not create duplicate Runs;
+- daemon restart, sleep/wake, duplicate ticks, and repeated HTTP requests must not create duplicate Runs;
 - future runtime adapters must not require changes to Scheduler persistence or Dashboard Run lifecycle.
 
 ### Success criteria
@@ -94,15 +94,15 @@ Provide a local automation system whose behavior is easy to predict:
 - `Run now` persists a Run and returns its ID before process startup;
 - the Dashboard observes `queued → running → terminal` through a common read model and SSE;
 - scheduled and manual Runs use the same orchestrator;
-- sleep, taskd restart, and clock changes produce at most one bounded catch-up Run per missed Schedule;
+- sleep, daemon restart, and clock changes produce at most one bounded catch-up Run per missed Schedule;
 - an unavailable runtime or model catalog produces an explicit capability state, never a missing route or indefinite loading state;
-- source Dashboard and source taskd start together with one command and matching API versions.
+- source Dashboard and source daemon start together with one command and matching API versions.
 
 ## Target architecture
 
 ```mermaid
 flowchart LR
-  UI[Dashboard] <-->|HTTP + SSE| D[taskd]
+  UI[Dashboard] <-->|HTTP + SSE| D[daemon]
   D --> DEF[Markdown Schedule Repository]
   D --> CLOCK[Scheduler Clock]
   D --> RUNS[SQLite Run Ledger]
@@ -121,12 +121,12 @@ flowchart LR
 | Component | Owns | Does not own |
 | --- | --- | --- |
 | Dashboard | intent, filtering, editing, Run observation | executable paths, argv, process state, SQLite |
-| `taskd` | APIs, scheduler clock, registry, Runs, events, persistence | agent reasoning or project file tools |
+| `daemon` | APIs, scheduler clock, registry, Runs, events, persistence | agent reasoning or project file tools |
 | Schedule repository | Markdown parsing, validation, atomic writes, watcher refresh | Run history or process lifecycle |
 | Runtime registry | adapter identity and detection orchestration | Schedule cadence or persistence |
 | Runtime adapter | CLI-specific probe, invocation, model parsing, event parsing | HTTP, SQLite, generic timeout/cancel |
 | Process supervisor | spawn, stdin, output limits, cancel, timeout, exit | CLI-specific JSON semantics |
-| local CLI | authentication, agent loop, tools, provider calls, workspace edits | Schedule definition or Tasks Recorder Run state |
+| local CLI | authentication, agent loop, tools, provider calls, workspace edits | Schedule definition or Rillo Run state |
 
 ## Runtime Agent Registry
 
@@ -194,9 +194,9 @@ The resolver follows the same policy for detection, models, and Runs:
 4. `PATH` plus common GUI-missing toolchain directories;
 5. platform-specific resolvers such as Codex.app.
 
-Taskd creates one Runtime Environment and gives that same instance to the resolver and process supervisor. It includes process PATH, static GUI-missing locations, and installed-version directories from fnm, nvm, and mise. Candidates are canonicalized, checked as executable files, deduplicated, and probed in order. The bound applies to actual executable probes, not missing PATH entries; npm-prepended `node_modules/.bin` directories therefore cannot exhaust the budget before Homebrew or a user toolchain path is reached. A broken early shim does not make the runtime unavailable; the resolver continues through a bounded executable count. The child process receives the same environment-derived search directories so an `env node` / `env bun` wrapper that resolved under a GUI-launched daemon remains invocable.
+Daemon creates one Runtime Environment and gives that same instance to the resolver and process supervisor. It includes process PATH, static GUI-missing locations, and installed-version directories from fnm, nvm, and mise. Candidates are canonicalized, checked as executable files, deduplicated, and probed in order. The bound applies to actual executable probes, not missing PATH entries; npm-prepended `node_modules/.bin` directories therefore cannot exhaust the budget before Homebrew or a user toolchain path is reached. A broken early shim does not make the runtime unavailable; the resolver continues through a bounded executable count. The child process receives the same environment-derived search directories so an `env node` / `env bun` wrapper that resolved under a GUI-launched daemon remains invocable.
 
-Successful executable resolution may be cached for a bounded TTL. Failed resolution is evicted immediately: installing a CLI, repairing permissions, or restoring a toolchain path must allow the next status/model/Run request to recover without restarting taskd or waiting for a stale negative cache.
+Successful executable resolution may be cached for a bounded TTL. Failed resolution is evicted immediately: installing a CLI, repairing permissions, or restoring a toolchain path must allow the next status/model/Run request to recover without restarting daemon or waiting for a stale negative cache.
 
 ### Probe isolation
 
@@ -207,7 +207,7 @@ Successful executable resolution may be cached for a bounded TTL. Failed resolut
 - successful detection is cached for a bounded TTL and invalidated after explicit refresh;
 - a Run resolves again through the same resolver instead of trusting a stale UI result.
 
-Authentication is intentionally not a registry-list probe. It is mutable execution state owned by the CLI/provider, and probing it made Dashboard discovery and daemon startup depend on another subprocess. The actual Run is authoritative: authentication failure is recorded as a typed Run failure without hiding the runtime or blocking `taskd` readiness.
+Authentication is intentionally not a registry-list probe. It is mutable execution state owned by the CLI/provider, and probing it made Dashboard discovery and daemon startup depend on another subprocess. The actual Run is authoritative: authentication failure is recorded as a typed Run failure without hiding the runtime or blocking `daemon` readiness.
 
 `codex_path` is no longer required for service startup. A configured path is an override, not an installer-created capability flag. Installer detection may suggest or validate an override, but runtime correctness cannot depend on installation having mutated config.
 
@@ -306,9 +306,9 @@ SQLite stores durable Run lifecycle, session identity, bounded final message, us
 
 ### Restart and interruption
 
-- normal taskd shutdown cancels owned child processes before closing stores;
+- normal daemon shutdown cancels owned child processes before closing stores;
 - at startup, any non-terminal Run from a previous daemon instance becomes `interrupted`;
-- Tasks Recorder does not pretend it can reattach to an unknown child stream;
+- Rillo does not pretend it can reattach to an unknown child stream;
 - a recorded PID is never signaled after restart unless executable identity and ownership can be proven safely;
 - interrupted Runs remain reviewable and can be retried as new Runs.
 
@@ -316,9 +316,9 @@ The objective is honest recovery, not a permanently spinning `running` row.
 
 ## Scheduler clock
 
-The existing per-Schedule launchd backend is removed. The only LaunchAgent is the existing KeepAlive service for `taskd`.
+The existing per-Schedule launchd backend is removed. The only LaunchAgent is the existing KeepAlive service for `daemon`.
 
-`taskd` owns one wall-clock scheduler:
+`daemon` owns one wall-clock scheduler:
 
 - run a tick immediately on startup;
 - run a bounded periodic tick, initially every 30 seconds;
@@ -330,7 +330,7 @@ The existing per-Schedule launchd backend is removed. The only LaunchAgent is th
 - recalculate on timezone or wall-clock change because every tick uses current system time;
 - honor one-active-Run-per-Schedule through the same transaction as manual Runs.
 
-If the Mac is asleep, powered off, or logged out, no CLI runs. On the next taskd tick, the latest missed occurrence may become one catch-up Run. Older missed occurrences are coalesced.
+If the Mac is asleep, powered off, or logged out, no CLI runs. On the next daemon tick, the latest missed occurrence may become one catch-up Run. Older missed occurrences are coalesced.
 
 This preserves the useful behavior of the current design without per-Schedule plists, runner processes, sockets, locks, or completion spools.
 
@@ -403,7 +403,7 @@ The existing Schedule-specific Run action is removed during the source cutover. 
 
 ### Compatibility handshake
 
-`GET /api/v1/meta` exposes service version, API contract version, and capabilities. The source Dashboard checks it before mounting feature routes. A mismatch produces one explicit “source Dashboard / taskd version mismatch” screen with the detected versions and correct development command.
+`GET /api/v1/meta` exposes service version, API contract version, and capabilities. The source Dashboard checks it before mounting feature routes. A mismatch produces one explicit “source Dashboard / daemon version mismatch” screen with the detected versions and correct development command.
 
 ## Dashboard behavior
 
@@ -425,7 +425,7 @@ Add one primary command:
 npm run dev
 ```
 
-It starts a matching source taskd and source Dashboard under one parent process:
+It starts a matching source daemon and source Dashboard under one parent process:
 
 - one source revision and one API contract;
 - loopback-only non-production ports;
@@ -433,14 +433,14 @@ It starts a matching source taskd and source Dashboard under one parent process:
 - live UI rebuild/reload;
 - coordinated shutdown on `Ctrl+C`;
 - startup health and version checks;
-- no dependency on the installed release taskd;
+- no dependency on the installed release daemon;
 - no need to publish or reinstall to inspect source changes.
 
 An advanced UI-only command may continue to proxy an installed service, but the compatibility handshake must reject an incompatible backend before feature rendering.
 
 ## Security boundary
 
-- taskd binds only to `127.0.0.1` and retains Host/Origin checks;
+- daemon binds only to `127.0.0.1` and retains Host/Origin checks;
 - all CLI launches use canonical executable paths, argv arrays, `shell: false`, explicit cwd, bounded output, and timeouts;
 - executable probes run outside project Workspaces;
 - model IDs, reasoning values, runtime IDs, and session IDs use bounded allowlists;
@@ -448,7 +448,7 @@ An advanced UI-only command may continue to proxy an installed service, but the 
 - each adapter declares its sandbox and permission capabilities; the UI must not imply equivalent isolation across runtimes;
 - per-Run capability isolation uses runtime-owned argv/protocol controls and never mutates global CLI configuration; Web Search remains independent from the MCP/App integration policy;
 - logs and SQLite remain local and use private permissions;
-- taskd never assumes that `shell: false` replaces the CLI's own sandbox or approval model.
+- daemon never assumes that `shell: false` replaces the CLI's own sandbox or approval model.
 
 ## Removal and cutover
 
@@ -463,7 +463,7 @@ The implementation removes the old execution path rather than maintaining two su
 - scheduler sync state whose only purpose is per-Schedule launchd reconciliation;
 - runner-owned config parsing and its duplicate `codex_path` dependency.
 
-The taskd service LaunchAgent, Markdown repository, scheduler database, bounded Run logs, Session Resume, and Dashboard SSE infrastructure remain.
+The daemon service LaunchAgent, Markdown repository, scheduler database, bounded Run logs, Session Resume, and Dashboard SSE infrastructure remain.
 
 Cutover is single-path:
 
@@ -515,7 +515,7 @@ Errors retain bounded adapter/runtime details for diagnostics. They do not expos
 ### Integration
 
 - fake runtime process emits events, ignores graceful cancel, exceeds timeout, exits non-zero, and produces malformed output;
-- taskd restart marks a live Run interrupted and never leaves indefinite running state;
+- daemon restart marks a live Run interrupted and never leaves indefinite running state;
 - Markdown watcher changes immediately affect the next scheduler tick;
 - manual and scheduled triggers enter the same RunService;
 - SSE disconnect/reconnect falls back to authoritative Run state;
@@ -528,7 +528,7 @@ Errors retain bounded adapter/runtime details for diagnostics. They do not expos
 - run one bounded Codex task in a disposable Workspace and capture session ID, logs, and terminal state;
 - cancel one real Run;
 - sleep/wake across a due time and verify exactly one catch-up;
-- stop taskd during a real Run and verify `interrupted` recovery;
+- stop daemon during a real Run and verify `interrupted` recovery;
 - run `npm run dev`, edit UI source, and verify live reload without touching the installed service.
 
 ### UI validation
@@ -558,8 +558,8 @@ Implementation must update:
 ### Open Area
 
 - OpenDesign's daemon/registry/spawn/event pattern is documented and source-backed.
-- Current Tasks Recorder has verified duplicate resolver/config paths and a multi-process execution chain.
-- taskd is already a KeepAlive daemon and sole SQLite writer.
+- Current Rillo has verified duplicate resolver/config paths and a multi-process execution chain.
+- daemon is already a KeepAlive daemon and sole SQLite writer.
 - the owner explicitly selected a multi-CLI registry for future adapters.
 
 ### Hidden Area
@@ -570,7 +570,7 @@ Implementation must update:
 ### Blind Spot
 
 - A generic registry can become speculative infrastructure. The contract therefore contains only mechanisms required by Codex and directly evidenced future process adapters; it does not implement a plugin marketplace or dynamic third-party code loading.
-- Moving supervision into taskd means a daemon crash interrupts observation of the child. The design deliberately reports `interrupted` instead of rebuilding the current runner/spool system inside a new abstraction.
+- Moving supervision into daemon means a daemon crash interrupts observation of the child. The design deliberately reports `interrupted` instead of rebuilding the current runner/spool system inside a new abstraction.
 - Different CLIs have different sandbox and permission behavior. A shared UI must preserve those differences instead of presenting a false common security level.
 
 ### Unknown Area
@@ -591,7 +591,7 @@ Implementation must update:
 
 ## Decision
 
-Adopt the OpenDesign-style multi-CLI runtime registry and direct daemon orchestration. Implement Codex as the first adapter. Keep Markdown Schedule definitions and durable Run facts, replace per-Schedule launchd/runner machinery with one taskd wall-clock scheduler, and use the same runtime resolver for detection, models, and execution.
+Adopt the OpenDesign-style multi-CLI runtime registry and direct daemon orchestration. Implement Codex as the first adapter. Keep Markdown Schedule definitions and durable Run facts, replace per-Schedule launchd/runner machinery with one daemon wall-clock scheduler, and use the same runtime resolver for detection, models, and execution.
 
 The architectural invariant is:
 

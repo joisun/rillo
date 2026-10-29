@@ -52,7 +52,7 @@ function createV1(databasePath, { id = randomUUID(), title = 'Legacy brief' } = 
 }
 
 async function fixture(t, legacy = {}) {
-  const root = await mkdtemp(join(tmpdir(), 'tasks-recorder-migration-'))
+  const root = await mkdtemp(join(tmpdir(), 'rillo-migration-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   const databasePath = join(root, 'scheduler.sqlite')
   const definitionsRoot = join(root, 'definitions')
@@ -85,7 +85,7 @@ test('migrates v1 definitions to Markdown and preserves immutable Run history in
 })
 
 test('migrates a v2 ledger in place and preserves pending dispatches and Run history', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'tasks-recorder-migration-v2-'))
+  const root = await mkdtemp(join(tmpdir(), 'rillo-migration-v2-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   const databasePath = join(root, 'scheduler.sqlite')
   const repository = createScheduleDefinitionRepository({ rootDirectory: join(root, 'definitions'), clock: () => new Date(NOW) })

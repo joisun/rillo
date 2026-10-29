@@ -10,7 +10,7 @@ import { createTaskStore } from '../mcp/src/task-store.mjs'
 import { taskInput } from './helpers.mjs'
 
 test('JournalStore creates and composes a canonical schema v3 database', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-journal-store-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-journal-store-'))
   const databasePath = join(directory, 'tasks.sqlite')
   let store
   try {
@@ -61,7 +61,7 @@ test('JournalStore creates and composes a canonical schema v3 database', async (
 })
 
 test('JournalStore refuses v2 without mutating it while the current v2 runtime remains usable', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-journal-v2-gate-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-journal-v2-gate-'))
   const databasePath = join(directory, 'tasks.sqlite')
   let db
   try {

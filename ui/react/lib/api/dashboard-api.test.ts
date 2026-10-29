@@ -54,7 +54,7 @@ describe('DashboardApi', () => {
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
   })
 
-  test('maps Scheduled and Run contracts to exact taskd routes and bodies', async () => {
+  test('maps Scheduled and Run contracts to exact daemon routes and bodies', async () => {
     const calls: Array<{ url: string; method: string; body: unknown }> = []
     const fetchImpl = vi.fn(async (url: RequestInfo | URL, init: RequestInit = {}) => {
       calls.push({

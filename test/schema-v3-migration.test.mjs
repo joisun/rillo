@@ -251,7 +251,7 @@ test('v2 migration keeps conflicting project labels provisional for one exact lo
 })
 
 test('v2 migration rejects a backup path that canonically resolves to the source', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-v3-same-backup-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-v3-same-backup-'))
   const databasePath = join(directory, 'tasks.sqlite')
   try {
     const store = createTaskStore({ databasePath })
@@ -272,7 +272,7 @@ test('v2 migration rejects a backup path that canonically resolves to the source
 })
 
 test('v2 migration backs up then preserves tasks and bound execution facts in schema v3', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-v3-apply-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-v3-apply-'))
   const databasePath = join(directory, 'tasks.sqlite')
   const backupPath = join(directory, 'tasks.v2.backup.sqlite')
   let db
@@ -372,7 +372,7 @@ test('v2 migration backs up then preserves tasks and bound execution facts in sc
 })
 
 test('v2 migration rolls back the source database when transformed rows violate v3', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-v3-rollback-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-v3-rollback-'))
   const databasePath = join(directory, 'tasks.sqlite')
   const backupPath = join(directory, 'tasks.v2.backup.sqlite')
   let db

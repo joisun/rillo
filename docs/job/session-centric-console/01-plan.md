@@ -16,7 +16,7 @@
 
 ## 并行所有权
 
-主agent负责核心SessionBrowser、session-link-store、Codex session adapter、核心新测试、工程文档、README/architecture和dotfiles。UI worker负责ui/react及CSS。服务worker负责API/taskd/MCP/adapters/hooks/CLI及对应test。跨所有权接口先沟通，不撤销彼此改动。
+主agent负责核心SessionBrowser、session-link-store、Codex session adapter、核心新测试、工程文档、README/architecture和dotfiles。UI worker负责ui/react及CSS。服务worker负责API/daemon/MCP/adapters/hooks/CLI及对应test。跨所有权接口先沟通，不撤销彼此改动。
 
 ## 加载性能增量（用户已明确要求“开始推进”）
 

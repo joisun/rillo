@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { startTaskd } from '../server/src/taskd-runtime.mjs'
+import { startDaemon } from '../server/src/daemon-runtime.mjs'
 
 const SESSION_ID = '019fcfae-8d5b-7640-aec8-83a114810589'
 
@@ -117,8 +117,8 @@ async function waitForActiveTurn(url, runId) {
   throw new Error('Run did not expose an active Turn')
 }
 
-for (const crash of [false, true]) test(`taskd executes Markdown Schedules through the direct runtime registry pipeline (crash=${crash})`, async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'tasks-recorder-runtime-e2e-'))
+for (const crash of [false, true]) test(`daemon executes Markdown Schedules through the direct runtime registry pipeline (crash=${crash})`, async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'rillo-runtime-e2e-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   const workspace = join(root, 'workspace')
   const data = join(root, 'data')
@@ -126,7 +126,7 @@ for (const crash of [false, true]) test(`taskd executes Markdown Schedules throu
   await mkdir(data)
   const codexPath = await writeFakeCodex(root, crash)
 
-  const runtime = await startTaskd({
+  const runtime = await startDaemon({
     config: {
       databasePath: join(data, 'journal.sqlite'),
       schedulerDatabasePath: join(data, 'scheduler.sqlite'),
@@ -138,7 +138,7 @@ for (const crash of [false, true]) test(`taskd executes Markdown Schedules throu
       serverPort: 0,
     },
     dashboardPath: join(root, 'index.html'),
-    dashboardHtml: '<!doctype html><title>Tasks Recorder</title>',
+    dashboardHtml: '<!doctype html><title>Rillo</title>',
     gitResolver: async () => ({}),
     renderer: async () => ({}),
     dashboardAdapter: () => ({ generated_at: new Date().toISOString(), tasks: [], warnings: [] }),

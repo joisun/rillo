@@ -50,11 +50,11 @@ test('runtime environment uses one enriched PATH for discovery and child process
   })
 
   const candidates = environment.executableCandidates(CODEX_DEFINITION)
-  const child = environment.childEnvironment({ TASKS_RECORDER_RUN: '1' })
+  const child = environment.childEnvironment({ RILLO_RUN: '1' })
   const childDirectories = child.PATH.split(delimiter)
 
   assert.equal(child.LANG, 'en_US.UTF-8')
-  assert.equal(child.TASKS_RECORDER_RUN, '1')
+  assert.equal(child.RILLO_RUN, '1')
   assert.equal(childDirectories.includes('/opt/homebrew/bin'), true)
   assert.equal(candidates.includes('/opt/homebrew/bin/codex'), true)
   assert.equal(

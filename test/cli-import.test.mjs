@@ -19,7 +19,7 @@ test('CLI opens the configured Dashboard URL without modifying service state', a
   assert.deepEqual(calls, ['http://127.0.0.1:43127'])
 })
 
-test('CLI scheduler commands delegate only to the typed taskd control-plane client', async () => {
+test('CLI scheduler commands delegate only to the typed daemon control-plane client', async () => {
   const calls = []
   const configResolver = async () => ({ serverBaseUrl: 'http://127.0.0.1:43127' })
   const clientFactory = ({ baseUrl }) => ({

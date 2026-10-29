@@ -86,7 +86,7 @@ test('Codex interactive session streams a private Turn and steers it through a p
   assert.deepEqual(client.requests.slice(0, 3), [
     {
       method: 'initialize',
-      params: { clientInfo: { name: 'tasks-recorder', title: 'Tasks Recorder', version: 'source' } },
+      params: { clientInfo: { name: 'rillo', title: 'Rillo', version: 'source' } },
     },
     {
       method: 'thread/start',
@@ -158,7 +158,7 @@ test('Codex interactive session streams a private Turn and steers it through a p
   assert.equal(client.closed, true)
 })
 
-test('Codex interactive session closes promptly when taskd aborts the Run', async () => {
+test('Codex interactive session closes promptly when daemon aborts the Run', async () => {
   const client = fakeClient()
   const controller = new AbortController()
   const factory = createCodexInteractiveSessionFactory({ createClient: () => client })
@@ -236,7 +236,7 @@ test('Codex interactive session applies integration launch isolation and disable
   assert.deepEqual(client.requests.slice(0, 3), [
     {
       method: 'initialize',
-      params: { clientInfo: { name: 'tasks-recorder', title: 'Tasks Recorder', version: 'source' } },
+      params: { clientInfo: { name: 'rillo', title: 'Rillo', version: 'source' } },
     },
     {
       method: 'skills/list',

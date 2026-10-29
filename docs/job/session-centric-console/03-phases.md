@@ -3,7 +3,7 @@
 - status: complete
 - phase: release-v0.9.0
 - current_task: Sessions与Cards完成，重连修复已验收；v0.9.0已发布并更新本地服务和插件
-- worktree: /Users/joi-com/Desktop/space/projects/tasks-recorder/.worktree/feature-session-browser
+- worktree: /Users/joi-com/Desktop/space/projects/rillo/.worktree/feature-session-browser
 - branch: feature/session-browser
 - authorization: 已确认完整计划，并明确要求实施。
 - next: 43127安装版和43129源码预览可用；Cards最近一轮对话预览保留为后续讨论，本期没有实现内容增强。

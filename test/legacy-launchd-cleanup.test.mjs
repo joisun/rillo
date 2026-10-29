@@ -7,7 +7,7 @@ import test from 'node:test'
 import { cleanupLegacyScheduleLaunchAgents } from '../server/src/scheduler/legacy-launchd-cleanup.mjs'
 
 const JOB_ID = '11111111-1111-4111-8111-111111111111'
-const LABEL = `com.joi.tasks-recorder.schedule.${JOB_ID}`
+const LABEL = `com.joi.rillo.schedule.${JOB_ID}`
 
 function legacyPlist({ label = LABEL, jobId = JOB_ID } = {}) {
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -17,7 +17,7 @@ function legacyPlist({ label = LABEL, jobId = JOB_ID } = {}) {
 <key>ProgramArguments</key>
 <array>
 <string>/usr/local/bin/node</string>
-<string>/opt/tasks-recorder/server/scheduled-runner.mjs</string>
+<string>/opt/rillo/server/scheduled-runner.mjs</string>
 <string>${jobId}</string>
 </array>
 </dict></plist>
@@ -25,7 +25,7 @@ function legacyPlist({ label = LABEL, jobId = JOB_ID } = {}) {
 }
 
 test('cleanup removes only a private legacy Schedule LaunchAgent and is idempotent', async (t) => {
-  const home = await mkdtemp(join(tmpdir(), 'tasks-recorder-launchd-cleanup-'))
+  const home = await mkdtemp(join(tmpdir(), 'rillo-launchd-cleanup-'))
   t.after(() => rm(home, { recursive: true, force: true }))
   const directory = join(home, 'Library', 'LaunchAgents')
   await mkdir(directory, { recursive: true })
@@ -62,7 +62,7 @@ test('cleanup removes only a private legacy Schedule LaunchAgent and is idempote
 })
 
 test('cleanup reports unsafe matching files without touching them', async (t) => {
-  const home = await mkdtemp(join(tmpdir(), 'tasks-recorder-launchd-cleanup-'))
+  const home = await mkdtemp(join(tmpdir(), 'rillo-launchd-cleanup-'))
   t.after(() => rm(home, { recursive: true, force: true }))
   const directory = join(home, 'Library', 'LaunchAgents')
   await mkdir(directory, { recursive: true })
@@ -70,7 +70,7 @@ test('cleanup reports unsafe matching files without touching them', async (t) =>
   const target = join(home, 'target.plist')
   await writeFile(target, legacyPlist(), { mode: 0o600 })
   await symlink(target, unsafe)
-  const malformed = 'com.joi.tasks-recorder.schedule.not-a-uuid.plist'
+  const malformed = 'com.joi.rillo.schedule.not-a-uuid.plist'
   await writeFile(join(directory, malformed), legacyPlist({
     label: malformed.slice(0, -6),
   }), { mode: 0o600 })
@@ -89,7 +89,7 @@ test('cleanup reports unsafe matching files without touching them', async (t) =>
 })
 
 test('cleanup removes an owned plist when its legacy job is already unloaded', async (t) => {
-  const home = await mkdtemp(join(tmpdir(), 'tasks-recorder-launchd-cleanup-'))
+  const home = await mkdtemp(join(tmpdir(), 'rillo-launchd-cleanup-'))
   t.after(() => rm(home, { recursive: true, force: true }))
   const directory = join(home, 'Library', 'LaunchAgents')
   await mkdir(directory, { recursive: true })

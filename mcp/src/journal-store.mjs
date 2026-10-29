@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-import { TaskRecorderError } from './errors.mjs'
+import { RilloError } from './errors.mjs'
 import { createProjectStore } from './project-store.mjs'
 import { checkSchemaV3Invariants, createSchemaV3, SCHEMA_V3 } from './schema-v3.mjs'
 import { createV3TaskStore } from './v3-task-store.mjs'
@@ -50,13 +50,13 @@ function initializeJournalSchema(db) {
   }
   if (version === SCHEMA_V3) return
   if (version === 1 || version === 2) {
-    throw new TaskRecorderError(
+    throw new RilloError(
       'SCHEMA_MIGRATION_REQUIRED',
       `database schema version ${version} must be explicitly migrated to version ${SCHEMA_V3}`,
       { expected: SCHEMA_V3, actual: version },
     )
   }
-  throw new TaskRecorderError(
+  throw new RilloError(
     'SCHEMA_VERSION_UNSUPPORTED',
     `database schema version ${version} is unsupported`,
     { expected: SCHEMA_V3, actual: version },

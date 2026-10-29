@@ -28,7 +28,7 @@ function schedule(overrides = {}) {
 }
 
 async function withStore(t, run) {
-  const root = await mkdtemp(join(tmpdir(), 'tasks-recorder-run-store-'))
+  const root = await mkdtemp(join(tmpdir(), 'rillo-run-store-'))
   const databasePath = join(root, 'runs.sqlite')
   let nextId = 0
   const store = createRunStore({

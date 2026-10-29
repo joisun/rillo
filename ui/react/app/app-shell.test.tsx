@@ -9,7 +9,7 @@ import { AppProviders } from './app-providers'
 import { DashboardApp } from './dashboard-app'
 
 const meta: DashboardMeta = {
-  service: 'tasks-recorder',
+  service: 'rillo',
   service_version: '0.8.0',
   api_version: 'v1',
   capabilities: {
@@ -136,7 +136,7 @@ test('only Sessions and Scheduled remain and old Tasks URLs open activity', asyn
   window.history.replaceState(null, '', '/?view=tasks')
   const api = dashboardApi()
   renderApp(api)
-  expect(screen.getByRole('heading', { name: 'Tasks Recorder' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Rillo' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Sessions' })).toHaveAttribute('aria-current', 'page')
   expect(screen.queryByRole('button', { name: 'Tasks' })).not.toBeInTheDocument()
   expect(screen.getByRole('region', { name: '活跃时间轴' })).toBeInTheDocument()

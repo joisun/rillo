@@ -6,7 +6,7 @@
 
 ## Purpose
 
-Move Scheduled Tasks and Run Review into the React Dashboard, then use a controlled subset of Vercel AI Elements for active Codex Live Sessions. The result preserves taskd as the runtime owner, dotUI as the only generic UI system, and the existing privacy boundary around ephemeral conversation content.
+Move Scheduled Tasks and Run Review into the React Dashboard, then use a controlled subset of Vercel AI Elements for active Codex Live Sessions. The result preserves daemon as the runtime owner, dotUI as the only generic UI system, and the existing privacy boundary around ephemeral conversation content.
 
 ## First-principles model
 
@@ -16,7 +16,7 @@ Let the user move from a Schedule to its active Run, understand live Agent outpu
 
 ### Facts
 
-- taskd already exposes Schedule, Run, log, Resume, steer, Stop, and Run-specific SSE contracts;
+- daemon already exposes Schedule, Run, log, Resume, steer, Stop, and Run-specific SSE contracts;
 - the Legacy Dashboard proves the end-to-end behavior but owns state through imperative DOM rendering;
 - the React Dashboard currently renders only Tasks and disables Scheduled navigation;
 - AI Elements provides source-owned React conversation components but its installer assumes shadcn generic primitives;
@@ -25,7 +25,7 @@ Let the user move from a Schedule to its active Run, understand live Agent outpu
 
 ### Constraints
 
-- no taskd, SQLite, Runtime Registry, Schedule file, Run API, SSE, Terminal Resume, or privacy-contract changes;
+- no daemon, SQLite, Runtime Registry, Schedule file, Run API, SSE, Terminal Resume, or privacy-contract changes;
 - do not add `@ai-sdk/react`, `useChat`, AI Gateway, or another runtime transport;
 - do not install shadcn Button, Tooltip, Select, Dialog, Dropdown Menu, or theme tokens;
 - vendor only reviewed AI Elements source required by Live Session;
@@ -51,7 +51,7 @@ Let the user move from a Schedule to its active Run, understand live Agent outpu
 ```mermaid
 flowchart LR
   NAV[React navigation] --> SCHEDULED[Scheduled workspace]
-  SCHEDULED --> API[Existing taskd REST]
+  SCHEDULED --> API[Existing daemon REST]
   SCHEDULED --> REVIEW[Run Review drawer]
   REVIEW --> LIVE[Live Run adapter]
   REVIEW --> HISTORY[Runtime conversation reader]
@@ -59,7 +59,7 @@ flowchart LR
   LIVE --> API
   LIVE --> ELEMENTS[AI Elements presentation]
   ELEMENTS --> DOTUI[dotUI controls]
-  API --> TASKD[taskd RunService and Scheduler]
+  API --> DAEMON[daemon RunService and Scheduler]
 ```
 
 | Unit | Owns | Does not own |
@@ -81,7 +81,7 @@ flowchart LR
 5. The reducer merges `assistant_delta` by `item_id`, upserts activity by `item_id`, tracks the public `turn_revision`, and reconciles terminal state through a fresh detail request.
 6. AI Elements renders messages and scrolling only. Product activity rows stay compact because public events intentionally omit raw tool input/output.
 7. The composer submits `{ expected_turn_revision, text }`; Stop submits `{ expected_turn_revision }`. Rejected guidance remains in the local draft.
-8. A terminal Run submits only its Run ID; taskd resolves canonical runtime/session facts and the adapter calls the CLI protocol `thread/read` on demand.
+8. A terminal Run submits only its Run ID; daemon resolves canonical runtime/session facts and the adapter calls the CLI protocol `thread/read` on demand.
 
 ## AI Elements boundary
 
@@ -92,7 +92,7 @@ Use reviewed official registry source for:
 
 `MessageResponse` keeps Streamdown-based streaming Markdown. Generic Button/Tooltip imports are adapted to repository dotUI components. Branching, attachments, reasoning, download, model picker, AI SDK hooks, and the full official Prompt Input are excluded because the Run contract does not support those semantics.
 
-The composer is a Tasks Recorder component built from React Aria/dotUI. The official Prompt Input is deliberately excluded because its registry pulls shadcn command, dropdown, hover-card, select, spinner, tooltip, attachment, and model-selection primitives that this product does not need.
+The composer is a Rillo component built from React Aria/dotUI. The official Prompt Input is deliberately excluded because its registry pulls shadcn command, dropdown, hover-card, select, spinner, tooltip, attachment, and model-selection primitives that this product does not need.
 
 ## Experience
 
@@ -161,7 +161,7 @@ The composer is a Tasks Recorder component built from React Aria/dotUI. The offi
 
 ### Hidden area
 
-- a Tasks Recorder-owned durable transcript or transcript search would still require a separate privacy/storage decision;
+- a Rillo-owned durable transcript or transcript search would still require a separate privacy/storage decision;
 - approval UI needs new protocol events and is outside this integration.
 
 ### Blind spots

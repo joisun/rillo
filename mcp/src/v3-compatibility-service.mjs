@@ -4,7 +4,7 @@ import { access as fsAccess, stat as fsStat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 
 import { createJournalDashboardSnapshot } from './dashboard-data.mjs'
-import { TaskRecorderError } from './errors.mjs'
+import { RilloError } from './errors.mjs'
 
 const TERMINAL = new Set(['done', 'canceled'])
 const LIFECYCLE_PRIORITY = new Map([
@@ -28,7 +28,7 @@ function compatibility(replacement, extra = {}) {
 
 function requiredString(value, field) {
   if (typeof value !== 'string' || value.trim() === '') {
-    throw new TaskRecorderError('COMPATIBILITY_INPUT_INVALID', `${field} must be a non-empty string`, {
+    throw new RilloError('COMPATIBILITY_INPUT_INVALID', `${field} must be a non-empty string`, {
       field,
     })
   }
@@ -372,7 +372,7 @@ export function createV3CompatibilityService({
       children: result.children.map((task) => legacyTask(task, snapshot)),
       progress: result.progress,
       sessions: taskSessions(snapshot, result.task.id),
-      compatibility: compatibility('agent_tasks_mutate'),
+      compatibility: compatibility('rillo_mutate'),
     }
   }
 
@@ -438,7 +438,7 @@ export function createV3CompatibilityService({
       task: legacyTaskResult(result.task),
       changed: result.changed,
       bound_execution: bound,
-      compatibility: compatibility('agent_tasks_mutate'),
+      compatibility: compatibility('rillo_mutate'),
     }, { task_id: result.task.id })
   }
 
@@ -453,7 +453,7 @@ export function createV3CompatibilityService({
     return publish('legacy.complete', {
       task: legacyTaskResult(result.task),
       changed: result.changed,
-      compatibility: compatibility('agent_tasks_mutate'),
+      compatibility: compatibility('rillo_mutate'),
     }, { task_id: result.task.id })
   }
 
@@ -516,7 +516,7 @@ export function createV3CompatibilityService({
       removed: result.removed.map((task) => legacyTask(task, snapshot)),
       focused_task: focusId ? legacyTask(store.tasks.show(focusId).task, snapshot) : null,
       bound_execution: bound,
-      compatibility: compatibility('agent_tasks_sync_structure'),
+      compatibility: compatibility('rillo_sync_structure'),
     }
   }
 
@@ -540,14 +540,14 @@ export function createV3CompatibilityService({
     })
     return publish('legacy.updateTask', {
       task: legacyTaskResult(result.task), changed: result.changed,
-      compatibility: compatibility('agent_tasks_mutate'),
+      compatibility: compatibility('rillo_mutate'),
     }, { task_id: result.task.id })
   }
 
   async function updateStatus(input) {
     const current = store.tasks.show(input.id).task
     if (input.expected_updated_at && input.expected_updated_at !== current.updated_at) {
-      throw new TaskRecorderError('TASK_VERSION_CONFLICT', `task ${input.id} was updated`, {
+      throw new RilloError('TASK_VERSION_CONFLICT', `task ${input.id} was updated`, {
         id: input.id,
         expected_updated_at: input.expected_updated_at,
         task: legacyTaskResult(current),
@@ -561,7 +561,7 @@ export function createV3CompatibilityService({
     })
     return publish('legacy.updateStatus', {
       task: legacyTaskResult(result.task), changed: result.changed,
-      compatibility: compatibility('agent_tasks_mutate'),
+      compatibility: compatibility('rillo_mutate'),
     }, { task_id: result.task.id })
   }
 
@@ -642,7 +642,7 @@ export function createV3CompatibilityService({
     return publish(`legacy.${operation}`, {
       task: legacyTaskResult(result.task),
       changed: result.changed,
-      compatibility: compatibility('agent_tasks_mutate'),
+      compatibility: compatibility('rillo_mutate'),
     }, { task_id: result.task.id })
   }
 

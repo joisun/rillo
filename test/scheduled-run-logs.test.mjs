@@ -20,7 +20,7 @@ function storeFor(run) {
 }
 
 async function fixture(overrides = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-scheduled-logs-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-scheduled-logs-'))
   const root = join(directory, 'logs')
   const jobDirectory = join(root, JOB_ID)
   const stdout = join(jobDirectory, `${RUN_ID}.stdout.jsonl`)
@@ -89,8 +89,8 @@ test('rejects unknown streams and tails outside the public bounded reader contra
   } finally { await current.cleanup() }
 })
 
-test('taskd-owned log store creates bounded private Run streams', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-run-log-writer-'))
+test('daemon-owned log store creates bounded private Run streams', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-run-log-writer-'))
   const root = join(directory, 'logs')
   try {
     const writerStore = createRunLogStore({ root, maxFileBytes: 8 })

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a source-development Dashboard at `127.0.0.1:43128` that rebuilds and reloads automatically while using the installed taskd at `127.0.0.1:43127` for authoritative REST/SSE data.
+**Goal:** Add a source-development Dashboard at `127.0.0.1:43128` that rebuilds and reloads automatically while using the installed daemon at `127.0.0.1:43127` for authoritative REST/SSE data.
 
-**Architecture:** Extract the existing single-file Dashboard compiler, then compose a loopback-only HTTP gateway with a streaming taskd proxy and a separate dev reload SSE channel. A source watcher owns last-good build state; taskd remains the only SQLite owner and the production/release bundle remains dev-code-free.
+**Architecture:** Extract the existing single-file Dashboard compiler, then compose a loopback-only HTTP gateway with a streaming daemon proxy and a separate dev reload SSE channel. A source watcher owns last-good build state; daemon remains the only SQLite owner and the production/release bundle remains dev-code-free.
 
 **Tech Stack:** Node.js 24 native HTTP/filesystem APIs, esbuild 0.28.2, ESM, `node:test`, Playwright MCP (`playwright-headless`).
 
@@ -12,11 +12,11 @@
 
 ## Global Constraints
 
-- Work only in `/Users/joi-com/Desktop/space/projects/tasks-recorder/.worktree/feature-dashboard-dev-gateway` on branch `feature/dashboard-dev-gateway`.
+- Work only in `/Users/joi-com/Desktop/space/projects/rillo/.worktree/feature-dashboard-dev-gateway` on branch `feature/dashboard-dev-gateway`.
 - Before every edit or verification, confirm `git rev-parse --show-toplevel` equals that exact worktree path.
 - Use TDD for every production behavior: add a focused failing test, observe the expected failure, make the smallest implementation pass, then run affected regressions.
 - Bind only to `127.0.0.1`; reject non-loopback upstreams, credentials, paths, query strings, fragments, invalid ports, and matching dev/upstream ports.
-- Keep taskd at `43127` as the only SQLite owner. The gateway must not import stores, services, config files, or database modules.
+- Keep daemon at `43127` as the only SQLite owner. The gateway must not import stores, services, config files, or database modules.
 - Preserve API methods, query strings, bodies, response status, business headers, and streaming SSE. Validate dev `Host`/`Origin`, then rewrite them specifically for the validated upstream.
 - Do not add CORS, remote assets, telemetry, auth tokens, Vite, chokidar, or another dependency.
 - A failed runtime build keeps last-good HTML. An initial build failure exits before opening a listener.
@@ -60,11 +60,11 @@ test('compiler returns the tracked production dashboard without dev code', async
   ])
 
   assert.equal(compiled, tracked)
-  assert.doesNotMatch(compiled, /__tasks_recorder_dev|43128|dev reload/i)
+  assert.doesNotMatch(compiled, /__rillo_dev|43128|dev reload/i)
 })
 
 test('writer atomically publishes only a successful compilation', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-compiler-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-compiler-'))
   const outputPath = join(directory, 'index.html')
   try {
     const result = await writeDashboard({
@@ -223,7 +223,7 @@ import {
   resolveDashboardDevConfig,
 } from '../ui/dev-gateway.mjs'
 
-test('dev config defaults to a distinct loopback listener and taskd upstream', () => {
+test('dev config defaults to a distinct loopback listener and daemon upstream', () => {
   const config = resolveDashboardDevConfig({ env: {} })
   assert.deepEqual(
     { host: config.host, port: config.port, upstream: config.upstream.href },
@@ -234,28 +234,28 @@ test('dev config defaults to a distinct loopback listener and taskd upstream', (
 test('dev config accepts valid overrides and rejects unsafe endpoints', () => {
   const overridden = resolveDashboardDevConfig({
     env: {
-      TASKS_RECORDER_DEV_PORT: '44128',
-      TASKS_RECORDER_DEV_UPSTREAM: 'http://127.0.0.1:44127',
+      RILLO_DEV_PORT: '44128',
+      RILLO_DEV_UPSTREAM: 'http://127.0.0.1:44127',
     },
   })
   assert.equal(overridden.port, 44128)
   assert.equal(overridden.upstream.href, 'http://127.0.0.1:44127/')
 
   for (const env of [
-    { TASKS_RECORDER_DEV_PORT: '0' },
-    { TASKS_RECORDER_DEV_PORT: '43127' },
-    { TASKS_RECORDER_DEV_UPSTREAM: 'http://0.0.0.0:43127' },
-    { TASKS_RECORDER_DEV_UPSTREAM: 'https://127.0.0.1:43127' },
-    { TASKS_RECORDER_DEV_UPSTREAM: 'http://user:pass@127.0.0.1:43127' },
-    { TASKS_RECORDER_DEV_UPSTREAM: 'http://127.0.0.1:43127/api' },
+    { RILLO_DEV_PORT: '0' },
+    { RILLO_DEV_PORT: '43127' },
+    { RILLO_DEV_UPSTREAM: 'http://0.0.0.0:43127' },
+    { RILLO_DEV_UPSTREAM: 'https://127.0.0.1:43127' },
+    { RILLO_DEV_UPSTREAM: 'http://user:pass@127.0.0.1:43127' },
+    { RILLO_DEV_UPSTREAM: 'http://127.0.0.1:43127/api' },
   ]) assert.throws(() => resolveDashboardDevConfig({ env }), /dev|port|upstream|loopback/i)
 })
 
 test('reload client is injected once and remains absent from source HTML', () => {
   const source = '<!doctype html><body><main>Dashboard</main></body>'
   const injected = injectDashboardReloadClient(source)
-  assert.doesNotMatch(source, /__tasks_recorder_dev/)
-  assert.equal((injected.match(/__tasks_recorder_dev\/reload/g) ?? []).length, 1)
+  assert.doesNotMatch(source, /__rillo_dev/)
+  assert.equal((injected.match(/__rillo_dev\/reload/g) ?? []).length, 1)
   assert.match(injected, /new EventSource/)
   assert.match(injected, /addEventListener\(['\"]reload['\"]/)
   assert.match(injected, /location\.reload/)
@@ -288,29 +288,29 @@ function portValue(value, field) {
 }
 
 export function resolveDashboardDevConfig({ env = process.env } = {}) {
-  const port = portValue(env.TASKS_RECORDER_DEV_PORT ?? 43128, 'TASKS_RECORDER_DEV_PORT')
-  const upstream = new URL(env.TASKS_RECORDER_DEV_UPSTREAM ?? 'http://127.0.0.1:43127')
+  const port = portValue(env.RILLO_DEV_PORT ?? 43128, 'RILLO_DEV_PORT')
+  const upstream = new URL(env.RILLO_DEV_UPSTREAM ?? 'http://127.0.0.1:43127')
   if (upstream.protocol !== 'http:' || upstream.hostname !== LOOPBACK) {
-    throw new Error('TASKS_RECORDER_DEV_UPSTREAM must be an HTTP loopback URL')
+    throw new Error('RILLO_DEV_UPSTREAM must be an HTTP loopback URL')
   }
   if (upstream.username || upstream.password || !['', '/'].includes(upstream.pathname)
     || upstream.search || upstream.hash) {
-    throw new Error('TASKS_RECORDER_DEV_UPSTREAM must not contain credentials, path, query, or hash')
+    throw new Error('RILLO_DEV_UPSTREAM must not contain credentials, path, query, or hash')
   }
-  const upstreamPort = portValue(upstream.port || 80, 'TASKS_RECORDER_DEV_UPSTREAM port')
+  const upstreamPort = portValue(upstream.port || 80, 'RILLO_DEV_UPSTREAM port')
   if (port === upstreamPort) throw new Error('dev port must differ from upstream port')
   return { host: LOOPBACK, port, upstream }
 }
 
-const reloadClient = `<script data-tasks-recorder-dev-reload>
+const reloadClient = `<script data-rillo-dev-reload>
 (() => {
-  const source = new EventSource('/__tasks_recorder_dev/reload')
+  const source = new EventSource('/__rillo_dev/reload')
   source.addEventListener('reload', () => globalThis.location.reload())
 })()
 </script>`
 
 export function injectDashboardReloadClient(html) {
-  if (html.includes('data-tasks-recorder-dev-reload')) return html
+  if (html.includes('data-rillo-dev-reload')) return html
   if (!html.includes('</body>')) throw new Error('Dashboard HTML is missing </body>')
   return html.replace('</body>', `${reloadClient}\n</body>`)
 }
@@ -390,7 +390,7 @@ test('gateway serves HTML and securely proxies methods, origins, bodies, and SSE
         origin: request.headers.origin,
         body: Buffer.concat(chunks).toString('utf8'),
       })
-      response.writeHead(207, { 'Content-Type': 'application/json', 'X-Upstream': 'taskd' })
+      response.writeHead(207, { 'Content-Type': 'application/json', 'X-Upstream': 'daemon' })
       response.end('{"ok":true}')
     })
   })
@@ -409,7 +409,7 @@ test('gateway serves HTML and securely proxies methods, origins, bodies, and SSE
     assert.match(htmlResponse.headers.get('content-security-policy'), /connect-src 'self'/)
     const html = await htmlResponse.text()
     assert.match(html, /source/)
-    assert.match(html, /__tasks_recorder_dev\/reload/)
+    assert.match(html, /__rillo_dev\/reload/)
 
     const mutation = await fetch(`${address.url}/api/v1/tasks/example`, {
       method: 'PATCH',
@@ -417,7 +417,7 @@ test('gateway serves HTML and securely proxies methods, origins, bodies, and SSE
       body: '{"status":"done"}',
     })
     assert.equal(mutation.status, 207)
-    assert.equal(mutation.headers.get('x-upstream'), 'taskd')
+    assert.equal(mutation.headers.get('x-upstream'), 'daemon')
     assert.deepEqual(seen[0], {
       method: 'PATCH', url: '/api/v1/tasks/example',
       host: upstream.host, origin: upstream.origin, body: '{"status":"done"}',
@@ -460,7 +460,7 @@ test('gateway returns bounded 502 and keeps serving HTML when upstream is unavai
       ok: false,
       error: {
         code: 'DEV_UPSTREAM_UNAVAILABLE',
-        message: 'Tasks Recorder upstream is unavailable',
+        message: 'Rillo upstream is unavailable',
       },
     })
     assert.match(await fetch(address.url).then((response) => response.text()), /last good/)
@@ -477,7 +477,7 @@ test('gateway broadcasts one reload event on the dedicated dev SSE channel', asy
   const address = await gateway.listen()
   let reader
   try {
-    const response = await fetch(`${address.url}/__tasks_recorder_dev/reload`)
+    const response = await fetch(`${address.url}/__rillo_dev/reload`)
     reader = response.body.getReader()
     assert.match(await readSseEvent(reader), /event: ready/)
     gateway.broadcastReload()
@@ -496,12 +496,12 @@ Use `node:http` `createServer` and `request`, not `fetch`, so request bodies and
 ```js
 validateRequestBoundary(request, expectedHost, devOrigin)
 if (GET / or /index.html) send injected getHtml()
-else if (GET /__tasks_recorder_dev/reload) attachReloadClient(response)
+else if (GET /__rillo_dev/reload) attachReloadClient(response)
 else if (pathname starts /api/ or /health/) proxyRequest(request, response, upstream)
 else send 404
 ```
 
-The HTML response must use `Content-Type: text/html; charset=utf-8`, `Cache-Control: no-cache`, `X-Content-Type-Options: nosniff`, and the same loopback-only Content Security Policy as taskd (`default-src 'self'`, inline script/style for the self-contained bundle, `connect-src 'self'`, data image/font, and `frame-ancestors 'none'`). Error and 404 responses use JSON with `Cache-Control: no-store`.
+The HTML response must use `Content-Type: text/html; charset=utf-8`, `Cache-Control: no-cache`, `X-Content-Type-Options: nosniff`, and the same loopback-only Content Security Policy as daemon (`default-src 'self'`, inline script/style for the self-contained bundle, `connect-src 'self'`, data image/font, and `frame-ancestors 'none'`). Error and 404 responses use JSON with `Cache-Control: no-store`.
 
 Define the hop-by-hop set exactly as:
 
@@ -515,7 +515,7 @@ const hopByHopHeaders = new Set([
 For proxy request headers, copy entries not in that set, set `host` to `upstream.host`, and only when incoming `origin` exists set it to `upstream.origin`. Pipe `request` into the upstream request. Copy non-hop-by-hop response headers and pipe the upstream response into the browser response. Before response headers are sent, map upstream connection errors to:
 
 ```json
-{"ok":false,"error":{"code":"DEV_UPSTREAM_UNAVAILABLE","message":"Tasks Recorder upstream is unavailable"}}
+{"ok":false,"error":{"code":"DEV_UPSTREAM_UNAVAILABLE","message":"Rillo upstream is unavailable"}}
 ```
 
 with status `502`, `Content-Type: application/json; charset=utf-8`, and `Cache-Control: no-store`. Do not expose the original socket error.
@@ -697,7 +697,7 @@ test('runtime serves the initial build then reloads after a watched successful b
   let reader
   try {
     assert.match(await fetch(runtime.address.url).then((response) => response.text()), /initial/)
-    const reload = await fetch(`${runtime.address.url}/__tasks_recorder_dev/reload`)
+    const reload = await fetch(`${runtime.address.url}/__rillo_dev/reload`)
     reader = reload.body.getReader()
     assert.match(await readSseEvent(reader), /event: ready/)
 
@@ -744,7 +744,7 @@ test('runtime keeps last-good HTML after failure and reloads after recovery', as
   })
   let reader
   try {
-    const reload = await fetch(`${runtime.address.url}/__tasks_recorder_dev/reload`)
+    const reload = await fetch(`${runtime.address.url}/__rillo_dev/reload`)
     reader = reload.body.getReader()
     assert.match(await readSseEvent(reader), /event: ready/)
     const pendingReload = readSseEvent(reader)
@@ -847,9 +847,9 @@ import { startDashboardDevRuntime } from './dev-runtime.mjs'
 try {
   const config = resolveDashboardDevConfig()
   const runtime = await startDashboardDevRuntime({ config })
-  process.stderr.write(`Tasks Recorder source Dashboard: ${runtime.address.url}\n`)
-  process.stderr.write(`Live taskd upstream: ${config.upstream.origin}\n`)
-  process.stderr.write('Warning: Dashboard mutations update your real local Tasks Recorder data.\n')
+  process.stderr.write(`Rillo source Dashboard: ${runtime.address.url}\n`)
+  process.stderr.write(`Live daemon upstream: ${config.upstream.origin}\n`)
+  process.stderr.write('Warning: Dashboard mutations update your real local Rillo data.\n')
   let stopping = false
   async function stop() {
     if (stopping) return
@@ -859,7 +859,7 @@ try {
   process.once('SIGINT', () => { stop().finally(() => process.exit(0)) })
   process.once('SIGTERM', () => { stop().finally(() => process.exit(0)) })
 } catch (error) {
-  process.stderr.write(`Tasks Recorder Dashboard dev server failed: ${error.message}\n`)
+  process.stderr.write(`Rillo Dashboard dev server failed: ${error.message}\n`)
   process.exitCode = 1
 }
 ```
@@ -883,7 +883,7 @@ npm run check
 
 Expected: all PASS and syntax output includes the new modules in its source-file count.
 
-With the installed taskd already ready at `43127`, start:
+With the installed daemon already ready at `43127`, start:
 
 ```bash
 npm run dev:ui
@@ -923,19 +923,19 @@ git commit -m "feat(ui): add live dashboard development workflow"
 In `## Develop from source`, after `npm ci`, add the primary UI loop:
 
 ~~~markdown
-保持已安装的 taskd 在 `http://127.0.0.1:43127` 运行，然后启动源码 Dashboard：
+保持已安装的 daemon 在 `http://127.0.0.1:43127` 运行，然后启动源码 Dashboard：
 
 ```bash
 npm run dev:ui
 ```
 
-打开 <http://127.0.0.1:43128>。`ui/src` 构建成功后页面会自动刷新；实时 snapshot、任务变更 SSE 和 API 操作仍由 `43127` 的正式 taskd 提供，不需要发布 Release 或重新安装。
+打开 <http://127.0.0.1:43128>。`ui/src` 构建成功后页面会自动刷新；实时 snapshot、任务变更 SSE 和 API 操作仍由 `43127` 的正式 daemon 提供，不需要发布 Release 或重新安装。
 
-`43128` 页面中的编辑、归属和状态修改会写入当前真实本机数据库。只做视觉检查时不要触发 mutation；需要其他端口或 taskd upstream 时使用：
+`43128` 页面中的编辑、归属和状态修改会写入当前真实本机数据库。只做视觉检查时不要触发 mutation；需要其他端口或 daemon upstream 时使用：
 
 ```bash
-TASKS_RECORDER_DEV_PORT=44128 \
-TASKS_RECORDER_DEV_UPSTREAM=http://127.0.0.1:44127 \
+RILLO_DEV_PORT=44128 \
+RILLO_DEV_UPSTREAM=http://127.0.0.1:44127 \
 npm run dev:ui
 ```
 
@@ -958,30 +958,30 @@ bash -n install.sh
 git diff --check
 ```
 
-Expected: every command exits `0`; production UI contains no `__tasks_recorder_dev`, `43128`, or reload client. Record exact test and syntax counts in the spec closeout note.
+Expected: every command exits `0`; production UI contains no `__rillo_dev`, `43128`, or reload client. Record exact test and syntax counts in the spec closeout note.
 
 - [x] **Step 3: Verify release archives exclude dev source runtime**
 
 Run:
 
 ```bash
-for archive in release/tasks-recorder-macos.tar.gz release/tasks-recorder-codex-adapter.tar.gz release/tasks-recorder-claude-adapter.tar.gz; do
+for archive in release/rillo-macos.tar.gz release/rillo-codex-adapter.tar.gz release/rillo-claude-adapter.tar.gz; do
   tar -tzf "$archive" >/dev/null
 done
-tar -tzf release/tasks-recorder-macos.tar.gz | rg 'ui/(dev-|compiler\.mjs)' && exit 1 || true
-rg -n '__tasks_recorder_dev|43128|data-tasks-recorder-dev-reload' ui/dist/index.html && exit 1 || true
+tar -tzf release/rillo-macos.tar.gz | rg 'ui/(dev-|compiler\.mjs)' && exit 1 || true
+rg -n '__rillo_dev|43128|data-rillo-dev-reload' ui/dist/index.html && exit 1 || true
 ```
 
 Expected: archives are readable and both negative scans produce no matches.
 
 - [x] **Step 4: Run Playwright headless against the real dev gateway**
 
-Use the existing `playwright-headless` MCP server. Keep installed taskd `43127` ready and run `npm run dev:ui` in this worktree. At `1440×900` open `http://127.0.0.1:43128` and verify:
+Use the existing `playwright-headless` MCP server. Keep installed daemon `43127` ready and run `npm run dev:ui` in this worktree. At `1440×900` open `http://127.0.0.1:43128` and verify:
 
 - title and Project-first Grid/Timeline render from source HTML;
 - `GET /api/v1/snapshot` through `43128` returns `200`;
-- Dashboard `/api/v1/events` remains open and receives the taskd `ready` event;
-- dev `/__tasks_recorder_dev/reload` remains open and receives its own `ready` event;
+- Dashboard `/api/v1/events` remains open and receives the daemon `ready` event;
+- dev `/__rillo_dev/reload` remains open and receives its own `ready` event;
 - console has zero errors and zero warnings;
 - no mutation control is activated during this production-data smoke.
 

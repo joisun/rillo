@@ -1,0 +1,21 @@
+{
+  "name": "rillo",
+  "displayName": "Rillo",
+  "version": "0.15.0",
+  "description": "Search native sessions, read conversation history and manage scheduled automation.",
+  "author": {
+    "name": "Joi Sun",
+    "url": "https://github.com/joisun"
+  },
+  "homepage": "https://github.com/joisun/rillo",
+  "repository": "https://github.com/joisun/rillo",
+  "license": "GPL-2.0-only",
+  "keywords": [
+    "sessions",
+    "claude",
+    "mcp",
+    "dashboard"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

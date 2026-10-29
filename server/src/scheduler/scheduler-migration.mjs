@@ -293,7 +293,7 @@ function migrateRunStatus(status) {
 function migrationErrorCode(legacy, status) {
   if (legacy.status === 'skipped_overlap') return legacy.error_code ?? 'SCHEDULE_OVERLAP'
   if (status === 'interrupted') {
-    return legacy.error_code ?? 'TASKD_MIGRATION_INTERRUPTED'
+    return legacy.error_code ?? 'DAEMON_MIGRATION_INTERRUPTED'
   }
   return legacy.error_code
 }

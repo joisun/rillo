@@ -13,11 +13,11 @@ test('compiler returns the tracked production dashboard without dev code', async
   ])
 
   assert.equal(compiled, tracked)
-  assert.doesNotMatch(compiled, /__tasks_recorder_dev|43128|dev reload/i)
+  assert.doesNotMatch(compiled, /__rillo_dev|43128|dev reload/i)
 })
 
 test('writer atomically publishes only a successful compilation', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-compiler-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-compiler-'))
   const outputPath = join(directory, 'index.html')
   try {
     const result = await writeDashboard({

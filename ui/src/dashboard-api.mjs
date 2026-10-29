@@ -67,7 +67,7 @@ export function createDashboardApi({
       })
     } catch (error) {
       const timedOut = error?.name === 'AbortError'
-      throw new DashboardApiError(timedOut ? '请求超时' : '无法连接 Tasks Recorder', {
+      throw new DashboardApiError(timedOut ? '请求超时' : '无法连接 Rillo', {
         code: timedOut ? 'DASHBOARD_REQUEST_TIMEOUT' : 'DASHBOARD_CONNECTION_FAILED',
       })
     } finally {

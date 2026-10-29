@@ -101,7 +101,7 @@ export function createStructuredLogger({
   const fileCap = positiveInteger(maxFileBytes, 'maxFileBytes')
   const retentionFiles = positiveInteger(maxFiles, 'maxFiles')
   const retentionAge = positiveInteger(maxAgeMs, 'maxAgeMs')
-  const activePath = join(directory, 'tasks-recorder.ndjson')
+  const activePath = join(directory, 'rillo.ndjson')
   let queue = Promise.resolve()
   let lastWrittenAt = null
   let lastErrorCode = null
@@ -144,7 +144,7 @@ export function createStructuredLogger({
     if (current && current.size > 0 && current.size + bytes > fileCap) {
       const rotatedPath = join(
         directory,
-        `tasks-recorder-${now.valueOf()}-${String(uuid()).replace(/[^a-zA-Z0-9_-]/g, '-')}.ndjson`,
+        `rillo-${now.valueOf()}-${String(uuid()).replace(/[^a-zA-Z0-9_-]/g, '-')}.ndjson`,
       )
       await rename(activePath, rotatedPath)
       await chmod(rotatedPath, 0o600)

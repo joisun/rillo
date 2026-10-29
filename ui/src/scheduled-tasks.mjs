@@ -158,7 +158,7 @@ function contentMarkup({ state, capability, jobs, filters, message, busyIds, bus
     return '<div class="scheduled-state-panel" role="status" aria-busy="true"><strong>正在读取 Scheduled Tasks…</strong><span>正在同步本机 scheduler 状态</span></div>'
   }
   if (state === 'error') {
-    return `<div class="scheduled-state-panel is-error" role="alert"><strong>Scheduled Tasks 暂不可用</strong><span>${escapeHtml(message || '请检查 taskd 连接后重试')}</span></div>`
+    return `<div class="scheduled-state-panel is-error" role="alert"><strong>Scheduled Tasks 暂不可用</strong><span>${escapeHtml(message || '请检查 daemon 连接后重试')}</span></div>`
   }
   const filtered = filterScheduledTasks(jobs, filters)
   if (jobs.length === 0) {

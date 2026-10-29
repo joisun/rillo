@@ -15,10 +15,10 @@
 ## Global Constraints
 
 - Markdown 是未来执行的唯一 source of truth；SQLite 不保存当前 definition 字段。
-- 只识别 `type: tasks-recorder/schedule` 的 Markdown，递归 scan 时忽略 dot directories。
+- 只识别 `type: rillo/schedule` 的 Markdown，递归 scan 时忽略 dot directories。
 - invalid、duplicate、removed、paused 均 fail closed。
 - Dashboard file writes 必须 atomic、CAS-protected、recoverable delete。
-- 默认 root 为 `~/.config/tasks-recorder/schedules`；v1 只支持一个 root。
+- 默认 root 为 `~/.config/rillo/schedules`；v1 只支持一个 root。
 - 不修改或安装正式用户数据库；所有迁移测试使用临时目录。
 - 未经用户明确要求不 commit、push、release 或本地安装。
 
@@ -85,12 +85,12 @@
 
 **Files:**
 - Modify: `server/src/scheduler/scheduler-service.mjs`
-- Modify: `server/src/taskd-runtime.mjs`
+- Modify: `server/src/daemon-runtime.mjs`
 - Modify: `mcp/src/config.mjs`
 - Modify: `server/src/scheduler/launchd-backend.mjs`
 - Modify: `server/scheduled-runner.mjs`
 - Modify: `test/scheduler-service.test.mjs`
-- Modify: `test/taskd-runtime.test.mjs`
+- Modify: `test/daemon-runtime.test.mjs`
 - Modify: `test/launchd-scheduler-backend.test.mjs`
 - Modify: `test/scheduled-runtime-e2e.test.mjs`
 
@@ -101,7 +101,7 @@
 
 - [x] Add failing service tests proving claim reads current file and removed/invalid/paused definitions cannot claim.
 - [x] Refactor service CRUD/reconcile/list composition around repository and sync ledger.
-- [x] Wire migration, repository and monitor lifecycle into taskd; publish SSE invalidation on definition diff.
+- [x] Wire migration, repository and monitor lifecycle into daemon; publish SSE invalidation on definition diff.
 - [x] Update launchd generation/stale handling for etag-backed definitions.
 - [x] Run service/runtime/launchd/E2E focused suites; expect pass.
 
@@ -151,8 +151,8 @@
 **Files:**
 - Modify: `README.md`
 - Modify: `docs/superpowers/specs/2026-08-24-scheduled-tasks-design.md`
-- Modify: `docs/job/tasks-recorder-scheduled-tasks/05-test-cases.md`
-- Modify: `docs/job/tasks-recorder-scheduled-tasks/06-test-report.md`
+- Modify: `docs/job/rillo-scheduled-tasks/05-test-cases.md`
+- Modify: `docs/job/rillo-scheduled-tasks/06-test-report.md`
 - Modify: related phase/progress documents
 
 - [x] Run `git diff --name-only HEAD` and full Markdown reference scan required by project policy.
@@ -168,12 +168,12 @@
 - Create: `server/src/scheduler/schedule-definition-relocation.mjs`
 - Create: `test/schedule-definition-relocation.test.mjs`
 - Modify: `server/src/scheduler/scheduler-service.mjs`
-- Modify: `server/src/taskd-runtime.mjs`
+- Modify: `server/src/daemon-runtime.mjs`
 - Modify: `server/src/dashboard-settings.mjs`
 - Modify: `server/src/api-server.mjs`
 - Modify: `ui/src/settings-dialog.mjs`
 - Modify: `test/scheduler-service.test.mjs`
-- Modify: `test/taskd-runtime.test.mjs`
+- Modify: `test/daemon-runtime.test.mjs`
 - Modify: `test/dashboard-settings.test.mjs`
 - Modify: `test/settings-dialog.test.mjs`
 - Modify: `README.md` and workflow evidence documents

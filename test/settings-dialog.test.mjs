@@ -29,7 +29,7 @@ test('settings dialog presents an extensible General shell and terminal availabi
   assert.match(html, /codex resume · cwd: Workspace/)
   assert.match(html, /Schedule definitions/)
   assert.match(html, /value="\/tmp\/schedules"/)
-  assert.doesNotMatch(html, /Tasks Recorder|Preferences|Local control plane/)
+  assert.doesNotMatch(html, /Rillo|Preferences|Local control plane/)
 })
 
 test('settings dialog escapes adapter metadata and communicates loading state', () => {
@@ -46,7 +46,7 @@ test('settings dialog escapes adapter metadata and communicates loading state', 
   assert.match(settingsDialogMarkup({ loading: true }), /data-settings-definitions-dir[^>]* disabled/)
 })
 
-test('settings reports a live library move instead of asking for a taskd restart', () => {
+test('settings reports a live library move instead of asking for a daemon restart', () => {
   assert.equal(relocationMessage({
     relocation: { moved_count: 3, merged_count: 1, cleanup_warning: null },
   }), '目录已切换 · 迁移 3 · 合并 1')

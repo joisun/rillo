@@ -3,7 +3,7 @@
 import { fileURLToPath } from 'node:url'
 
 import { readHookInput, sourceKey, toolHeartbeatEvent } from './src/hook-context.mjs'
-import { sendJournalEvent } from './src/taskd-client.mjs'
+import { sendJournalEvent } from './src/daemon-client.mjs'
 import { currentTurn, explicitTurn } from './src/turn-state.mjs'
 
 try {
@@ -12,8 +12,8 @@ try {
   if (
     process.env.AGENT_SUPERVISOR_ROLE !== 'worker'
     && input.session_id
-    && !toolName.includes('tasks-recorder')
-    && !toolName.includes('agent_tasks_')
+    && !toolName.includes('rillo')
+    && !toolName.includes('rillo_')
   ) {
     const source = sourceKey(input)
     const turnKey = explicitTurn(input) ?? (await currentTurn(source, input.session_id))?.turn_key

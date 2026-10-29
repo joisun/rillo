@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { normalize as normalizePath } from 'node:path'
 
-import { TaskRecorderError } from './errors.mjs'
+import { RilloError } from './errors.mjs'
 import { normalizeGitRemote } from './git-context.mjs'
 
 const PROJECT_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -9,7 +9,7 @@ const LOCATION_KINDS = new Set(['git_common_dir', 'workspace', 'git_remote', 'ma
 const EXACT_LOCATION_KINDS = new Set(['git_common_dir', 'workspace', 'manual'])
 
 function fail(code, message, details) {
-  throw new TaskRecorderError(code, message, details)
+  throw new RilloError(code, message, details)
 }
 
 function requiredString(value, field) {

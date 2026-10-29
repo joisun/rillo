@@ -43,7 +43,7 @@ test('app-server client correlates a JSON-RPC response without shell execution',
 
   const written = readWrittenLine(child.stdin)
   const pending = client.request('initialize', {
-    clientInfo: { name: 'tasks-recorder', version: 'source' },
+    clientInfo: { name: 'rillo', version: 'source' },
   })
 
   assert.deepEqual(spawns, [{
@@ -61,7 +61,7 @@ test('app-server client correlates a JSON-RPC response without shell execution',
     jsonrpc: '2.0',
     id: 1,
     method: 'initialize',
-    params: { clientInfo: { name: 'tasks-recorder', version: 'source' } },
+    params: { clientInfo: { name: 'rillo', version: 'source' } },
   })
 
   child.stdout.write(`${JSON.stringify({

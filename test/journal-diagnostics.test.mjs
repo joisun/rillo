@@ -33,7 +33,7 @@ function event(overrides = {}) {
 }
 
 test('diagnostics distinguishes ready from degraded and exposes bounded operational state', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-diagnostics-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-diagnostics-'))
   const store = createJournalStore({ databasePath: join(directory, 'tasks.sqlite') })
   const spool = createEventSpool({ directory: join(directory, 'spool') })
   const logger = createStructuredLogger({
@@ -80,7 +80,7 @@ test('diagnostics distinguishes ready from degraded and exposes bounded operatio
     assert.equal(degraded.executions.open, 1)
     assert.equal(degraded.executions.stale, 1)
 
-    const records = (await readFile(join(directory, 'logs', 'tasks-recorder.ndjson'), 'utf8'))
+    const records = (await readFile(join(directory, 'logs', 'rillo.ndjson'), 'utf8'))
       .trim().split('\n').map((line) => JSON.parse(line))
     assert.deepEqual(records.map(({ event: name }) => name), [
       'event.rejected',
@@ -97,7 +97,7 @@ test('GET v5 status exposes service health without Journal dependencies and pres
   const hub = createRevisionHub({ keepaliveMs: 60_000 })
   const api = createApiServer({ hub, port: 0, dashboardHtml: '<!doctype html>',
     journalDiagnostics: { status: () => assert.fail('retired diagnostics must not run') },
-    serviceStatus: async () => ({ ready: true, service: 'tasks-recorder', api_version: 5 }),
+    serviceStatus: async () => ({ ready: true, service: 'rillo', api_version: 5 }),
   })
   try {
     const address = await api.listen()
@@ -105,7 +105,7 @@ test('GET v5 status exposes service health without Journal dependencies and pres
     assert.equal(response.status, 200)
     const status = await response.json()
     assert.equal(status.ready, true)
-    assert.equal(status.service, 'tasks-recorder')
+    assert.equal(status.service, 'rillo')
     assert.equal(status.api_version, 5)
     assert.equal('spool' in status, false)
     const rejected = await fetch(`${address.url}/api/v1/status`, { headers: { Origin: 'https://attacker.example' } })
@@ -114,7 +114,7 @@ test('GET v5 status exposes service health without Journal dependencies and pres
 })
 
 test('scheduler diagnostics are a privacy-bounded degraded sibling and do not make Journal unready', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-diagnostics-scheduler-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-diagnostics-scheduler-'))
   const store = createJournalStore({ databasePath: join(directory, 'tasks.sqlite') })
   const spool = createEventSpool({ directory: join(directory, 'spool') })
   const diagnostics = createJournalDiagnostics({

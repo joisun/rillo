@@ -103,7 +103,7 @@ test('native connection uses WebSocket over the existing Unix socket and never o
 })
 
 test('a missing shared server reports unavailable on every platform', async t => {
-  const monitor = createCodexSessionStatus({ dataRoot: '/missing/tasks-recorder-codex' })
+  const monitor = createCodexSessionStatus({ dataRoot: '/missing/rillo-codex' })
   t.after(() => monitor.close())
   assert.equal((await monitor.snapshot()).available, false)
 })

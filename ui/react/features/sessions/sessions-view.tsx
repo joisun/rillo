@@ -60,7 +60,7 @@ export function SessionsView({ api }: { api: DashboardApi }) {
   useEffect(() => {
     const url = new URL(window.location.href)
     url.searchParams.delete('sessions')
-    window.localStorage.removeItem('tasks-recorder.sessions-view')
+    window.localStorage.removeItem('rillo.sessions-view')
     window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
   }, [])
   useEffect(() => persistSessionsGroup(groupPreference), [groupPreference])

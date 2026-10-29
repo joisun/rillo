@@ -33,7 +33,7 @@ Make an automated Run predictable: the model sees only the extension surfaces th
 - Codex app-server accepts process configuration overrides and `thread/start.config` overrides.
 - `codex mcp list --json` returns configured MCP identities without launching an Agent thread.
 - An empty `mcp_servers={}` override merges with inherited configuration and does not remove configured servers.
-- Tasks Recorder already starts an independent Codex app-server for each active Run.
+- Rillo already starts an independent Codex app-server for each active Run.
 - Web Search is a native Codex tool and must not be coupled to MCP or Apps policy.
 
 ### Constraints
@@ -42,7 +42,7 @@ Make an automated Run predictable: the model sees only the extension surfaces th
 - Never create a second `CODEX_HOME`; Run Sessions must remain resumable through the user's normal Codex installation.
 - Never pass browser-provided argv or arbitrary config keys to Codex.
 - Capability discovery and launch use argument arrays with `shell: false`, bounded output, and bounded timeouts.
-- `disabled` is fail-closed. If Tasks Recorder cannot prove that a requested isolation policy was applied, the Run fails before `thread/start`.
+- `disabled` is fail-closed. If Rillo cannot prove that a requested isolation policy was applied, the Run fails before `thread/start`.
 - Existing Schedule definitions remain behavior-compatible.
 - Web Search remains outside this feature.
 
@@ -53,7 +53,7 @@ Make an automated Run predictable: the model sees only the extension surfaces th
 - A Run snapshot contains the exact resolved policy used for that occurrence.
 - With integrations disabled, the Run app-server starts with every configured MCP identity explicitly disabled and Apps/Connectors disabled.
 - With Skills disabled, every discovered Skill path is disabled in `thread/start.config` before the Thread is created.
-- With either value inherited, Tasks Recorder does not override that capability family.
+- With either value inherited, Rillo does not override that capability family.
 - No capability switch disables Web Search or changes sandbox mode.
 - Invalid policy values, malformed discovery output, unsafe identifiers, and discovery timeouts produce stable typed Run failures.
 
@@ -74,7 +74,7 @@ Markdown uses the same nested shape:
 
 ```yaml
 ---
-type: tasks-recorder/schedule
+type: rillo/schedule
 id: 4e27a4a7-1528-4cfd-8bd2-e7cb6b6e0fa1
 title: Daily report
 enabled: true
@@ -135,7 +135,7 @@ If enumeration fails, times out, exceeds its byte/count limits, or returns an in
 
 ### Skill isolation
 
-After app-server `initialize`, but before `thread/start`, Tasks Recorder calls:
+After app-server `initialize`, but before `thread/start`, Rillo calls:
 
 ```json
 {

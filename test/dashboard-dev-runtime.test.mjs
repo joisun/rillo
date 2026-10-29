@@ -95,7 +95,7 @@ test('runtime serves the initial build then reloads after a watched successful b
   let reader
   try {
     assert.match(await fetch(runtime.address.url).then((response) => response.text()), /initial/)
-    const reload = await fetch(`${runtime.address.url}/__tasks_recorder_dev/reload`)
+    const reload = await fetch(`${runtime.address.url}/__rillo_dev/reload`)
     reader = reload.body.getReader()
     assert.match(await readSseEvent(reader), /event: ready/)
 
@@ -139,7 +139,7 @@ test('runtime keeps last-good HTML after failure and reloads after recovery', as
   })
   let reader
   try {
-    const reload = await fetch(`${runtime.address.url}/__tasks_recorder_dev/reload`)
+    const reload = await fetch(`${runtime.address.url}/__rillo_dev/reload`)
     reader = reload.body.getReader()
     assert.match(await readSseEvent(reader), /event: ready/)
     const pendingReload = readSseEvent(reader)

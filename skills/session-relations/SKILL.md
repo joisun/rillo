@@ -11,4 +11,4 @@ After a delegated child session has been created and its native ID is known, cal
 
 Use `session_unlink({parent, child})` for an explicit correction or removal. Repeating either operation is safe. Native subagent and fork relations come from the provider and are read-only; unlink only removes registered relations. No lifecycle hooks, Task attribution, checkpoint, heartbeat, or automatic summary calls are required. These tools do not create or stop agent sessions.
 
-If the service is unavailable, run `tasks-recorder status` to diagnose it. If `API_VERSION_MISMATCH` is returned, update the service and plugin together. Never write SQLite or create substitute persistence files.
+If the service is unavailable, run `rillo status` to diagnose it. If `API_VERSION_MISMATCH` is returned, update the service and plugin together. Never write SQLite or create substitute persistence files.

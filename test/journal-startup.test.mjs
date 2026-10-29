@@ -30,7 +30,7 @@ function event(overrides = {}) {
 }
 
 test('startup uses explicit inactive evidence before replaying the bounded spool', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-journal-startup-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-journal-startup-'))
   const store = createJournalStore({ databasePath: join(directory, 'tasks.sqlite') })
   const service = createJournalService({ store })
   const spool = createEventSpool({ directory: join(directory, 'spool') })
@@ -68,7 +68,7 @@ test('startup uses explicit inactive evidence before replaying the bounded spool
 })
 
 test('detector failure never invents inactive evidence and does not block spool replay', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-journal-startup-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-journal-startup-'))
   const store = createJournalStore({ databasePath: join(directory, 'tasks.sqlite') })
   const service = createJournalService({ store })
   const spool = createEventSpool({ directory: join(directory, 'spool') })
@@ -99,7 +99,7 @@ test('detector failure never invents inactive evidence and does not block spool 
 })
 
 test('startup quarantines a permanent identity conflict without blocking later replay', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-journal-startup-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-journal-startup-'))
   const store = createJournalStore({ databasePath: join(directory, 'tasks.sqlite') })
   const service = createJournalService({ store })
   const spoolDirectory = join(directory, 'spool')

@@ -33,7 +33,7 @@ function createV1Database(databasePath, { includeAgent = false } = {}) {
 }
 
 test('initializes a new database with schema v2 lifecycle storage', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-schema-v2-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-schema-v2-'))
   const databasePath = join(directory, 'tasks.sqlite')
   let store
   let db
@@ -74,7 +74,7 @@ test('initializes a new database with schema v2 lifecycle storage', async () => 
 })
 
 test('migrates schema v1 task trees and sessions without inventing execution history', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-schema-v1-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-schema-v1-'))
   const databasePath = join(directory, 'tasks.sqlite')
   let store
   let db
@@ -134,7 +134,7 @@ test('migrates schema v1 task trees and sessions without inventing execution his
 })
 
 test('rejects a database schema newer than this runtime supports', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-schema-future-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-schema-future-'))
   const databasePath = join(directory, 'tasks.sqlite')
   const db = new DatabaseSync(databasePath)
   db.exec('PRAGMA user_version = 3')
@@ -152,7 +152,7 @@ test('rejects a database schema newer than this runtime supports', async () => {
 })
 
 test('concurrent schema initialization rechecks the version after acquiring the write lock', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-schema-race-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-schema-race-'))
   const databasePath = join(directory, 'tasks.sqlite')
   const blocker = new DatabaseSync(databasePath)
   blocker.exec('PRAGMA journal_mode = WAL')

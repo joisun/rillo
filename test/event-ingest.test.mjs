@@ -30,7 +30,7 @@ function event(overrides = {}) {
 }
 
 async function journalFixture() {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-ingest-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-ingest-'))
   const store = createJournalStore({
     databasePath: join(directory, 'tasks.sqlite'),
     clock: () => new Date('2026-08-20T01:00:00.000Z'),

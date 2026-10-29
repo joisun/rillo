@@ -45,7 +45,7 @@
 [{ "path": "reports/daily.md", "kind": "add" }]
 ```
 
-只接受 successful `item.completed` file-change event，path 必须落在 immutable Run Workspace 内，并转换为 relative path。绝对路径、Workspace 外路径、NUL、未知 kind 和超限值全部丢弃。Spool replay 同样携带 bounded file changes，确保 taskd 短暂不可用时证据不丢失。
+只接受 successful `item.completed` file-change event，path 必须落在 immutable Run Workspace 内，并转换为 relative path。绝对路径、Workspace 外路径、NUL、未知 kind 和超限值全部丢弃。Spool replay 同样携带 bounded file changes，确保 daemon 短暂不可用时证据不丢失。
 
 ## API Read Model
 

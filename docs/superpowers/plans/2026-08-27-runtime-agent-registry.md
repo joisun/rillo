@@ -2,28 +2,28 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the independent Scheduled runner chain with an OpenDesign-style multi-CLI runtime registry, direct taskd process orchestration, a single durable Run lifecycle, and an internal wall-clock scheduler.
+**Goal:** Replace the independent Scheduled runner chain with an OpenDesign-style multi-CLI runtime registry, direct daemon process orchestration, a single durable Run lifecycle, and an internal wall-clock scheduler.
 
-**Architecture:** `taskd` remains the sole local daemon and SQLite writer. A registry discovers local agent CLIs and supplies runtime-specific probes, model discovery, invocation building, and event parsing; shared services own process supervision, Run persistence, scheduling, HTTP/SSE, and UI state. Codex is the only adapter in this cutover, while all scheduler and Dashboard contracts use a stable runtime ID.
+**Architecture:** `daemon` remains the sole local daemon and SQLite writer. A registry discovers local agent CLIs and supplies runtime-specific probes, model discovery, invocation building, and event parsing; shared services own process supervision, Run persistence, scheduling, HTTP/SSE, and UI state. Codex is the only adapter in this cutover, while all scheduler and Dashboard contracts use a stable runtime ID.
 
-**Tech Stack:** Node.js 24 ESM, built-in `node:child_process`, built-in `node:sqlite`, HTTP/SSE, React 19, esbuild, Node test runner, macOS launchd for the taskd service only.
+**Tech Stack:** Node.js 24 ESM, built-in `node:child_process`, built-in `node:sqlite`, HTTP/SSE, React 19, esbuild, Node test runner, macOS launchd for the daemon service only.
 
 **Spec:** `docs/superpowers/specs/2026-08-27-runtime-agent-registry-design.md`
 
 ## Global Constraints
 
-- Tasks 1–12 work only in `/Users/joi-com/Desktop/space/projects/tasks-recorder/.worktree/feature-scheduled-tasks`; verify `git rev-parse --show-toplevel` before every phase.
-- Task 13 public-documentation edits use `/Users/joi-com/Desktop/space/projects/tasks-recorder/.worktree/docs-public-documentation` only after verifying its branch/path mapping. Never edit public-documentation paths through the feature worktree.
+- Tasks 1–12 work only in `/Users/joi-com/Desktop/space/projects/rillo/.worktree/feature-scheduled-tasks`; verify `git rev-parse --show-toplevel` before every phase.
+- Task 13 public-documentation edits use `/Users/joi-com/Desktop/space/projects/rillo/.worktree/docs-public-documentation` only after verifying its branch/path mapping. Never edit public-documentation paths through the feature worktree.
 - Preserve all pre-existing dirty changes. Stage or commit only files from the current task, and do not create any commit without explicit owner authorization.
 - Use TDD: add one focused failing test, prove the expected failure, implement the smallest passing behavior, then run the focused suite.
-- `taskd` remains the only SQLite writer and the only long-lived Tasks Recorder process.
+- `daemon` remains the only SQLite writer and the only long-lived Rillo process.
 - Runtime probes and Runs use argv arrays with `shell: false`; probes run in a private temporary cwd.
 - Schedule definitions remain Markdown; SQLite stores Run facts and immutable execution snapshots.
 - Codex is the only delivered adapter. Do not add dynamic third-party adapter loading or speculative ACP infrastructure.
 - Manual and scheduled execution must enter the same `RunService.create()` path.
 - Do not keep the legacy runner active beside the new direct supervisor.
 - A missing runtime or model catalog is a typed capability state, never a missing HTTP route.
-- The source Dashboard must not connect silently to an incompatible source or installed taskd.
+- The source Dashboard must not connect silently to an incompatible source or installed daemon.
 
 ## File structure
 
@@ -43,17 +43,17 @@ New Run and scheduling files:
 - `server/src/runs/run-event-hub.mjs`: bounded per-Run SSE replay buffer and subscribers.
 - `server/src/runs/run-service.mjs`: durable create, asynchronous launch, cancel, complete, recovery, and read model.
 - `server/src/scheduler/scheduler-clock.mjs`: periodic wall-clock due/catch-up planning.
-- `server/src/scheduler/legacy-launchd-cleanup.mjs`: one-shot removal of Tasks Recorder-owned per-Schedule LaunchAgents.
-- `scripts/dev.mjs`: one-process development supervisor for isolated source taskd plus live Dashboard.
+- `server/src/scheduler/legacy-launchd-cleanup.mjs`: one-shot removal of Rillo-owned per-Schedule LaunchAgents.
+- `scripts/dev.mjs`: one-process development supervisor for isolated source daemon plus live Dashboard.
 
 Existing files retained and changed:
 
 - `server/src/scheduler/cadence.mjs`: expose the latest due occurrence calculation.
 - `server/src/scheduler/schedule-definition-codec.mjs`: add normalized `agent` field with legacy default `codex`.
 - `server/src/scheduler/schedule-definition-repository.mjs`: preserve the new field through atomic writes.
-- `server/src/scheduler/scheduled-run-logs.mjs`: become taskd-owned Run log storage.
+- `server/src/scheduler/scheduled-run-logs.mjs`: become daemon-owned Run log storage.
 - `server/src/scheduler/scheduler-migration.mjs`: transactional v3-to-v4 ledger migration.
-- `server/src/taskd-runtime.mjs`: compose registry, RunService, scheduler clock, and direct supervisor.
+- `server/src/daemon-runtime.mjs`: compose registry, RunService, scheduler clock, and direct supervisor.
 - `server/src/api-server.mjs`: runtime, Run, meta, log, review, cancel, and resume routes.
 - `server/src/session-resume-service.mjs`: resolve unified Run session targets.
 - `ui/src/dashboard-api.mjs`: runtime and unified Run clients.
@@ -588,7 +588,7 @@ Cover:
 - spawn error → `RUN_SPAWN_FAILED`;
 - cancel queued and cancel running;
 - timeout;
-- taskd startup → `recover()` marks open rows interrupted;
+- daemon startup → `recover()` marks open rows interrupted;
 - completion preserves Session ID and file changes;
 - repeated completion cannot overwrite a terminal Run.
 
@@ -610,7 +610,7 @@ Confirm that `RunService` contains no launchd, Unix socket, or spool imports. Do
 
 **Files:**
 - Modify: `server/src/api-server.mjs`
-- Modify: `server/src/taskd-runtime.mjs`
+- Modify: `server/src/daemon-runtime.mjs`
 - Modify: `ui/src/dashboard-api.mjs`
 - Create: `test/runtime-api.test.mjs`
 - Create: `test/run-api.test.mjs`
@@ -639,7 +639,7 @@ Expected response:
 
 ```js
 {
-  service: 'tasks-recorder',
+  service: 'rillo',
   service_version: PACKAGE_VERSION,
   api_version: 4,
   capabilities: {
@@ -821,21 +821,21 @@ Expected: PASS.
 
 Confirm there is no launchctl, plist, socket, runner, or spool dependency in `scheduler-clock.mjs`. Do not commit without explicit owner authorization.
 
-### Task 8: Compose the direct runtime pipeline in taskd
+### Task 8: Compose the direct runtime pipeline in daemon
 
 **Files:**
-- Modify: `server/src/taskd-runtime.mjs`
+- Modify: `server/src/daemon-runtime.mjs`
 - Modify: `server/src/api-server.mjs`
 - Modify: `server/src/session-resume-service.mjs`
 - Modify: `server/src/journal-diagnostics.mjs`
-- Modify: `test/taskd-runtime.test.mjs`
+- Modify: `test/daemon-runtime.test.mjs`
 - Modify: `test/scheduled-runtime-e2e.test.mjs`
 - Modify: `test/session-resume-service.test.mjs`
 - Modify: `test/journal-diagnostics.test.mjs`
 
 **Interfaces:**
 - Consumes Tasks 1–7.
-- Produces one taskd composition with registry, RunStore, RunService, RunEventHub, SchedulerClock, and API.
+- Produces one daemon composition with registry, RunStore, RunService, RunEventHub, SchedulerClock, and API.
 - Produces startup recovery and coordinated shutdown.
 
 - [ ] **Step 1: Replace the E2E test's fake launchd backend with a fake runtime definition**
@@ -856,7 +856,7 @@ Run: `node --test test/scheduled-runtime-e2e.test.mjs`
 
 Expected: FAIL because the runtime does not accept registry/supervisor injection or because launchd is still invoked.
 
-- [ ] **Step 3: Compose services in `startTaskd`**
+- [ ] **Step 3: Compose services in `startDaemon`**
 
 Construction order:
 
@@ -909,7 +909,7 @@ Close in this order:
 ```js
 {
   runtime_registry: { registered: 1, ready: 0, unavailable: 1 },
-  scheduler: { engine: 'taskd-clock', running: true, last_tick_at, last_error_code },
+  scheduler: { engine: 'daemon-clock', running: true, last_tick_at, last_error_code },
   runs: { queued, running, interrupted },
 }
 ```
@@ -922,13 +922,13 @@ It no longer reports per-Schedule launchd sync, runner socket, or spool backlog.
 
 - [ ] **Step 8: Run focused integration tests**
 
-Run: `node --test test/taskd-runtime.test.mjs test/scheduled-runtime-e2e.test.mjs test/session-resume-service.test.mjs test/journal-diagnostics.test.mjs`
+Run: `node --test test/daemon-runtime.test.mjs test/scheduled-runtime-e2e.test.mjs test/session-resume-service.test.mjs test/journal-diagnostics.test.mjs`
 
 Expected: PASS without a launchd fixture or Unix socket.
 
 - [ ] **Step 9: Review checkpoint**
 
-Search: `rg -n "runnerProtocol|runnerSpool|createLaunchdSchedulerBackend|scheduledRunnerPath" server/src/taskd-runtime.mjs`
+Search: `rg -n "runnerProtocol|runnerSpool|createLaunchdSchedulerBackend|scheduledRunnerPath" server/src/daemon-runtime.mjs`
 
 Expected: no matches. Do not commit without explicit owner authorization.
 
@@ -957,13 +957,13 @@ Expected: no matches. Do not commit without explicit owner authorization.
 
 **Interfaces:**
 - Produces: `cleanupLegacyScheduleLaunchAgents({ homeDirectory, uid, commandRunner })`.
-- Cleanup only owns labels beginning `com.joi.tasks-recorder.schedule.` and matching private plist files.
+- Cleanup only owns labels beginning `com.joi.rillo.schedule.` and matching private plist files.
 
 - [ ] **Step 1: Write cleanup ownership tests**
 
 Prove:
 
-- owned Tasks Recorder schedule plist is booted out and removed;
+- owned Rillo schedule plist is booted out and removed;
 - unrelated LaunchAgents are untouched;
 - a symlink, wrong owner/mode, or malformed ID is reported and not removed;
 - repeated cleanup is idempotent;
@@ -990,7 +990,7 @@ Call cleanup during install/update before starting the source clock. If any owne
 
 - [ ] **Step 4: Remove legacy packaging**
 
-Delete the standalone runner entry from release manifests, package smoke assertions, third-party notices if no longer applicable, and launchd scheduler assets. Keep the taskd LaunchAgent controller unchanged.
+Delete the standalone runner entry from release manifests, package smoke assertions, third-party notices if no longer applicable, and launchd scheduler assets. Keep the daemon LaunchAgent controller unchanged.
 
 - [ ] **Step 5: Delete legacy code and tests**
 
@@ -1186,18 +1186,18 @@ Confirm status text comes from Run facts, not optimistic transient copy. Do not 
 
 **Interfaces:**
 - Produces: `npm run dev`.
-- Produces: `startDevSupervisor({ projectRoot, temporaryRoot, taskdFactory, dashboardFactory, stderr })`.
-- Default source taskd and Dashboard share API version 4 and isolated development state.
+- Produces: `startDevSupervisor({ projectRoot, temporaryRoot, daemonFactory, dashboardFactory, stderr })`.
+- Default source daemon and Dashboard share API version 4 and isolated development state.
 
 - [ ] **Step 1: Write lifecycle tests for the parent supervisor**
 
 Prove:
 
 - isolated config and databases are created beneath the supplied temporary root;
-- taskd starts before the Dashboard gateway;
-- gateway upstream is the exact source taskd address;
-- taskd startup failure prevents the gateway;
-- `close()` shuts down gateway, watcher, child Runs, taskd, and temporary resources;
+- daemon starts before the Dashboard gateway;
+- gateway upstream is the exact source daemon address;
+- daemon startup failure prevents the gateway;
+- `close()` shuts down gateway, watcher, child Runs, daemon, and temporary resources;
 - signal handling settles once;
 - installed `43127` is never stopped or modified.
 
@@ -1214,7 +1214,7 @@ The command:
 1. resolves the current source root;
 2. creates a private temporary dev home;
 3. writes a minimal isolated config through existing config helpers, not shell heredocs;
-4. starts source taskd on an available loopback port;
+4. starts source daemon on an available loopback port;
 5. starts live Dashboard compilation/gateway against that exact address;
 6. prints one Dashboard URL and data directory;
 7. handles SIGINT/SIGTERM and coordinated close.
@@ -1255,7 +1255,7 @@ Expected:
 - Scheduled and runtime routes return structured responses;
 - editing `ui/src/dashboard.css` triggers a rebuild and reload;
 - `Ctrl+C` closes both source services;
-- `tasks-recorder status` for the installed service is unchanged.
+- `rillo status` for the installed service is unchanged.
 
 - [ ] **Step 7: Review checkpoint**
 
@@ -1272,7 +1272,7 @@ Confirm no preview instruction requires publishing, reinstalling, or running thr
 - Modify: `docs/superpowers/specs/2026-08-24-scheduled-tasks-design.md`
 - Modify: `docs/superpowers/specs/2026-08-25-file-native-scheduled-tasks-design.md`
 - Modify: `docs/superpowers/specs/2026-08-26-scheduled-execution-observability-design.md`
-- Modify: `docs/job/tasks-recorder-scheduled-tasks/06-test-report.md`
+- Modify: `docs/job/rillo-scheduled-tasks/06-test-report.md`
 - Test in documentation worktree: `test/documentation.test.mjs`
 
 **Interfaces:**
@@ -1312,11 +1312,11 @@ Historical specs receive a banner:
 > Retained as historical design evidence; do not implement its independent runner path.
 ```
 
-Apply README and historical-spec changes in the feature worktree. Then run `git worktree list --porcelain`, verify `docs/public-documentation` maps to `/Users/joi-com/Desktop/space/projects/tasks-recorder/.worktree/docs-public-documentation`, switch command `workdir` to that worktree, and update MAINTAINERS/architecture/operations/getting-started without staging unrelated documentation changes.
+Apply README and historical-spec changes in the feature worktree. Then run `git worktree list --porcelain`, verify `docs/public-documentation` maps to `/Users/joi-com/Desktop/space/projects/rillo/.worktree/docs-public-documentation`, switch command `workdir` to that worktree, and update MAINTAINERS/architecture/operations/getting-started without staging unrelated documentation changes.
 
 - [ ] **Step 3: Run public-documentation tests**
 
-Run in `/Users/joi-com/Desktop/space/projects/tasks-recorder/.worktree/docs-public-documentation`:
+Run in `/Users/joi-com/Desktop/space/projects/rillo/.worktree/docs-public-documentation`:
 
 ```bash
 node --test test/documentation.test.mjs
@@ -1337,7 +1337,7 @@ npm run package:release
 bash -n install.sh
 ```
 
-Expected: all commands PASS. Record exact test counts and durations in `docs/job/tasks-recorder-scheduled-tasks/06-test-report.md`.
+Expected: all commands PASS. Record exact test counts and durations in `docs/job/rillo-scheduled-tasks/06-test-report.md`.
 
 - [ ] **Step 5: Perform Playwright MCP visual verification**
 
@@ -1364,7 +1364,7 @@ Using a disposable Workspace and current authenticated Codex:
 4. observe SSE and terminal success;
 5. verify output file, Session ID, logs, and Resume;
 6. cancel one bounded Run;
-7. stop taskd during a Run and verify interrupted recovery;
+7. stop daemon during a Run and verify interrupted recovery;
 8. schedule a near-future Run, sleep/wake across the due time, and verify exactly one catch-up.
 
 Do not use the user's production project as the disposable Workspace.

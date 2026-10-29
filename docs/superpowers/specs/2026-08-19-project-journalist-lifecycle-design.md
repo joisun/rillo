@@ -1,4 +1,4 @@
-# Tasks Recorder 记者模型与双平面生命周期设计
+# Rillo 记者模型与双平面生命周期设计
 
 > 日期：2026-08-19（Asia/Shanghai）
 > 状态：Phase 1–5、v0.6.0 schema-v3 rollout 与 v0.6.1 permanent replay conflict hotfix 已完成
@@ -7,7 +7,7 @@
 
 ## 结论
 
-Tasks Recorder 的产品角色是本机工作记录员，而不是驱动 Agent 的项目管理器。它像记者一样：持续接收来源不同的事实，保存发生过什么与正在发生什么，再把可验证的工作片段归入稳定的 Project / Task 叙事；不确定的归属留给 Inbox，而不是靠 branch、标题或相邻时间强行猜测。
+Rillo 的产品角色是本机工作记录员，而不是驱动 Agent 的项目管理器。它像记者一样：持续接收来源不同的事实，保存发生过什么与正在发生什么，再把可验证的工作片段归入稳定的 Project / Task 叙事；不确定的归属留给 Inbox，而不是靠 branch、标题或相邻时间强行猜测。
 
 系统采用双平面模型：
 
@@ -42,7 +42,7 @@ Dashboard 应稳定回答五个问题：
 
 - v2 中 `tasks.project` 只是文本，不是稳定实体。
 - v2 中 `task_executions.task_id` 是单值外键，无法准确表示一次 session 中 Task A → B → A。
-- 当前 `agent_tasks_context` 会把 branch 当跨仓库候选依据；常见的 `main` 会造成 Project 污染。
+- 当前 `rillo_context` 会把 branch 当跨仓库候选依据；常见的 `main` 会造成 Project 污染。
 - 当前 lifecycle 收口经常触发 `context + list + full sync_tree`，payload 大且把机械记录与语义编辑混在一起。
 - Hook 能观察生命周期边界，但不能只凭事件文本可靠判断 Main Task identity。
 - Session ID 能关联一次 host session，却不是 Task ID、Project ID 或认证凭据。
@@ -52,11 +52,11 @@ Dashboard 应稳定回答五个问题：
 - 大多数 Project 可以通过显式注册或精确的 Git/workspace location 解析；无法解析的比例需要用迁移报告和运行指标验证。
 - `update_plan` 对任务语义有帮助，但 plan item 未必都是值得长期追踪的 Subtask。
 - 多数 tool-use heartbeat 只需更新时间和计数，不需要逐条形成永久事件。
-- Adapter 本地 bounded spool 足以覆盖 taskd 短暂不可用；容量、保留期和丢弃策略需要故障测试确认。
+- Adapter 本地 bounded spool 足以覆盖 daemon 短暂不可用；容量、保留期和丢弃策略需要故障测试确认。
 
 ### Constraints
 
-- SQLite 继续是 canonical store，只有 `taskd` 写入。
+- SQLite 继续是 canonical store，只有 `daemon` 写入。
 - 不保存原始 prompt、reasoning、assistant message、tool input/output、token、cookie 或 secret。
 - Codex、Claude 等 adapter 各自利用原生 lifecycle，服务端只接受 host-neutral Event Envelope。
 - 业务层级固定为 Project → Main Task → Subtask；不支持任意深度。
@@ -70,13 +70,13 @@ Dashboard 应稳定回答五个问题：
 - 同一 execution 的 A → B → A 会形成三个 Work Segment、两个稳定 Task。
 - Project / Main Task 的 actual timeline summary 必须包络全部 descendant segments。
 - Task lifecycle 与 execution live state 分离：Agent 离线不会自动把 Task 标为 done。
-- taskd 暂时不可用时，Hook fail-open；允许的 metadata 进入 bounded spool，并在恢复后幂等 replay。
+- daemon 暂时不可用时，Hook fail-open；允许的 metadata 进入 bounded spool，并在恢复后幂等 replay。
 - Dashboard 可以处理 Project 未归属与 Task 未归属两类 Inbox。
 - 所有自动归属都能回答“为什么被归到这里”，且用户修正不会被下一次 heartbeat 覆盖。
 
 ## 产品语义
 
-| 记者行为 | Tasks Recorder 概念 | 系统语义 |
+| 记者行为 | Rillo 概念 | 系统语义 |
 | --- | --- | --- |
 | 收到线索 | Observation | Host 观察到的不可变事实 |
 | 辨认消息来源 | Source Session | 来源、session、turn、Agent 的关联上下文 |
@@ -315,7 +315,7 @@ interface SegmentAttribution {
 | --- | --- | --- |
 | Host / native lifecycle | 产生真实触发点 | 判断业务 Task identity |
 | Source adapter / Hook | 归一化、脱敏、spool、投递 | 直接写 SQLite、阻塞 Agent |
-| taskd | 幂等接收、写事实、维护 lifecycle、投影 | 猜测复杂任务语义 |
+| daemon | 幂等接收、写事实、维护 lifecycle、投影 | 猜测复杂任务语义 |
 | Agent MCP / Dashboard | 显式语义编辑、确认 Attribution | 机械 heartbeat |
 | Recovery watchdog | 发现 stale、重放 spool、生成恢复证据 | 无证据地完成 Task |
 
@@ -325,7 +325,7 @@ interface SegmentAttribution {
 Native event
   -> adapter validate + redact + normalize
   -> POST /v1/events
-     -> taskd dedupe Observation
+     -> daemon dedupe Observation
      -> resolve Source Session / Project evidence
      -> advance Execution / Work Segment lifecycle
      -> apply deterministic Attribution or create Inbox suggestion
@@ -336,35 +336,35 @@ Adapter 不通过 Agent 调用 MCP。MCP 专注于语义命令，例如：
 
 - `agent_work_context(execution_id)`：返回 resolved Project、当前 focus、最多 3 个同 Project 候选及直接 children。
 - `agent_work_focus(execution_id, task_id)`：显式切换 focus，形成 Segment boundary。
-- `agent_tasks_mutate(...)`：创建/修改/move/完成单个 Task。
-- `agent_tasks_sync_structure(...)`：仅在真实结构变化时批量提交 Task/Subtask，不用于 heartbeat 或 Stop。
+- `rillo_mutate(...)`：创建/修改/move/完成单个 Task。
+- `rillo_sync_structure(...)`：仅在真实结构变化时批量提交 Task/Subtask，不用于 heartbeat 或 Stop。
 - `agent_work_checkpoint(...)`：写 compact summary / next action，不携带整个 session 列表。
 
-旧 `agent_tasks_context`、`agent_tasks_sync_tree` 在 `0.7.x` 兼容期继续包装到新 command，返回 deprecation metadata；新 skill 不再使用 `list + full sync_tree` 收口。legacy wrapper 最早在 `0.8.0` 移除。
+旧 `rillo_context`、`rillo_sync_tree` 在 `0.7.x` 兼容期继续包装到新 command，返回 deprecation metadata；新 skill 不再使用 `list + full sync_tree` 收口。legacy wrapper 最早在 `0.8.0` 移除。
 
 ### Stop 与异常策略
 
 ```text
 Stop Hook
   -> 发出 execution.stop EventEnvelope
-  -> taskd 可用：关闭 Segment / Execution，返回 2xx
-  -> taskd 不可用：写 bounded spool，立即 exit 0
+  -> daemon 可用：关闭 Segment / Execution，返回 2xx
+  -> daemon 不可用：写 bounded spool，立即 exit 0
   -> spool 写入也失败：记录本地单行 error，仍 exit 0
 ```
 
 - Stop 只关闭执行事实，不自动修改 Task lifecycle。
 - 未提交的语义变更可以进入 reconciliation Inbox，但不能阻断 Stop。
-- Hook 只允许短超时、单次投递，不做长重试、不运行 npm、不启动 taskd。
-- taskd 恢复后按 `external_event_id` replay，重复事件不会重复关闭 lifecycle。
+- Hook 只允许短超时、单次投递，不做长重试、不运行 npm、不启动 daemon。
+- daemon 恢复后按 `external_event_id` replay，重复事件不会重复关闭 lifecycle。
 
 ### Bounded spool
 
-- 默认目录：`~/.config/tasks-recorder/spool/`，文件/目录权限 `0600/0700`。
+- 默认目录：`~/.config/rillo/spool/`，文件/目录权限 `0600/0700`。
 - 只写经过 allowlist 与脱敏的 Event Envelope，不写 prompt 或 tool payload。
 - 按文件大小与时间轮转，设总容量上限；超限先丢可 coalesce heartbeat，保留 lifecycle boundary。
 - replay 成功后采用可恢复的归档/删除策略，并记录 dropped/replayed 计数。
 - replay 必须区分临时失败与确定不可重试的 Event contract/identity rejection：前者恢复 claim 并等待下次重试，后者以 `0600` `.invalid` 文件隔离、增加 isolated 计数并继续后续事件，避免 poison event 永久阻塞 boundary queue。
-- taskd 仍是唯一 SQLite writer，spool 不是第二数据库。
+- daemon 仍是唯一 SQLite writer，spool 不是第二数据库。
 
 ## Task lifecycle 与 live state
 
@@ -427,19 +427,19 @@ Project
 ### Session recall
 
 - 有 accepted Attribution 的 Main Task、Subtask 与独立 Task 可以直接召回其最新 Codex Source Session；Project projection 不提供 Resume。
-- Browser 只提交 Task ID。taskd 从 canonical Task scope、Segment、Execution 与 Source Session 重新解析 Session ID、Workspace，不信任 client 提交 path、session 或 command。
+- Browser 只提交 Task ID。daemon 从 canonical Task scope、Segment、Execution 与 Source Session 重新解析 Session ID、Workspace，不信任 client 提交 path、session 或 command。
 - Dashboard 是否展示 Resume 以本机 `~/.codex/sessions` inventory 为准。inventory 通过标准 rollout 文件名建立 30 秒 bounded cache；实际 launch 前必须读取 transcript `session_meta` 再次核对 exact Session ID。旧 migration 产生的 `legacy` source 只有通过该校验才可召回；显式 Claude source 永远拒绝。
 - 设置面板从右上角 Settings 进入，首个 General setting 为 Resume terminal。`config.json` 使用 `resume_terminal` 保存 allowlisted adapter ID；当前 macOS 支持 Terminal.app、Otty 与 Ghostty，未安装 adapter 不可保存。
-- Otty 使用 authoritative Workspace 创建持久化交互式 shell，只向本次新建 window 的唯一 pane 发送由 taskd 构造并严格 shell quoting 的 allowlisted `codex resume <session-id>`，不使用 `exec` 替换 shell，也不产生中间文件。Codex 退出后回到该 shell，window 生命周期不与 Session 绑定。需要 `.command` bridge 的 terminal adapter 才在 `~/.config/tasks-recorder/runtime/` 创建权限 `0700` 的一次性 launcher，并在进程开始时自删除。route 不接受 browser 提交的 shell command。
+- Otty 使用 authoritative Workspace 创建持久化交互式 shell，只向本次新建 window 的唯一 pane 发送由 daemon 构造并严格 shell quoting 的 allowlisted `codex resume <session-id>`，不使用 `exec` 替换 shell，也不产生中间文件。Codex 退出后回到该 shell，window 生命周期不与 Session 绑定。需要 `.command` bridge 的 terminal adapter 才在 `~/.config/rillo/runtime/` 创建权限 `0700` 的一次性 launcher，并在进程开始时自删除。route 不接受 browser 提交的 shell command。
 - Window title 取自被点击 Task 的 canonical title，不接受 browser 自定义。Otty 1.4.1 的 create/open focus 与 `--title` 不能作为 macOS foreground 或最终标题保证；adapter 因此串行执行一次 launch control flow：读取 window inventory、以非阻塞 `otty open <workspace>` 创建 shell、用 ID 差集唯一解析新窗口、解析其唯一 pane 并以 `pane send-keys` 提交 Resume、`window rename` 设置 canonical Task name，最后以 `window focus <id>` 激活 Otty 到前台。若同时出现多个外部窗口或目标 pane 不唯一，adapter fail closed，不猜测目标。
 
 ### Rollup、完成与归档
 
 - 所有非 canceled、非 deleted children 都为 `done` 时，group 的 Dashboard `rollup_state` 为 `done`；这是 read-model projection，不是后台 lifecycle mutation。
 - `done` / `canceled` 不会立即等于历史。当前 Tree 只排除 `archived_at != null` 的 branch，“历史”读取归档记录并保留必要的 Project / Main Task ancestor context。
-- 用户可以手动提前归档；未手动处理的一级任务组与独立任务连续完成满 5 天后自动归档。taskd 在 startup 执行一次检查，运行期间每小时 sweep 一次并以一个 batch 发布 SSE。
+- 用户可以手动提前归档；未手动处理的一级任务组与独立任务连续完成满 5 天后自动归档。daemon 在 startup 执行一次检查，运行期间每小时 sweep 一次并以一个 batch 发布 SSE。
 - Subtask 不单独自动归档，`canceled` Task 不进入自动归档策略。独立任务使用自身 `completed_at`；derived-complete group 使用最后一个非 canceled、非 deleted child 的 `completed_at`。Task reopen 会清空 `completed_at`，连续完成周期从下一次完成重新计算。
-- terminal leaf 可以直接归档；derived-complete Main Task 可以归档，taskd 在一个 revisioned transaction 中把 persisted lifecycle 规范化为 `done` 并写入 `archived_at`，只产生一个 Task Event 与一次 SSE invalidation。
+- terminal leaf 可以直接归档；derived-complete Main Task 可以归档，daemon 在一个 revisioned transaction 中把 persisted lifecycle 规范化为 `done` 并写入 `archived_at`，只产生一个 Task Event 与一次 SSE invalidation。
 - 最近活跃与 sibling sorting 使用 Task update、accepted Segment activity 与 execution context 中可验证的最新时间，不按标题或数组原始顺序猜测。
 
 ## 数据库目标结构
@@ -489,7 +489,7 @@ plan_observations
 1. 先 backup，再在单事务中迁移；失败保留 v2 数据与 migration report。
 2. 提供 dry-run，输出会创建多少 Project、未归属多少 execution、出现哪些歧义。
 3. 宁可拆成 provisional Project，也不凭 name/remote 把不确定数据错误合并。
-4. 现有 installer / update 绝不能覆盖 `~/.config/tasks-recorder/tasks.db`。
+4. 现有 installer / update 绝不能覆盖 `~/.config/rillo/tasks.db`。
 
 ### 映射
 
@@ -505,8 +505,8 @@ plan_observations
 
 - 数据库 schema version 从 2 升到 3，仅在全部 migration checks 通过后落版本号。
 - 迁移前 backup 文件包含时间戳与源 schema checksum。
-- 新 taskd 在兼容期读取旧 API shape；旧 taskd 不允许打开已升级的 v3 database。
-- CLI 提供 `migrate --dry-run` 与 `migrate --apply --backup <path>`；apply 只允许在 taskd 停止时运行，dry-run 与 apply 都输出 privacy-bounded JSON report。首次服务启动不静默迁移，也不执行有歧义的合并。
+- 新 daemon 在兼容期读取旧 API shape；旧 daemon 不允许打开已升级的 v3 database。
+- CLI 提供 `migrate --dry-run` 与 `migrate --apply --backup <path>`；apply 只允许在 daemon 停止时运行，dry-run 与 apply 都输出 privacy-bounded JSON report。首次服务启动不静默迁移，也不执行有歧义的合并。
 
 ## API 与事件投影
 
@@ -522,7 +522,7 @@ plan_observations
 
 - Hook fail-open；Dashboard / MCP mutation 返回明确错误，不假装成功。
 - ingest 与 replay 都幂等；同一 external event 重放不产生重复 Segment。
-- open Segment / Execution 在 taskd startup 做 consistency scan，只修复有确定证据的异常。
+- open Segment / Execution 在 daemon startup 做 consistency scan，只修复有确定证据的异常。
 - 并发 mutation 使用实体级 revision；语义冲突返回 current snapshot，不做 last-write-wins。
 
 ### Privacy
@@ -534,7 +534,7 @@ plan_observations
 
 ### Logs 与 metrics
 
-结构化日志写入 `~/.config/tasks-recorder/logs/`，至少包含：
+结构化日志写入 `~/.config/rillo/logs/`，至少包含：
 
 - event accepted/deduped/rejected（不含敏感 payload）；
 - lifecycle transition 与 rejected transition reason；
@@ -573,7 +573,7 @@ plan_observations
 2. 主 Agent spawn 两个 subagent，两个 child Execution 可分别 Attribution 到不同 Subtask。
 3. 两个不同 repo 都在 `main`，候选与 Project resolution 完全隔离。
 4. 一个 Project 有 main checkout 与多个 worktree，Project 唯一，location 多值。
-5. taskd 停止时 Stop Hook 立即成功；重启后 spool replay 且无重复 event。
+5. daemon 停止时 Stop Hook 立即成功；重启后 spool replay 且无重复 event。
 6. Agent 直接关闭会话：Execution 先 stale，经 recovery evidence 后 interrupted；Task 保持原 lifecycle。
 7. 用户把 Segment 从 Task A 修正到 B，旧 attribution 可审计，heartbeat 不会改回 A。
 8. Subtask 实际时间超出 Main Task 自身 Segment，Main Task summary 自动扩展并包络 Subtask。

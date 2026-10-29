@@ -1,9 +1,9 @@
-import { TaskRecorderError } from './errors.mjs'
+import { RilloError } from './errors.mjs'
 
 export const SCHEMA_VERSION = 2
 
 function fail(code, message, details) {
-  throw new TaskRecorderError(code, message, details)
+  throw new RilloError(code, message, details)
 }
 
 function hasColumn(db, table, column) {

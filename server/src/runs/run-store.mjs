@@ -237,7 +237,7 @@ export function createRunStore({
       return db.prepare(`
         UPDATE scheduled_runs
         SET status = 'interrupted', pid = NULL, finished_at = ?,
-            error_code = 'TASKD_RESTARTED', updated_at = ?
+            error_code = 'RILLO_RESTARTED', updated_at = ?
         WHERE status IN ('queued', 'running')
       `).run(timestamp, timestamp).changes
     })

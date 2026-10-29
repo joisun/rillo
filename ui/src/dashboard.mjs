@@ -805,7 +805,7 @@ coordinator = createSnapshotCoordinator({
     else if (state === 'stale') {
       setRefreshMessage('freshness', '任务数据刷新失败，正在显示最后一次成功数据')
     } else if (state === 'unavailable') {
-      setRefreshMessage('freshness', '任务数据暂不可用，等待 taskd 恢复')
+      setRefreshMessage('freshness', '任务数据暂不可用，等待 daemon 恢复')
     }
   },
 })

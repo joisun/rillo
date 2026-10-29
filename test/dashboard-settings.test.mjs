@@ -7,7 +7,7 @@ import test from 'node:test'
 import { createDashboardSettings } from '../server/src/dashboard-settings.mjs'
 
 test('dashboard settings preserve service config and atomically persist an available terminal', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-settings-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-settings-'))
   const configPath = join(directory, 'config.json')
   const definitions = join(directory, 'my-schedules')
   const relocations = []
@@ -60,7 +60,7 @@ test('dashboard settings preserve service config and atomically persist an avail
 })
 
 test('settings never exposes a new config when permission hardening fails before commit', async (t) => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-settings-atomic-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-settings-atomic-'))
   t.after(() => rm(directory, { recursive: true, force: true }))
   const configPath = join(directory, 'config.json')
   const original = { output_dir: '.', server_port: 43127 }
@@ -82,7 +82,7 @@ test('settings never exposes a new config when permission hardening fails before
 
 
 test('Web-only hosts report desktop actions unavailable without changing stored configuration', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-web-settings-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-web-settings-'))
   t.after(() => rm(directory, { recursive: true, force: true }))
   const configPath = join(directory, 'config.json')
   const original = '{"output_dir":"."}'

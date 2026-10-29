@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { createTaskStore } from '../mcp/src/task-store.mjs'
 
 export async function temporaryStore(options = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-test-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-test-'))
   const databasePath = join(directory, 'tasks.sqlite')
   const store = createTaskStore({ databasePath, ...options })
   return {

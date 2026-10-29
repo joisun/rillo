@@ -6,16 +6,16 @@
 
 **Goal:** Replace DHTMLX Gantt with a pinned MIT SVAR React Gantt island while preserving every Dashboard contract and eliminating the known visual truncation/target-size defects.
 
-**Architecture:** Keep taskd, REST/SSE, Details Sheet, Inbox, and the vanilla Dashboard controller. Add one React/SVAR renderer boundary plus pure projection/state helpers; the controller communicates only through a small renderer interface and stable data attributes.
+**Architecture:** Keep daemon, REST/SSE, Details Sheet, Inbox, and the vanilla Dashboard controller. Add one React/SVAR renderer boundary plus pure projection/state helpers; the controller communicates only through a small renderer interface and stable data attributes.
 
 **Tech Stack:** Node.js 24, esbuild 0.28.2, React 19.2.8, React DOM 19.2.8, @svar-ui/react-gantt 2.7.1, node:test, Playwright MCP.
 
 ## Global Constraints
 
-- Work only in /Users/joi-com/Desktop/space/projects/tasks-recorder/.worktree/experiment-svar-gantt-dashboard on branch experiment/svar-gantt-dashboard.
+- Work only in /Users/joi-com/Desktop/space/projects/rillo/.worktree/experiment-svar-gantt-dashboard on branch experiment/svar-gantt-dashboard.
 - Before every edit/test, verify git rev-parse --show-toplevel equals that absolute worktree path.
 - Do not commit or push; the user did not authorize Git commits for this phase.
-- Do not modify ~/.config/tasks-recorder/tasks.sqlite; browser mutation tests must use an isolated temporary HOME/config/database/port.
+- Do not modify ~/.config/rillo/tasks.sqlite; browser mutation tests must use an isolated temporary HOME/config/database/port.
 - Do not enable SVAR PRO modules, markers, resources, calendars, grouping, baselines, or any license-key path.
 - Do not use CDN, remote fonts, telemetry, tokens, or external runtime services.
 - Keep one self-contained ui/dist/index.html and the 2 MiB bundle ceiling.
@@ -136,7 +136,7 @@ The renderer lifecycle is intentionally not tested by grepping its source. Tasks
 
 - [x] **Step 6: Run a real package DOM spike**
 
-Start an isolated taskd with a temporary config and database, open it with playwright-headless, and prove:
+Start an isolated daemon with a temporary config and database, open it with playwright-headless, and prove:
 
 - SVAR renders at least one summary and one child row.
 - disclosure changes visible row count using a real pointer click.
@@ -476,7 +476,7 @@ Expected: FAIL on old dependency/attribution assertions.
 
 Keep existing GPL-2.0-only project license unless the user separately chooses relicensing. Record MIT third-party notices without claiming the whole repository is MIT.
 
-Update architecture specs only where they assert DHTMLX APIs/layout. Preserve taskd/API/SSE and Dashboard behavior wording.
+Update architecture specs only where they assert DHTMLX APIs/layout. Preserve daemon/API/SSE and Dashboard behavior wording.
 
 - [x] **Step 4: Verify GREEN**
 
@@ -583,8 +583,8 @@ If every fallback condition is false and all production gates pass, retain this 
 | Standalone build | `npm run build` | PASS |
 | Full regression | `npm test` → 183 pass, 0 fail/cancel/skip/todo | PASS |
 | Adapter artifacts | `npm run build:adapters` emitted Codex + Claude MCP bundles | PASS |
-| Release archives | explicit `package:release -- --output /tmp/tasks-recorder-svar-final-release.dF3L4z` emitted runtime + 2 adapters | PASS |
-| Packaged runtime | full suite executed extracted runtime, importer, taskd lifecycle/API, CLI, and both adapter MCP bundles outside source tree | PASS |
+| Release archives | explicit `package:release -- --output /tmp/rillo-svar-final-release.dF3L4z` emitted runtime + 2 adapters | PASS |
+| Packaged runtime | full suite executed extracted runtime, importer, daemon lifecycle/API, CLI, and both adapter MCP bundles outside source tree | PASS |
 | Diff hygiene | `git diff --check` | PASS |
 
 ### Requirement mapping
@@ -598,7 +598,7 @@ If every fallback condition is false and all production gates pass, retain this 
 | Session copy/status/progress | cell tests; copy/status mutation browser probes | PASS |
 | Timeline/bar/labels/current time | day/week/month and restore-race tests; locate and VDR geometry | PASS |
 | Details/Inbox + density | multiline Next action; 30px Grid rows; grouped toolbar; three-tab/empty-state VDR | PASS |
-| Realtime/failure | coordinator/EventSource tests; taskd interrupt/recover VDR; React Error Boundary tests | PASS |
+| Realtime/failure | coordinator/EventSource tests; daemon interrupt/recover VDR; React Error Boundary tests | PASS |
 | Security/offline/license | escaped React text, no raw HTML, no CDN/font/key/watermark/DHTMLX bundle; MIT notices | PASS |
 | Scale | isolated 1,000-task browser gate: 22 virtual rows, 98ms load, 25ms filter, bottom scroll | PASS |
 | Visual production gate | PC 1440 × 900 multi-state VDR，Critical 0 / High 0 / Medium 0 | PASS |

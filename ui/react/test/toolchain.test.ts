@@ -4,9 +4,9 @@ import { expect, test } from 'vitest'
 
 test('React UI test toolchain boots in jsdom', () => {
   const element = document.createElement('div')
-  element.textContent = 'Tasks Recorder'
+  element.textContent = 'Rillo'
   document.body.append(element)
-  expect(element).toHaveTextContent('Tasks Recorder')
+  expect(element).toHaveTextContent('Rillo')
 })
 
 test('pins the dotUI Vercel registry for reproducible source components', async () => {

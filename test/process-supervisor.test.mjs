@@ -25,7 +25,7 @@ const INVOCATION = Object.freeze({
   args: Object.freeze(['exec', '--json', '-']),
   cwd: '/tmp/project',
   stdin: 'private prompt',
-  env: Object.freeze({ TASKS_RECORDER_RUN: '1' }),
+  env: Object.freeze({ RILLO_RUN: '1' }),
   timeout_ms: 60_000,
 })
 
@@ -79,7 +79,7 @@ test('supervisor normalizes a successful process without shell execution', async
   assert.equal(spawnCalls[0].options.shell, false)
   assert.deepEqual(spawnCalls[0].options.stdio, ['pipe', 'pipe', 'pipe'])
   assert.equal(spawnCalls[0].options.cwd, INVOCATION.cwd)
-  assert.equal(spawnCalls[0].options.env.TASKS_RECORDER_RUN, '1')
+  assert.equal(spawnCalls[0].options.env.RILLO_RUN, '1')
   assert.deepEqual(spawned, [{ pid: 4242 }])
   assert.equal(emitted.length, 2)
   assert.equal(Buffer.concat(stdout).includes('session-1'), true)
@@ -123,7 +123,7 @@ test('supervisor repairs a stripped child PATH with user toolchain directories',
     signal: new AbortController().signal,
   })
 
-  assert.equal(spawnedEnvironment.TASKS_RECORDER_RUN, '1')
+  assert.equal(spawnedEnvironment.RILLO_RUN, '1')
   assert.equal(
     spawnedEnvironment.PATH.split(delimiter).includes('/Users/tester/.local/bin'),
     true,
@@ -161,7 +161,7 @@ test('supervisor delegates child environment construction to the runtime environ
 
   assert.deepEqual(invocationEnvironment, INVOCATION.env)
   assert.equal(spawnedEnvironment.PATH, '/runtime/bin')
-  assert.equal(spawnedEnvironment.TASKS_RECORDER_RUN, '1')
+  assert.equal(spawnedEnvironment.RILLO_RUN, '1')
 })
 
 test('supervisor treats malformed runtime output as noise, not a false terminal state', async () => {

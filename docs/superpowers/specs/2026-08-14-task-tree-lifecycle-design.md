@@ -1,13 +1,13 @@
-# Tasks Recorder Task Tree and Execution Lifecycle Design
+# Rillo Task Tree and Execution Lifecycle Design
 
 > 日期：2026-08-14（Asia/Shanghai）
 > 状态：Phase 1–3 已实现，v0.4.0 已发布并完成本机 service/adapter 升级；真实历史 import apply 未执行
-> 适用项目：`/Users/joi-com/Desktop/space/projects/tasks-recorder`
+> 适用项目：`/Users/joi-com/Desktop/space/projects/rillo`
 > 后续目标架构：[`2026-08-19-project-journalist-lifecycle-design.md`](./2026-08-19-project-journalist-lifecycle-design.md) 已在 `0.6.0` release-candidate branch 实现，将 `project` 提升为独立一级实体，并以 Fact plane、Semantic plane 与 Work Segment Attribution 重构 lifecycle；本文件仅保留为已发布 `0.4.0` / schema v2 的历史设计记录。
 
 ## 目标
 
-把 Tasks Recorder 从“Agent 主动上报少量 task + session heartbeat”升级为真正的本机多任务控制面：
+把 Rillo 从“Agent 主动上报少量 task + session heartbeat”升级为真正的本机多任务控制面：
 
 1. 以一棵 `root task -> child task` 的一层 Task tree 表达要完成的工作。
 2. 自动记录主线程、turn、session 与 subagent 的 execution lifecycle，但不把执行单元伪装成业务任务。
@@ -21,7 +21,7 @@
 - **Goal**：用户需要掌控“有哪些任务、任务如何拆解、谁正在执行、还剩多少、如何恢复”，而不是只查看 Agent 曾经活动过的时间戳。
 - **Facts**：Codex 0.147.0 原生提供 `SessionStart`、`SessionEnd`、`UserPromptSubmit`、`PostToolUse`、`SubagentStart`、`SubagentStop` 和 `Stop` hooks；现有数据库已支持一层 `parent_id`，但 Task 只能靠 Agent 显式 upsert，subagent lifecycle 没有进入数据库。
 - **Assumptions**：Task 是长期、可变的业务对象；session、turn、root Agent 和 subagent 都是执行上下文。仅凭 prompt 或 plan item 文本不能稳定判断 Task identity。
-- **Constraints**：Task tree 首期只支持 root + 一层 child；SQLite 仍是 canonical store 且只由 `taskd` 写入；不后台扫描全部 Codex 历史；不保存 prompt 或 assistant message 正文；Codex 与 Claude adapter 继续各自维护。
+- **Constraints**：Task tree 首期只支持 root + 一层 child；SQLite 仍是 canonical store 且只由 `daemon` 写入；不后台扫描全部 Codex 历史；不保存 prompt 或 assistant message 正文；Codex 与 Claude adapter 继续各自维护。
 - **Success Criteria**：同一 session 的 A -> B -> A 执行不会丢失；subagent execution 能绑定 Task 或进入未绑定 inbox；Task 改名不换 ID；child 变化实时更新父任务 `remaining / total`；旧 session 可手动 import；现有 v0.3.x 数据和 MCP tools 继续可用。
 
 ## 已确认的产品决策
@@ -258,7 +258,7 @@ Codex 0.147.0 hook payload 可直接提供 `session_id`、`turn_id`、`agent_id`
 
 ### UserPromptSubmit
 
-1. Hook 把 session/turn/workfolder 注册到 `taskd`。
+1. Hook 把 session/turn/workfolder 注册到 `daemon`。
 2. Service 创建或复用该 turn 的 main execution，初始可以未绑定。
 3. Hook 查询当前 session 最近 Task tree、tree revision、未绑定 execution 和 pending plan observation。
 4. Hook 把结构化摘要注入 Agent context，提示 Agent先调用 context，再同步 tree。
@@ -269,7 +269,7 @@ Codex 0.147.0 hook payload 可直接提供 `session_id`、`turn_id`、`agent_id`
 新增原子 tool：
 
 ```ts
-agent_tasks_sync_tree(input: {
+rillo_sync_tree(input: {
   session_id: string;
   turn_id: string;
   workfolder: string;
@@ -315,7 +315,7 @@ agent_tasks_sync_tree(input: {
 - 同步成功后，将该 turn 已观察到的 plan revision 标为 reconciled。
 - 重复提交相同 tree 不增加 revision、不发布重复 SSE。
 
-现有 `agent_tasks_upsert`、`complete`、`context`、`list`、`show`、`check` 继续保留。旧 upsert 继续写 Task 与 `task_sessions` compatibility projection；精确 execution 由 native lifecycle hooks 创建，只有 `sync_tree` 能一次同步完整 root/child 语义并绑定当前 turn。
+现有 `rillo_upsert`、`complete`、`context`、`list`、`show`、`check` 继续保留。旧 upsert 继续写 Task 与 `task_sessions` compatibility projection；精确 execution 由 native lifecycle hooks 创建，只有 `sync_tree` 能一次同步完整 root/child 语义并绑定当前 turn。
 
 ### update_plan observation
 
@@ -324,10 +324,10 @@ agent_tasks_sync_tree(input: {
 1. 使用 `tool_use_id` 生成幂等 external key。
 2. 把 plan steps/status/explanation 写入 plan observation。
 3. 标记当前 turn `sync_pending`。
-4. 通过 PostToolUse additional context 提示 Agent 调用 `agent_tasks_sync_tree`。
+4. 通过 PostToolUse additional context 提示 Agent 调用 `rillo_sync_tree`。
 5. 不按 step title、数组位置或相似度直接创建、改名、取消 Task。
 
-Stop hook 只在 `taskd` 可达且存在未 reconcile observation、未绑定 concrete execution 或未收口 active Task 状态时阻止结束一次，并给出明确 sync context。普通聊天、没有 work objective 的 turn 可以由 Agent显式标记为 non-work，从而关闭未绑定 execution而不创建 Task。
+Stop hook 只在 `daemon` 可达且存在未 reconcile observation、未绑定 concrete execution 或未收口 active Task 状态时阻止结束一次，并给出明确 sync context。普通聊天、没有 work objective 的 turn 可以由 Agent显式标记为 non-work，从而关闭未绑定 execution而不创建 Task。
 
 ### Subagent execution 绑定
 
@@ -439,8 +439,8 @@ Root progress cell：
 CLI：
 
 ```bash
-tasks-recorder import codex --session <session-id> --dry-run
-tasks-recorder import codex --session <session-id>
+rillo import codex --session <session-id> --dry-run
+rillo import codex --session <session-id>
 ```
 
 行为：
@@ -496,10 +496,10 @@ POST  /api/v1/import/executions
 新增 MCP tools：
 
 ```text
-agent_tasks_sync_tree
-agent_tasks_update
-agent_tasks_archive
-agent_tasks_restore
+rillo_sync_tree
+rillo_update
+rillo_archive
+rillo_restore
 agent_task_executions_list
 agent_task_execution_assign
 ```
@@ -518,7 +518,7 @@ agent_task_execution_assign
 - v0.3.x MCP inputs 继续有效；缺少 turn ID 时，upsert 只更新 Task/task_sessions，并在能唯一确定当前 turn 时绑定 execution。
 - migration 在 transaction 内执行；失败时回滚并让 `/health/ready` 返回 schema error。
 
-Installer 仍不覆盖 `~/.config/tasks-recorder/tasks.sqlite`。升级验证必须包含真实 v1 fixture 的 migration 和回滚测试。
+Installer 仍不覆盖 `~/.config/rillo/tasks.sqlite`。升级验证必须包含真实 v1 fixture 的 migration 和回滚测试。
 
 ## 安全与隐私
 
@@ -536,7 +536,7 @@ Installer 仍不覆盖 `~/.config/tasks-recorder/tasks.sqlite`。升级验证必
 | --- | --- |
 | Hook 重放 | external key 命中，返回原 execution，不重复发布 SSE |
 | Hook 无法解析 parent transcript | 写入未绑定 execution，记录 enrichment warning，不阻塞 Codex |
-| taskd unavailable | lifecycle hook fail-open；Stop 报告 service unavailable，不写替代文件 |
+| daemon unavailable | lifecycle hook fail-open；Stop 报告 service unavailable，不写替代文件 |
 | Tree revision 冲突 | `409 TASK_VERSION_CONFLICT`，返回最新 root/children/revision |
 | focus 不属于 root tree | `400 TASK_FOCUS_INVALID`，整个 sync 回滚 |
 | parent/child 层级非法 | `409 PARENT_DEPTH_INVALID`，整个 sync 回滚 |
@@ -597,7 +597,7 @@ Installer 仍不覆盖 `~/.config/tasks-recorder/tasks.sqlite`。升级验证必
 ### Phase 1：Task tree correctness
 
 - 已完成：schema v2、Task metadata/events/progress。
-- 已完成：`agent_tasks_sync_tree` 与 task mutation contracts。
+- 已完成：`rillo_sync_tree` 与 task mutation contracts。
 - 已完成：update_plan observation 与 Stop reconciliation gate。
 - 已完成：Dashboard progress ring、count、Task details/edit actions。
 

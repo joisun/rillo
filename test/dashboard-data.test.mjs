@@ -209,7 +209,7 @@ test('dashboard snapshot exposes v2 tree and execution aggregates without full h
 })
 
 const v3Project = {
-  id: 'recorder', name: 'Tasks Recorder', description: 'Local project journalist', revision: 2,
+  id: 'recorder', name: 'Rillo', description: 'Local project journalist', revision: 2,
   archived_at: null, created_at: '2026-08-18T08:00:00.000Z', updated_at: '2026-08-20T08:00:00.000Z',
 }
 
@@ -229,7 +229,7 @@ function v3Snapshot() {
     projects: [v3Project],
     project_locations: [{
       id: 'location-recorder', project_id: 'recorder', kind: 'workspace',
-      normalized_value: '/Users/me/tasks-recorder', display_value: '/Users/me/tasks-recorder',
+      normalized_value: '/Users/me/rillo', display_value: '/Users/me/rillo',
       last_seen_at: '2026-08-20T09:00:00.000Z', created_at: '2026-08-18T08:00:00.000Z',
     }],
     tasks: [
@@ -255,9 +255,9 @@ function v3Snapshot() {
     executions: [{
       id: 'execution-1', source_session_id: 'source-session-1', source_turn_key: 'turn-1',
       source_agent_key: 'codex-main', parent_execution_id: null, kind: 'main', classification: 'work',
-      workfolder: '/Users/me/tasks-recorder', git_root: '/Users/me/tasks-recorder',
-      git_common_dir: '/Users/me/tasks-recorder/.git', git_remote: null,
-      worktree: '/Users/me/tasks-recorder/.worktree/feature-journalist-model-v3',
+      workfolder: '/Users/me/rillo', git_root: '/Users/me/rillo',
+      git_common_dir: '/Users/me/rillo/.git', git_remote: null,
+      worktree: '/Users/me/rillo/.worktree/feature-journalist-model-v3',
       branch: 'feature/journalist-model-v3', started_at: '2026-08-19T08:00:00.000Z',
       ended_at: null, last_seen_at: '2026-08-20T09:59:00.000Z', end_reason: null,
       created_at: '2026-08-19T08:00:00.000Z', updated_at: '2026-08-20T09:59:00.000Z',

@@ -12,7 +12,7 @@ function schedule() {
     id: SCHEDULE_ID,
     etag: 'a'.repeat(64),
     title: 'Daily review',
-    prompt: 'Private prompt loaded by taskd.',
+    prompt: 'Private prompt loaded by daemon.',
     workspace: '/tmp/project',
     cadence: { kind: 'daily', hour: 9, minute: 30, timezone_mode: 'system' },
     enabled: true,
@@ -125,7 +125,7 @@ test('POST /runs loads the trusted Schedule and returns its durable queued Run',
     })
     assert.equal(result.status, 202)
     assert.equal(result.body.run.status, 'queued')
-    assert.equal(current.calls[0][1].schedule.prompt, 'Private prompt loaded by taskd.')
+    assert.equal(current.calls[0][1].schedule.prompt, 'Private prompt loaded by daemon.')
     assert.equal(JSON.stringify(result.body).includes('Private prompt'), false)
   } finally {
     await current.close()

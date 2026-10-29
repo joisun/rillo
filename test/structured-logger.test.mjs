@@ -7,7 +7,7 @@ import test from 'node:test'
 import { createStructuredLogger } from '../server/src/structured-logger.mjs'
 
 test('writes allowlisted NDJSON with 0700/0600 permissions and no payload surface', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'tasks-recorder-logs-'))
+  const root = await mkdtemp(join(tmpdir(), 'rillo-logs-'))
   const directory = join(root, 'logs')
   const logger = createStructuredLogger({
     directory,
@@ -46,7 +46,7 @@ test('writes allowlisted NDJSON with 0700/0600 permissions and no payload surfac
 })
 
 test('rejects unknown event names, privacy fields and non-primitive values before writing', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'tasks-recorder-logs-'))
+  const root = await mkdtemp(join(tmpdir(), 'rillo-logs-'))
   const directory = join(root, 'logs')
   const logger = createStructuredLogger({ directory })
   try {
@@ -69,7 +69,7 @@ test('rejects unknown event names, privacy fields and non-primitive values befor
 })
 
 test('rotates by size and prunes old files to the retention cap', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'tasks-recorder-logs-'))
+  const root = await mkdtemp(join(tmpdir(), 'rillo-logs-'))
   const directory = join(root, 'logs')
   let now = Date.parse('2026-08-20T08:00:00.000Z')
   let uuid = 0

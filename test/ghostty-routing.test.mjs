@@ -6,7 +6,7 @@ import test from 'node:test'
 import { createGhosttyRouter } from '../server/src/terminal-launcher/ghostty.mjs'
 
 async function fixture(t, existingWindows = ['w_live']) {
-  const runtimeDirectory = await mkdtemp(join(tmpdir(), 'tasks-recorder-ghostty-'))
+  const runtimeDirectory = await mkdtemp(join(tmpdir(), 'rillo-ghostty-'))
   t.after(() => rm(runtimeDirectory, { recursive: true, force: true }))
   const state = { windows: existingWindows, panes: [], created: 0, calls: [] }
   const execFileImpl = async (file, args) => {

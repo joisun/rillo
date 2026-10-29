@@ -7,23 +7,23 @@ import test from 'node:test'
 import {
   LAUNCH_AGENT_LABEL,
   createInstallBuildStep,
-  createTaskdController,
+  createDaemonController,
   renderLaunchAgentPlist,
 } from '../server/control.mjs'
 
-test('LaunchAgent plist fixes Node/taskd paths, lifecycle policy, logs, and XML escaping', () => {
+test('LaunchAgent plist fixes Node/daemon paths, lifecycle policy, logs, and XML escaping', () => {
   const plist = renderLaunchAgentPlist({
     label: LAUNCH_AGENT_LABEL,
     nodePath: '/opt/Node & Tools/bin/node',
-    taskdPath: '/Users/me/tasks recorder/server/taskd.mjs',
-    workingDirectory: '/Users/me/tasks recorder',
-    stdoutPath: '/Users/me/Library/Logs/tasks-recorder/out.log',
-    stderrPath: '/Users/me/Library/Logs/tasks-recorder/error.log',
+    daemonPath: '/Users/me/rillo/server/daemon.mjs',
+    workingDirectory: '/Users/me/rillo',
+    stdoutPath: '/Users/me/Library/Logs/rillo/out.log',
+    stderrPath: '/Users/me/Library/Logs/rillo/error.log',
   })
 
-  assert.match(plist, /<string>com\.joi\.tasks-recorder\.taskd<\/string>/)
+  assert.match(plist, /<string>com\.joi\.rillo\.daemon<\/string>/)
   assert.match(plist, /<string>\/opt\/Node &amp; Tools\/bin\/node<\/string>/)
-  assert.match(plist, /<string>\/Users\/me\/tasks recorder\/server\/taskd\.mjs<\/string>/)
+  assert.match(plist, /<string>\/Users\/me\/rillo\/server\/daemon\.mjs<\/string>/)
   assert.match(plist, /<key>RunAtLoad<\/key>\s*<true\/>/)
   assert.match(plist, /<key>KeepAlive<\/key>\s*<true\/>/)
   assert.match(plist, /StandardOutPath[\s\S]*out\.log/)
@@ -31,8 +31,8 @@ test('LaunchAgent plist fixes Node/taskd paths, lifecycle policy, logs, and XML 
 })
 
 test('controller install is repeatable and uninstall removes only the plist', async () => {
-  const homeDirectory = await mkdtemp(join(tmpdir(), 'tasks-recorder-control-'))
-  const projectRoot = join(homeDirectory, 'projects', 'tasks-recorder')
+  const homeDirectory = await mkdtemp(join(tmpdir(), 'rillo-control-'))
+  const projectRoot = join(homeDirectory, 'projects', 'rillo')
   const calls = []
   let builds = 0
   const run = async (command, args, options = {}) => {
@@ -40,7 +40,7 @@ test('controller install is repeatable and uninstall removes only the plist', as
     return { code: command === 'launchctl' && args[0] === 'bootout' ? 3 : 0, stdout: '', stderr: '' }
   }
   try {
-    const controller = createTaskdController({
+    const controller = createDaemonController({
       projectRoot,
       homeDirectory,
       nodePath: '/opt/homebrew/bin/node',
@@ -57,8 +57,8 @@ test('controller install is repeatable and uninstall removes only the plist', as
     assert.equal(installed.label, LAUNCH_AGENT_LABEL)
     const plist = await readFile(installed.plistPath, 'utf8')
     assert.match(plist, /\/opt\/homebrew\/bin\/node/)
-    assert.match(plist, /projects\/tasks-recorder\/server\/taskd\.mjs/)
-    assert.match(plist, /<key>WorkingDirectory<\/key>\s*<string>[^<]*projects\/tasks-recorder<\/string>/)
+    assert.match(plist, /projects\/rillo\/server\/daemon\.mjs/)
+    assert.match(plist, /<key>WorkingDirectory<\/key>\s*<string>[^<]*projects\/rillo<\/string>/)
     assert.deepEqual(calls.slice(-2).map(({ args }) => args[0]), ['bootout', 'bootstrap'])
 
     await writeFile(controller.paths.stdoutPath, 'keep-log')
@@ -71,23 +71,23 @@ test('controller install is repeatable and uninstall removes only the plist', as
 })
 
 test('controller uninstall delegates schedule cleanup through the owned-unit verifier and preserves Scheduler data', async () => {
-  const homeDirectory = await mkdtemp(join(tmpdir(), 'tasks-recorder-control-schedules-'))
-  const projectRoot = join(homeDirectory, 'projects', 'tasks-recorder')
+  const homeDirectory = await mkdtemp(join(tmpdir(), 'rillo-control-schedules-'))
+  const projectRoot = join(homeDirectory, 'projects', 'rillo')
   const known = [
     '11111111-1111-4111-8111-111111111111',
     '22222222-2222-4222-8222-222222222222',
   ]
   const calls = []
   try {
-    const controller = createTaskdController({
+    const controller = createDaemonController({
       projectRoot,
       homeDirectory,
       nodePath: '/opt/homebrew/bin/node',
       uid: 502,
       config: {
         serverBaseUrl: 'http://127.0.0.1:43127',
-        schedulerDatabasePath: join(homeDirectory, '.config', 'tasks-recorder', 'scheduler.sqlite'),
-        schedulerLogsDirectory: join(homeDirectory, '.config', 'tasks-recorder', 'schedules', 'logs'),
+        schedulerDatabasePath: join(homeDirectory, '.config', 'rillo', 'scheduler.sqlite'),
+        schedulerLogsDirectory: join(homeDirectory, '.config', 'rillo', 'schedules', 'logs'),
       },
       run: async (command, args, options = {}) => {
         calls.push(['launchctl', command, args, options.allowFailure ?? false])
@@ -98,7 +98,7 @@ test('controller uninstall delegates schedule cleanup through the owned-unit ver
         return {
           removed: known.map((job_id) => ({
             job_id,
-            label: `com.joi.tasks-recorder.schedule.${job_id}`,
+            label: `com.joi.rillo.schedule.${job_id}`,
           })),
           skipped: [],
         }
@@ -110,8 +110,8 @@ test('controller uninstall delegates schedule cleanup through the owned-unit ver
       ['cleanup-legacy', 502, homeDirectory],
       ['launchctl', 'launchctl', ['bootout', 'gui/502', controller.paths.plistPath], true],
     ])
-    assert.ok(result.preserved.includes(join(homeDirectory, '.config', 'tasks-recorder', 'scheduler.sqlite')))
-    assert.ok(result.preserved.includes(join(homeDirectory, '.config', 'tasks-recorder', 'schedules', 'logs')))
+    assert.ok(result.preserved.includes(join(homeDirectory, '.config', 'rillo', 'scheduler.sqlite')))
+    assert.ok(result.preserved.includes(join(homeDirectory, '.config', 'rillo', 'schedules', 'logs')))
   } finally {
     await rm(homeDirectory, { recursive: true, force: true })
   }
@@ -119,17 +119,17 @@ test('controller uninstall delegates schedule cleanup through the owned-unit ver
 
 test('controller rejects old Node and a foreign service occupying the configured port', async () => {
   const common = {
-    projectRoot: '/projects/tasks-recorder', homeDirectory: '/Users/me', nodePath: '/node', uid: 502,
+    projectRoot: '/projects/rillo', homeDirectory: '/Users/me', nodePath: '/node', uid: 502,
     config: { serverBaseUrl: 'http://127.0.0.1:43127' },
     run: async () => ({ code: 0, stdout: '', stderr: '' }),
     build: async () => {},
   }
   await assert.rejects(
-    createTaskdController({ ...common, nodeVersion: '22.0.0', probeHealth: async () => null }).install(),
+    createDaemonController({ ...common, nodeVersion: '22.0.0', probeHealth: async () => null }).install(),
     /Node\.js 24 or newer/,
   )
   await assert.rejects(
-    createTaskdController({
+    createDaemonController({
       ...common,
       nodeVersion: '24.0.0',
       probeHealth: async () => ({ service: 'another-service', ready: true }),
@@ -139,14 +139,14 @@ test('controller rejects old Node and a foreign service occupying the configured
 })
 
 test('release install validates the prebuilt dashboard without invoking the source builder', async () => {
-  const projectRoot = await mkdtemp(join(tmpdir(), 'tasks-recorder-prebuilt-'))
+  const projectRoot = await mkdtemp(join(tmpdir(), 'rillo-prebuilt-'))
   const calls = []
   try {
     const run = async (...args) => { calls.push(args) }
     const build = createInstallBuildStep({
       projectRoot,
       nodePath: '/opt/homebrew/bin/node',
-      env: { TASKS_RECORDER_PREBUILT: '1' },
+      env: { RILLO_PREBUILT: '1' },
       run,
     })
     await assert.rejects(build(), /prebuilt Dashboard is missing/)
@@ -166,7 +166,7 @@ test('source install invokes the Dashboard builder with the selected Node runtim
   const calls = []
   const run = async (...args) => { calls.push(args) }
   const build = createInstallBuildStep({
-    projectRoot: '/projects/tasks-recorder',
+    projectRoot: '/projects/rillo',
     nodePath: '/opt/homebrew/bin/node',
     env: {},
     run,
@@ -174,6 +174,6 @@ test('source install invokes the Dashboard builder with the selected Node runtim
   await build()
   assert.deepEqual(calls, [[
     '/opt/homebrew/bin/node',
-    ['/projects/tasks-recorder/ui/build.mjs'],
+    ['/projects/rillo/ui/build.mjs'],
   ]])
 })

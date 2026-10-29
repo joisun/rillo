@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { createJournalEventClient as createClaudeJournalEventClient } from '../adapters/claude/tasks-recorder/hooks/src/journal-client.mjs'
-import { createJournalEventClient as createCodexJournalEventClient } from '../adapters/codex/tasks-recorder/hooks/src/journal-client.mjs'
+import { createJournalEventClient as createClaudeJournalEventClient } from '../adapters/claude/rillo/hooks/src/journal-client.mjs'
+import { createJournalEventClient as createCodexJournalEventClient } from '../adapters/codex/rillo/hooks/src/journal-client.mjs'
 import { createJournalEventClient } from '../hooks/src/journal-client.mjs'
 
 function event(overrides = {}) {
@@ -29,7 +29,7 @@ function event(overrides = {}) {
 }
 
 async function fixture(options = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-delivery-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-delivery-'))
   return {
     directory,
     client: createJournalEventClient({
@@ -44,7 +44,7 @@ async function fixture(options = {}) {
 }
 
 test('root, Codex and Claude delivery clients keep the same fail-open contract', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-delivery-parity-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-delivery-parity-'))
   const implementations = [
     ['root', createJournalEventClient],
     ['codex', createCodexJournalEventClient],
@@ -88,7 +88,7 @@ test('delivers a validated boundary event directly with a bounded timeout', asyn
   }
 })
 
-test('fails open and spools the validated event when taskd is unavailable', async () => {
+test('fails open and spools the validated event when daemon is unavailable', async () => {
   const current = await fixture({ fetchImpl: async () => { throw new Error('unavailable') } })
   try {
     const result = await current.client.deliver(event())
@@ -97,7 +97,7 @@ test('fails open and spools the validated event when taskd is unavailable', asyn
       delivered: false,
       spooled: true,
       dropped: false,
-      error_code: 'TASKD_UNAVAILABLE',
+      error_code: 'DAEMON_UNAVAILABLE',
     })
     assert.equal((await current.client.spool.status()).backlog_files, 1)
   } finally {
@@ -121,7 +121,7 @@ test('does not poison the spool with invalid or permanent 4xx events', async () 
 
     const rejected = await current.client.deliver(event())
     assert.equal(rejected.dropped, true)
-    assert.equal(rejected.error_code, 'TASKD_EVENT_REJECTED')
+    assert.equal(rejected.error_code, 'DAEMON_EVENT_REJECTED')
     assert.equal(rejected.http_status, 409)
     assert.equal((await current.client.spool.status()).backlog_files, 0)
   } finally {

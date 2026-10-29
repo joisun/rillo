@@ -7,7 +7,7 @@ import { compileDashboard, compileReactDashboard } from '../ui/compiler.mjs'
 test('React production Dashboard compiles to an offline single-file document', async () => {
   const html = await compileReactDashboard()
   assert.match(html, /id="root"/)
-  assert.match(html, /Tasks Recorder/)
+  assert.match(html, /Rillo/)
   assert.equal((html.match(/<script type="module">/g) ?? []).length, 1)
   assert.equal((html.match(/<style>/g) ?? []).length, 1)
   assert.doesNotMatch(html, /<script[^>]+src=|<link[^>]+href=/)

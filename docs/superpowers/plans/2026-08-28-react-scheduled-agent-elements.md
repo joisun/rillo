@@ -4,7 +4,7 @@
 
 **Goal:** Port Scheduled Tasks and Live Run control into the React Dashboard and render active assistant output with a reviewed, dotUI-compatible subset of AI Elements.
 
-**Architecture:** React owns the Scheduled route, Run Review and ephemeral Live Run state while reusing existing taskd REST/SSE contracts. AI Elements owns conversation scrolling and streaming Markdown only; dotUI remains the sole generic control system and taskd remains the runtime owner.
+**Architecture:** React owns the Scheduled route, Run Review and ephemeral Live Run state while reusing existing daemon REST/SSE contracts. AI Elements owns conversation scrolling and streaming Markdown only; dotUI remains the sole generic control system and daemon remains the runtime owner.
 
 **Tech Stack:** React 19.2.8, TypeScript 7.0.2, TanStack Query 5.102.8, dotUI/React Aria, Vercel AI Elements source, Streamdown, Tailwind CSS 4.3.3, Vitest 4.1.11, Playwright MCP.
 
@@ -34,7 +34,7 @@
 - Modify: `ui/react/lib/query/keys.ts`
 
 **Interfaces:**
-- Consumes: existing taskd Schedule, Run, log, steer, Stop, review and Resume routes.
+- Consumes: existing daemon Schedule, Run, log, steer, Stop, review and Resume routes.
 - Produces: `ScheduleRecord`, `RunRecord`, `RunEvent`, `RunLog` and typed `DashboardApi` methods.
 
 - [x] **Step 1: Extend the existing API test**
@@ -259,7 +259,7 @@ Preserve exact Legacy limits, cadence shape, catalog checks, timeout bounds and 
 
 - [x] **Step 4: Build the editor from dotUI primitives**
 
-Use a controlled form, inline errors, saving state and `expected_etag`. Agent changes refresh the model catalog without taskd restart.
+Use a controlled form, inline errors, saving state and `expected_etag`. Agent changes refresh the model catalog without daemon restart.
 
 - [x] **Step 5: Verify editor parity**
 
@@ -278,7 +278,7 @@ Verification evidence: TypeScript, 13 focused tests and production build passed.
 - Modify: matching maintenance docs found by the documentation scan.
 
 **Interfaces:**
-- Consumes: complete React Scheduled vertical slice and local taskd data.
+- Consumes: complete React Scheduled vertical slice and local daemon data.
 - Produces: visual evidence, public documentation and a Legacy cutover decision.
 
 - [ ] **Step 1: Run the full gate**

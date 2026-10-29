@@ -4,7 +4,7 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, relative } from 'node:path'
 import readline from 'node:readline'
 
-import { TaskRecorderError } from '../../../mcp/src/errors.mjs'
+import { RilloError } from '../../../mcp/src/errors.mjs'
 
 const DEFAULT_METADATA_BYTES = 64 * 1024
 const DEFAULT_LINE_BYTES = 4 * 1024 * 1024
@@ -36,14 +36,14 @@ async function resolveTranscriptPath(path, sessionsRoot) {
   try {
     [root, transcriptPath] = await Promise.all([realpath(sessionsRoot), realpath(path)])
   } catch (error) {
-    throw new TaskRecorderError(
+    throw new RilloError(
       'CODEX_TRANSCRIPT_UNAVAILABLE',
       'Codex transcript is unavailable',
       { cause: error.code ?? error.message },
     )
   }
   if (!isContained(root, transcriptPath)) {
-    throw new TaskRecorderError(
+    throw new RilloError(
       'CODEX_TRANSCRIPT_PATH_REJECTED',
       'Codex transcript must be inside the sessions directory',
     )
@@ -178,14 +178,14 @@ export async function readCodexSessionMetadata(path, {
       if (record?.type !== 'session_meta') continue
       const metadata = normalizeMetadata(record, transcriptPath)
       if (metadata === null) {
-        throw new TaskRecorderError(
+        throw new RilloError(
           'CODEX_SESSION_META_INVALID',
           'Codex session metadata is missing required lifecycle fields',
         )
       }
       return metadata
     }
-    throw new TaskRecorderError(
+    throw new RilloError(
       truncated ? 'CODEX_SESSION_META_LIMIT' : 'CODEX_SESSION_META_MISSING',
       truncated
         ? 'Codex session metadata was not found within the bounded prefix'

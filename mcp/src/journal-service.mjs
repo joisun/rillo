@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 
-import { TaskRecorderError } from './errors.mjs'
+import { RilloError } from './errors.mjs'
 import { parseEventEnvelope } from './event-envelope.mjs'
 
 function stableExecutionId(envelope) {
@@ -320,7 +320,7 @@ export function createJournalService({
   async function registerIntent(input) {
     const facts = store.work.context({ execution_id: input.execution_id })
     if (facts.execution.ended_at !== null) {
-      throw new TaskRecorderError(
+      throw new RilloError(
         'EXECUTION_ALREADY_ENDED',
         'cannot register a child execution intent from an ended execution',
         { execution_id: facts.execution.id },
@@ -391,7 +391,7 @@ export function createJournalService({
     const action = input?.action
     const taskInput = input?.task
     if (!taskInput || typeof taskInput !== 'object' || Array.isArray(taskInput)) {
-      throw new TaskRecorderError('TASK_INPUT_INVALID', 'task must be an object', {
+      throw new RilloError('TASK_INPUT_INVALID', 'task must be an object', {
         field: 'task',
       })
     }
@@ -400,7 +400,7 @@ export function createJournalService({
     else if (action === 'update') result = store.tasks.update(taskInput)
     else if (action === 'status') result = store.tasks.updateLifecycle(taskInput)
     else {
-      throw new TaskRecorderError(
+      throw new RilloError(
         'TASK_MUTATION_ACTION_INVALID',
         'action must be create, update, or status',
         { action },
@@ -424,26 +424,26 @@ export function createJournalService({
 
   async function syncStructure(input) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) {
-      throw new TaskRecorderError('TASK_INPUT_INVALID', 'input must be an object')
+      throw new RilloError('TASK_INPUT_INVALID', 'input must be an object')
     }
     const projectId = input.project_id
     const mainInput = input.main_task
     const desiredChildren = input.children
     const expectedChildren = input.expected_children
     if (!mainInput || typeof mainInput !== 'object' || Array.isArray(mainInput)) {
-      throw new TaskRecorderError('TASK_INPUT_INVALID', 'main_task must be an object', {
+      throw new RilloError('TASK_INPUT_INVALID', 'main_task must be an object', {
         field: 'main_task',
       })
     }
     if (!Array.isArray(desiredChildren) || !Array.isArray(expectedChildren)) {
-      throw new TaskRecorderError(
+      throw new RilloError(
         'TASK_INPUT_INVALID',
         'children and expected_children must be arrays',
       )
     }
     const ids = desiredChildren.map(({ id }) => id)
     if (new Set(ids).size !== ids.length) {
-      throw new TaskRecorderError('TASK_INPUT_INVALID', 'children contains duplicate ids', {
+      throw new RilloError('TASK_INPUT_INVALID', 'children contains duplicate ids', {
         field: 'children',
       })
     }
@@ -483,7 +483,7 @@ export function createJournalService({
           || item.revision < 1
           || expectedMap.has(item.id)
         ) {
-          throw new TaskRecorderError(
+          throw new RilloError(
             'TASK_INPUT_INVALID',
             'expected_children must contain unique id/revision pairs',
             { field: 'expected_children' },
@@ -497,7 +497,7 @@ export function createJournalService({
       const expected = [...expectedMap].map(([id, value]) => ({ id, revision: value }))
         .sort((left, right) => left.id.localeCompare(right.id))
       if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-        throw new TaskRecorderError(
+        throw new RilloError(
           'TASK_STRUCTURE_CONFLICT',
           'direct child set or revision changed',
           { current_children: actual },

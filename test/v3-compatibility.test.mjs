@@ -9,10 +9,10 @@ import { createJournalService } from '../mcp/src/journal-service.mjs'
 import { createJournalStore } from '../mcp/src/journal-store.mjs'
 import { createV3CompatibilityService } from '../mcp/src/v3-compatibility-service.mjs'
 import { createTaskStore } from '../mcp/src/task-store.mjs'
-import { startTaskd } from '../server/src/taskd-runtime.mjs'
+import { startDaemon } from '../server/src/daemon-runtime.mjs'
 
 async function fixture() {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-v3-compat-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-v3-compat-'))
   const store = createJournalStore({
     databasePath: join(directory, 'tasks.sqlite'),
     clock: () => new Date('2026-08-20T07:00:00.000Z'),
@@ -153,7 +153,7 @@ test('legacy context and sync tree delegate to compact v3 semantics with depreca
       }],
       focus_task_id: 'child-task',
     })
-    assert.equal(synced.compatibility.replacement, 'agent_tasks_sync_structure')
+    assert.equal(synced.compatibility.replacement, 'rillo_sync_structure')
     assert.equal(synced.root.status, 'active')
     assert.equal(synced.children[0].parent_id, 'root-task')
     assert.equal(current.store.work.context({ execution_id: current.executionId }).task.id, 'child-task')
@@ -169,7 +169,7 @@ test('Sessions runtime leaves an existing v2 database intact without requiring m
   legacy.close()
   let runtime
   try {
-    runtime = await startTaskd({
+    runtime = await startDaemon({
       config: { databasePath, serverHost: '127.0.0.1', serverPort: 0 },
       dashboardHtml: '<!doctype html>',
     })

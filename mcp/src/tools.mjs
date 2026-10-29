@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 
-import { TaskRecorderError } from './errors.mjs'
+import { RilloError } from './errors.mjs'
 
 export const SERVER_INSTRUCTIONS = `Query native sessions and manage scheduled automation through these tools. Use runtime_list before choosing a schedule agent. Read schedule_get before changing a schedule and pass its latest etag as expected_etag; on SCHEDULE_VERSION_CONFLICT read again and reconsider the change, never silently overwrite. schedule_create creates an enabled task; cadence uses the service machine timezone. Reuse the same idempotency_key when retrying schedule_run. Session search covers user and assistant text, not just previews. Follow next_cursor even when a search page has no matches; do not claim that a partial page is the complete result. Use session_sources to obtain the exact provider and store_id before registering relations. SessionRef is {provider, store_id, session_id}; for Codex session_id is thread.id. After a delegated child session exists, register its actual identity with session_link. Never guess a session ID from an execution, agent key, PID, worktree, or title. Use session_unlink only to remove an explicitly registered relation; native subagent/fork relations are read-only. For messaging, discover session_control_sources and session_control_capabilities first; reuse the same request_id for the same target, text and mode. queue schedules input, steer supplements a turn, and interrupt stops the expected turn before sending; steer and interrupt require the observed expected_turn_id. accepted does not mean completed. On unknown, query session_delivery; never switch IDs or transports to resend blindly. No Task, heartbeat, attribution, checkpoint or automatic summary recording is needed. Never edit local databases directly.`
 
@@ -60,12 +60,12 @@ function handler(operation) {
       const structuredContent = await operation(input)
       return { content: [{ type: 'text', text: JSON.stringify(structuredContent) }], structuredContent, ...(['unknown', 'rejected'].includes(structuredContent?.delivery?.status) ? { isError: true } : {}) }
     } catch (error) {
-      const known = error instanceof TaskRecorderError
+      const known = error instanceof RilloError
       const structuredContent = {
         ok: false,
         error: {
           code: known ? error.code : 'INTERNAL_ERROR',
-          message: known ? error.message : 'Tasks Recorder operation failed.',
+          message: known ? error.message : 'Rillo operation failed.',
           ...(known && error.details !== undefined ? { details: error.details } : {}),
         },
       }
@@ -74,9 +74,9 @@ function handler(operation) {
   }
 }
 
-export function createTasksRecorderServer({ service }) {
+export function createRilloServer({ service }) {
   const server = new McpServer(
-    { name: 'tasks-recorder', version: '0.14.0' },
+    { name: 'rillo', version: '0.15.0' },
     { instructions: SERVER_INSTRUCTIONS },
   )
   server.registerTool('session_sources', {

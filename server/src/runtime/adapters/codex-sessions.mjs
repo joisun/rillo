@@ -82,7 +82,7 @@ export function createCodexSessionAdapter({
         try {
           await client.started
           await client.request('initialize', {
-            clientInfo: { name: 'tasks-recorder-sessions', version: '0.1.0' },
+            clientInfo: { name: 'rillo-sessions', version: '0.1.0' },
             capabilities: { experimentalApi: true },
           })
           client.notify('initialized')
@@ -107,7 +107,7 @@ export function createCodexSessionAdapter({
     repairClient = client
     try {
       await client.started
-      await client.request('initialize', { clientInfo: { name: 'tasks-recorder-session-repair', version: '0.1.0' }, capabilities: { experimentalApi: true } })
+      await client.request('initialize', { clientInfo: { name: 'rillo-session-repair', version: '0.1.0' }, capabilities: { experimentalApi: true } })
       client.notify('initialized')
       for (const archived of [false, true]) nativePage(await client.request('thread/list', {
         cursor: null, limit: 100, archived, sortKey: 'recency_at', sortDirection: 'desc', useStateDbOnly: false,

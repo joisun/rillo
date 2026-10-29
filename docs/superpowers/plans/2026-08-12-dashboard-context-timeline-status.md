@@ -4,9 +4,9 @@
 
 > **执行状态（2026-08-13）：** Tasks 1–9 已实现并通过 automated、isolated browser 与 live read-only verification；项目尚无可用 Git `HEAD`，未创建 commit。
 
-**Goal:** 为 standalone Tasks Recorder Dashboard 增加工作目录、worktree、branch 三列、可折叠 Timeline，以及具备并发和父子一致性保护的人工状态修改，并彻底移除 token/Bearer contract。
+**Goal:** 为 standalone Rillo Dashboard 增加工作目录、worktree、branch 三列、可折叠 Timeline，以及具备并发和父子一致性保护的人工状态修改，并彻底移除 token/Bearer contract。
 
-**Architecture:** SQLite 仍由 taskd 单独持有；Dashboard 通过 snapshot 读取 absolute context，通过窄 `PATCH /api/v1/tasks/:id/status` 修改 status，并由 SSE revision 触发 authoritative refresh。DHTMLX Gantt 继续全局 readonly，Grid 与 Timeline 使用两个 custom layout 切换，状态编辑由应用自己的 Pill/listbox 完成。
+**Architecture:** SQLite 仍由 daemon 单独持有；Dashboard 通过 snapshot 读取 absolute context，通过窄 `PATCH /api/v1/tasks/:id/status` 修改 status，并由 SSE revision 触发 authoritative refresh。DHTMLX Gantt 继续全局 readonly，Grid 与 Timeline 使用两个 custom layout 切换，状态编辑由应用自己的 Pill/listbox 完成。
 
 **Tech Stack:** Node.js 24、`node:sqlite`、原生 HTTP/REST + SSE、DHTMLX Gantt Standard 9.1、vanilla JavaScript/CSS、Node test runner、esbuild。
 
@@ -527,7 +527,7 @@ function statusFor(error) {
   if (error.statusCode) return error.statusCode
   if (error.code === 'TASK_NOT_FOUND' || error.code === 'PARENT_NOT_FOUND') return 404
   if (error.code === 'TASK_VERSION_CONFLICT' || error.code === 'CHILD_TASKS_INCOMPLETE') return 409
-  if (error instanceof TaskRecorderError) return 400
+  if (error instanceof RilloError) return 400
   return 500
 }
 ```
@@ -584,13 +584,13 @@ Expected: no matches。
 - Delete: `test/auth-token.test.mjs`
 - Modify: `mcp/src/config.mjs:1-100`
 - Modify: `mcp/server.mjs:1-25`
-- Modify: `hooks/src/taskd-client.mjs:1-15`
-- Modify: `server/src/taskd-runtime.mjs:1-60`
-- Modify: `server/taskd.mjs:1-35`
+- Modify: `hooks/src/daemon-client.mjs:1-15`
+- Modify: `server/src/daemon-runtime.mjs:1-60`
+- Modify: `server/daemon.mjs:1-35`
 - Modify: `server/control.mjs:1-192`
 - Modify: `test/config.test.mjs:1-65`
 - Modify: `test/control.test.mjs:1-96`
-- Modify: `test/taskd-runtime.test.mjs:1-83`
+- Modify: `test/daemon-runtime.test.mjs:1-83`
 - Modify: `test/hook.test.mjs:1-103`
 - Modify: `test/server-integration.test.mjs:1-72`
 - Modify: `test/helpers.mjs:1-70`
@@ -608,19 +608,19 @@ Expected: no matches。
 assert.equal('tokenPath' in config, false)
 ```
 
-Controller test 删除 `ensureToken` fake、counter 与 token file writes；install 只断言 build + plist + launchctl，uninstall 的 `preserved` 只含 stdout/stderr logs。Runtime tests 和 `temporaryApi` 删除 `token` argument。Hook/MCP integration fixtures 只创建 `config.json`，环境不再传 `AGENT_TASKS_TOKEN_PATH`。
+Controller test 删除 `ensureToken` fake、counter 与 token file writes；install 只断言 build + plist + launchctl，uninstall 的 `preserved` 只含 stdout/stderr logs。Runtime tests 和 `temporaryApi` 删除 `token` argument。Hook/MCP integration fixtures 只创建 `config.json`，环境不再传 `RILLO_TOKEN_PATH`。
 
 - [ ] **Step 2: 运行受影响 tests，确认 RED**
 
-Run: `node --test test/config.test.mjs test/control.test.mjs test/taskd-runtime.test.mjs test/hook.test.mjs test/server-integration.test.mjs`
+Run: `node --test test/config.test.mjs test/control.test.mjs test/daemon-runtime.test.mjs test/hook.test.mjs test/server-integration.test.mjs`
 
 Expected: FAIL on existing `tokenPath`、auth-token import 或 Bearer startup behavior。
 
 - [ ] **Step 3: 删除 config token resolution**
 
-从 `mcp/src/config.mjs` 删除 `AGENT_TASKS_TOKEN_PATH` validation、`tokenPath` calculation 与 return field。保留 database/output/server URL validation 不变。
+从 `mcp/src/config.mjs` 删除 `RILLO_TOKEN_PATH` validation、`tokenPath` calculation 与 return field。保留 database/output/server URL validation 不变。
 
-- [ ] **Step 4: 删除 MCP、Hook 与 taskd runtime token wiring**
+- [ ] **Step 4: 删除 MCP、Hook 与 daemon runtime token wiring**
 
 目标构造形式：
 
@@ -628,15 +628,15 @@ Expected: FAIL on existing `tokenPath`、auth-token import 或 Bearer startup be
 // mcp/server.mjs
 const service = createTaskClient({ baseUrl: config.serverBaseUrl })
 
-// hooks/src/taskd-client.mjs
+// hooks/src/daemon-client.mjs
 const client = createTaskClient({ baseUrl: config.serverBaseUrl, timeoutMs: 1_000 })
 
-// server/taskd.mjs
+// server/daemon.mjs
 const dashboardHtml = await readFile(dashboardPath, 'utf8')
-const runtime = await startTaskd({ config, dashboardPath, dashboardHtml })
+const runtime = await startDaemon({ config, dashboardPath, dashboardHtml })
 
-// server/src/taskd-runtime.mjs
-export async function startTaskd({ config, dashboardPath, dashboardHtml, createStore, ...rest }) {
+// server/src/daemon-runtime.mjs
+export async function startDaemon({ config, dashboardPath, dashboardHtml, createStore, ...rest }) {
   // createApiServer receives no token
 }
 ```
@@ -647,16 +647,16 @@ export async function startTaskd({ config, dashboardPath, dashboardHtml, createS
 
 - [ ] **Step 6: 运行 focused tests，确认 GREEN**
 
-Run: `node --test test/config.test.mjs test/control.test.mjs test/taskd-runtime.test.mjs test/hook.test.mjs test/server-integration.test.mjs test/api-server.test.mjs test/task-client.test.mjs`
+Run: `node --test test/config.test.mjs test/control.test.mjs test/daemon-runtime.test.mjs test/hook.test.mjs test/server-integration.test.mjs test/api-server.test.mjs test/task-client.test.mjs`
 
-Expected: PASS；MCP stdio 与 heartbeat 均可在无 token 文件时访问 temporary taskd。
+Expected: PASS；MCP stdio 与 heartbeat 均可在无 token 文件时访问 temporary daemon。
 
 - [ ] **Step 7: 扫描 source contract**
 
 Run:
 
 ```bash
-rg -n "auth-token|AUTH_REQUIRED|Bearer|AGENT_TASKS_TOKEN|tokenPath|ensureAuthToken|readAuthToken" \
+rg -n "auth-token|AUTH_REQUIRED|Bearer|RILLO_TOKEN|tokenPath|ensureAuthToken|readAuthToken" \
   README.md hooks mcp server skills test package.json \
   -g '!docs/superpowers/**'
 ```
@@ -665,7 +665,7 @@ Expected: 此阶段只允许 `README.md` / `skills/task-manager/SKILL.md` 的待
 
 - [ ] **Step 8: Review gate**
 
-确认删除范围只有两个 obsolete auth files；`config.json` 与 `tasks.sqlite` 仍位于 `~/.config/tasks-recorder`，LaunchAgent label/paths 未改变。
+确认删除范围只有两个 obsolete auth files；`config.json` 与 `tasks.sqlite` 仍位于 `~/.config/rillo`，LaunchAgent label/paths 未改变。
 
 ---
 
@@ -904,7 +904,7 @@ Expected: PASS。
 
 - [ ] **Step 7: 用现有 Playwright MCP 做 focused layout spike**
 
-启动 isolated taskd 后使用 `playwright-headless`，在 1440px viewport 验证：
+启动 isolated daemon 后使用 `playwright-headless`，在 1440px viewport 验证：
 
 1. expanded 同时存在 `.gantt_grid`、`.gantt_task` 和两条 horizontal scrollbar；
 2. Grid 与 Timeline 分别横向滚动时互不改变对方 X；
@@ -1055,13 +1055,13 @@ Expected: PASS。
 - Modify: `README.md`
 - Modify: `skills/task-manager/SKILL.md`
 - Modify: `ui/dist/index.html`（由 `npm run build` 生成）
-- Runtime delete: `/Users/joi-com/.config/tasks-recorder/auth-token`
-- Runtime replace: `/Users/joi-com/Library/LaunchAgents/com.joi.tasks-recorder.taskd.plist`（由 controller install 原子写入）
+- Runtime delete: `/Users/joi-com/.config/rillo/auth-token`
+- Runtime replace: `/Users/joi-com/Library/LaunchAgents/com.joi.rillo.daemon.plist`（由 controller install 原子写入）
 
 **Interfaces:**
 
 - Consumes: Tasks 1-8 的完整 code/runtime contract。
-- Produces: 可开源理解的安装/访问/安全说明，运行中的 token-free taskd，以及完整验证证据。
+- Produces: 可开源理解的安装/访问/安全说明，运行中的 token-free daemon，以及完整验证证据。
 
 - [ ] **Step 1: 先做全量 Markdown scan**
 
@@ -1081,15 +1081,15 @@ rg -n "auth-token|Bearer|Authorization|Dashboard|Timeline|worktree|branch|状态
 README 必须明确：
 
 - 用户状态目录只有 `config.json` 与 `tasks.sqlite`；
-- `npm run taskd -- install|start|stop|status|uninstall` 与访问 URL；
+- `npm run daemon -- install|start|stop|status|uninstall` 与访问 URL；
 - Dashboard 三个 context 列、Timeline toggle、status correction；
 - status PATCH request/response 与 `expected_updated_at` conflict；
 - Server 只信任同用户 local processes，限制为 `127.0.0.1` + Host + Origin + no CORS；不声称隔离同用户进程；
-- 不再生成或需要 token/Bearer/`AGENT_TASKS_TOKEN_PATH`。
+- 不再生成或需要 token/Bearer/`RILLO_TOKEN_PATH`。
 
 - [ ] **Step 3: 更新 task-manager skill**
 
-删除 token 假设；继续要求 Agent 通过 MCP/taskd 做 semantic maintenance。补充一句：Dashboard status correction 只用于 Hook/lifecycle 漏更新，不替代 `agent_tasks_context`、`agent_tasks_upsert`、`agent_tasks_complete`。
+删除 token 假设；继续要求 Agent 通过 MCP/daemon 做 semantic maintenance。补充一句：Dashboard status correction 只用于 Hook/lifecycle 漏更新，不替代 `rillo_context`、`rillo_upsert`、`rillo_complete`。
 
 - [ ] **Step 4: 构建并运行完整 automated suite**
 
@@ -1102,29 +1102,29 @@ Expected: all tests PASS；syntax check PASS；built Dashboard 小于 2 MiB。
 Run:
 
 ```bash
-rg -n "auth-token|AUTH_REQUIRED|Bearer|AGENT_TASKS_TOKEN|tokenPath|ensureAuthToken|readAuthToken" \
+rg -n "auth-token|AUTH_REQUIRED|Bearer|RILLO_TOKEN|tokenPath|ensureAuthToken|readAuthToken" \
   README.md hooks mcp server skills test package.json ui/src ui/dist
 rg -n "inline_edit|lightbox|drag_move\s*=\s*true|drag_resize\s*=\s*true" ui/src
 ```
 
 Expected: no token matches；无新 inline/lightbox/drag enablement；历史 docs 不在该 scan 范围。
 
-- [ ] **Step 6: 安全替换本机 taskd 并删除 obsolete token**
+- [ ] **Step 6: 安全替换本机 daemon 并删除 obsolete token**
 
 先解析 exact targets，不使用 `$HOME`、`~` 或 glob：
 
 ```bash
-npm run taskd -- stop
-ls -ld /Users/joi-com/.config/tasks-recorder
-if [ -e /Users/joi-com/.config/tasks-recorder/auth-token ]; then ls -l /Users/joi-com/.config/tasks-recorder/auth-token; fi
+npm run daemon -- stop
+ls -ld /Users/joi-com/.config/rillo
+if [ -e /Users/joi-com/.config/rillo/auth-token ]; then ls -l /Users/joi-com/.config/rillo/auth-token; fi
 ```
 
 确认目录与文件精确匹配后只删除 obsolete token，再运行：
 
 ```bash
-node --input-type=module -e "import { unlink } from 'node:fs/promises'; await unlink('/Users/joi-com/.config/tasks-recorder/auth-token').catch((error) => { if (error.code !== 'ENOENT') throw error })"
-npm run taskd -- install
-npm run taskd -- status
+node --input-type=module -e "import { unlink } from 'node:fs/promises'; await unlink('/Users/joi-com/.config/rillo/auth-token').catch((error) => { if (error.code !== 'ENOENT') throw error })"
+npm run daemon -- install
+npm run daemon -- status
 ```
 
 Expected: status `loaded:true`、`ready:true`；token path 不存在。不得删除 `config.json`、`tasks.sqlite`、WAL/SHM 或日志。
@@ -1136,14 +1136,14 @@ Run:
 ```bash
 curl --fail --silent http://127.0.0.1:43127/health/ready
 curl --fail --silent http://127.0.0.1:43127/api/v1/snapshot
-test ! -e /Users/joi-com/.config/tasks-recorder/auth-token
+test ! -e /Users/joi-com/.config/rillo/auth-token
 ```
 
 Live runtime 只做 read-only health/snapshot smoke，不修改用户数据库。Status write、revision 与 SQLite 一致性已经在 temporary database 的 Store/API/browser tests 中验证；不要为了 smoke test 创建或改写用户 task。
 
 - [ ] **Step 8: 最终 browser regression**
 
-用 Task 8 相同的 `visual-driven-ui-test-skill@joi` + `playwright-headless` 流程连接 live taskd，read-only 复验 360 / 768 / 1440、Timeline state persistence 与 context columns；status success/error 继续使用 isolated temporary taskd，避免触碰用户任务。
+用 Task 8 相同的 `visual-driven-ui-test-skill@joi` + `playwright-headless` 流程连接 live daemon，read-only 复验 360 / 768 / 1440、Timeline state persistence 与 context columns；status success/error 继续使用 isolated temporary daemon，避免触碰用户任务。
 
 - [ ] **Step 9: 最终 Johari 与 First Principles completion check**
 
@@ -1154,7 +1154,7 @@ Live runtime 只做 read-only health/snapshot smoke，不修改用户数据库�
 
 - [ ] **Step 10: 交付 review gate**
 
-列出本次所有 changed/deleted/generated files、完整命令结果、live taskd 状态、obsolete token 已删除与 browser evidence。不要 commit；如用户之后要求 Git history，先初始化/确认 repository 策略。
+列出本次所有 changed/deleted/generated files、完整命令结果、live daemon 状态、obsolete token 已删除与 browser evidence。不要 commit；如用户之后要求 Git history，先初始化/确认 repository 策略。
 
 ---
 

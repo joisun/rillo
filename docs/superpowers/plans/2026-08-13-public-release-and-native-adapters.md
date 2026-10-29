@@ -2,18 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Publish Tasks Recorder as an installable macOS service with GitHub Actions, a checksummed `install.sh`, separate native Codex and Claude Code adapters, and a public README explaining how the system works.
+**Goal:** Publish Rillo as an installable macOS service with GitHub Actions, a checksummed `install.sh`, separate native Codex and Claude Code adapters, and a public README explaining how the system works.
 
-**Architecture:** `taskd` remains the only SQLite owner and exposes a localhost HTTP/SSE contract. The service is installed from an immutable GitHub Release into versioned directories, while Codex and Claude Code adapters are independent plugin roots that each ship their own hooks and bundled MCP client. Repository marketplace catalogs expose the adapters using each host's native format.
+**Architecture:** `daemon` remains the only SQLite owner and exposes a localhost HTTP/SSE contract. The service is installed from an immutable GitHub Release into versioned directories, while Codex and Claude Code adapters are independent plugin roots that each ship their own hooks and bundled MCP client. Repository marketplace catalogs expose the adapters using each host's native format.
 
 **Tech Stack:** Node.js 24 ESM, `node:sqlite`, esbuild, MCP SDK, macOS `launchd`, POSIX shell, GitHub Actions, GitHub CLI.
 
 ## Global Constraints
 
-- Public repository is `https://github.com/joisun/tasks-recorder`.
+- Repository name is `joisun/rillo`. The remote has been renamed; publication status is recorded in `docs/migrations/rillo-rename.md`.
 - Service support in this release is macOS with Node.js 24 or newer.
-- Persistent user data remains under `~/.config/tasks-recorder` and must survive upgrades/uninstall by default.
-- Installed releases live under `~/.local/share/tasks-recorder/releases/<version>` with a `current` symlink.
+- Persistent user data remains under `~/.config/rillo` and must survive upgrades/uninstall by default.
+- Installed releases live under `~/.local/share/rillo/releases/<version>` with a `current` symlink.
 - `install.sh` manages only the service; Codex and Claude Code adapters are installed separately through native marketplaces.
 - Adapters may duplicate implementation and must not depend on a source checkout, project `node_modules`, or the service's internal install path.
 - Project and distributed artifacts use GPL-2.0-only for the current DHTMLX-based release.
@@ -32,12 +32,12 @@
 
 **Interfaces:**
 - Produces: `npm run build:adapters`, `npm run package:release`, and release files under `release/`.
-- Runtime artifact: `release/tasks-recorder-macos.tar.gz` with a single `tasks-recorder-<version>/` root.
-- Adapter artifacts: `release/tasks-recorder-{codex,claude}-adapter.tar.gz`.
+- Runtime artifact: `release/rillo-macos.tar.gz` with a single `rillo-<version>/` root.
+- Adapter artifacts: `release/rillo-{codex,claude}-adapter.tar.gz`.
 
 - [ ] **Step 1: Write failing package behavior tests**
 
-  Run the package command in a temporary output directory and assert the runtime archive contains `package.json`, `package-lock.json`, `server/`, only the `mcp/src/` modules required by `taskd`, `ui/dist/index.html`, `LICENSE`, and `ui/THIRD_PARTY_NOTICES.md`, while excluding `test/`, `.git/`, root MCP entrypoints, and source adapter dependencies.
+  Run the package command in a temporary output directory and assert the runtime archive contains `package.json`, `package-lock.json`, `server/`, only the `mcp/src/` modules required by `daemon`, `ui/dist/index.html`, `LICENSE`, and `ui/THIRD_PARTY_NOTICES.md`, while excluding `test/`, `.git/`, root MCP entrypoints, and source adapter dependencies.
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
@@ -65,7 +65,7 @@
 
 **Interfaces:**
 - Consumes: a Release containing `ui/dist/index.html`.
-- Produces: `TASKS_RECORDER_PREBUILT=1 node server/control.mjs install`, which validates the prebuilt dashboard instead of invoking esbuild.
+- Produces: `RILLO_PREBUILT=1 node server/control.mjs install`, which validates the prebuilt dashboard instead of invoking esbuild.
 
 - [ ] **Step 1: Write a failing test for prebuilt mode**
 
@@ -77,7 +77,7 @@
 
 - [ ] **Step 3: Implement the minimal prebuilt verifier**
 
-  Keep source installs unchanged. When `TASKS_RECORDER_PREBUILT=1`, `main()` passes a build function that only checks `ui/dist/index.html` is readable.
+  Keep source installs unchanged. When `RILLO_PREBUILT=1`, `main()` passes a build function that only checks `ui/dist/index.html` is readable.
 
 - [ ] **Step 4: Run controller tests**
 
@@ -94,10 +94,10 @@
 - Create: `test/install-script.test.mjs`
 
 **Interfaces:**
-- Consumes: GitHub Release assets `tasks-recorder-macos.tar.gz` and `SHA256SUMS`.
-- Produces: versioned runtime, `current` symlink, default config, `~/.local/bin/tasks-recorder`, and a loaded LaunchAgent.
+- Consumes: GitHub Release assets `rillo-macos.tar.gz` and `SHA256SUMS`.
+- Produces: versioned runtime, `current` symlink, default config, `~/.local/bin/rillo`, and a loaded LaunchAgent.
 - Options: `--version <tag>`, `--no-start`, and `--uninstall`.
-- Test override: `TASKS_RECORDER_RELEASE_BASE_URL` changes only the download origin.
+- Test override: `RILLO_RELEASE_BASE_URL` changes only the download origin.
 
 - [ ] **Step 1: Write failing installer integration tests**
 
@@ -124,26 +124,26 @@
 **Files:**
 - Create: `.agents/plugins/marketplace.json`
 - Create: `.claude-plugin/marketplace.json`
-- Create: `adapters/codex/tasks-recorder/.codex-plugin/plugin.json`
-- Create: `adapters/codex/tasks-recorder/.mcp.json`
-- Create: `adapters/codex/tasks-recorder/hooks/**`
-- Create: `adapters/codex/tasks-recorder/mcp/**`
-- Create: `adapters/codex/tasks-recorder/skills/task-manager/SKILL.md`
-- Create: `adapters/claude/tasks-recorder/.claude-plugin/plugin.json`
-- Create: `adapters/claude/tasks-recorder/.mcp.json`
-- Create: `adapters/claude/tasks-recorder/hooks/**`
-- Create: `adapters/claude/tasks-recorder/mcp/**`
-- Create: `adapters/claude/tasks-recorder/skills/task-manager/SKILL.md`
+- Create: `adapters/codex/rillo/.codex-plugin/plugin.json`
+- Create: `adapters/codex/rillo/.mcp.json`
+- Create: `adapters/codex/rillo/hooks/**`
+- Create: `adapters/codex/rillo/mcp/**`
+- Create: `adapters/codex/rillo/skills/task-manager/SKILL.md`
+- Create: `adapters/claude/rillo/.claude-plugin/plugin.json`
+- Create: `adapters/claude/rillo/.mcp.json`
+- Create: `adapters/claude/rillo/hooks/**`
+- Create: `adapters/claude/rillo/mcp/**`
+- Create: `adapters/claude/rillo/skills/task-manager/SKILL.md`
 - Create: `test/plugin-adapters.test.mjs`
 
 **Interfaces:**
-- Codex marketplace ID: `tasks-recorder`; plugin ID: `tasks-recorder`.
-- Claude marketplace ID: `tasks-recorder`; plugin ID: `tasks-recorder`.
-- Both MCP clients consume only `~/.config/tasks-recorder/config.json`, `AGENT_TASKS_SERVER_URL`, and the localhost REST API.
+- Codex marketplace ID: `rillo`; plugin ID: `rillo`.
+- Claude marketplace ID: `rillo`; plugin ID: `rillo`.
+- Both MCP clients consume only `~/.config/rillo/config.json`, `RILLO_SERVER_URL`, and the localhost REST API.
 
 - [ ] **Step 1: Write failing adapter contract tests**
 
-  Assert each manifest and catalog has the correct native schema, plugin paths stay inside the plugin root, MCP config uses the correct root variable/schema, generated bundles start and complete MCP initialization against a temporary real `taskd`, and hooks report the correct host identity.
+  Assert each manifest and catalog has the correct native schema, plugin paths stay inside the plugin root, MCP config uses the correct root variable/schema, generated bundles start and complete MCP initialization against a temporary real `daemon`, and hooks report the correct host identity.
 
 - [ ] **Step 2: Run focused tests and verify RED**
 
@@ -163,8 +163,8 @@
 
   ```bash
   npm run build:adapters
-  python3 /Users/joi-com/.dotfiles/dot.configs/ai/.agents/skills/.system/plugin-creator/scripts/validate_plugin.py adapters/codex/tasks-recorder
-  claude plugin validate adapters/claude/tasks-recorder
+  python3 /Users/joi-com/.dotfiles/dot.configs/ai/.agents/skills/.system/plugin-creator/scripts/validate_plugin.py adapters/codex/rillo
+  claude plugin validate adapters/claude/rillo
   node --test test/plugin-adapters.test.mjs
   ```
 
@@ -209,7 +209,7 @@
 
 - [ ] **Step 5: Rewrite README for public users**
 
-  Include prerequisites, safe and one-line install variants, separate Codex/Claude plugin commands, hook trust behavior, dashboard/service commands, update/uninstall/data paths, troubleshooting, source development, security, license, and a **How it works** flow from prompt/tool/stop hooks through MCP/HTTP/taskd/SQLite/SSE.
+  Include prerequisites, safe and one-line install variants, separate Codex/Claude plugin commands, hook trust behavior, dashboard/service commands, update/uninstall/data paths, troubleshooting, source development, security, license, and a **How it works** flow from prompt/tool/stop hooks through MCP/HTTP/daemon/SQLite/SSE.
 
 - [ ] **Step 6: Run metadata and full project verification**
 
@@ -225,7 +225,7 @@
 - Modify only docs found to reference changed paths/behavior.
 
 **Interfaces:**
-- Produces: a public, empty-or-unpushed GitHub repository remote at `joisun/tasks-recorder` without creating commits/tags/pushes.
+- Produces: a public, empty-or-unpushed GitHub repository remote at `joisun/rillo` without creating commits/tags/pushes.
 
 - [ ] **Step 1: Scan structural documentation references**
 
@@ -244,11 +244,11 @@
 
 - [ ] **Step 3: Create the public GitHub repository with `gh`**
 
-  Run `gh repo create joisun/tasks-recorder --public --description "Local task control plane and real-time dashboard for coding agents"`, then add `origin` if `gh` did not do so. Do not push an unborn branch.
+  Run `gh repo create joisun/rillo --public --description "Local task control plane and real-time dashboard for coding agents"`, then add `origin` if `gh` did not do so. Do not push an unborn branch.
 
 - [ ] **Step 4: Inspect final changes and external state**
 
-  Run `git status --short`, `git diff --check`, `gh repo view joisun/tasks-recorder`, and report that Actions/Release begin only after the user authorizes a commit, push, and version tag.
+  Run `git status --short`, `git diff --check`, `gh repo view joisun/rillo`, and report that Actions/Release begin only after the user authorizes a commit, push, and version tag.
 
 - [ ] **Step 5: Prepare but do not yet create the permissive-Timeline branch**
 

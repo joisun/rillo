@@ -4,7 +4,7 @@
 
 **Goal:** Replace the React Dashboard's shadcn/Radix and raw generic controls with one checked-in dotUI/React Aria component system using the official Vercel preset, while preserving the existing backend, SVAR Gantt, offline single-file build and Legacy Dashboard.
 
-**Architecture:** Generate the official Vercel preset in an isolated temporary project, then selectively apply reviewed source and configuration to the existing React preview. dotUI owns generic controls and overlays; Tasks Recorder owns product layout/status mapping; SVAR remains the Tree/Timeline renderer. Migration proceeds surface-by-surface and removes the temporary Radix dependency only after all consumers use React Aria semantics.
+**Architecture:** Generate the official Vercel preset in an isolated temporary project, then selectively apply reviewed source and configuration to the existing React preview. dotUI owns generic controls and overlays; Rillo owns product layout/status mapping; SVAR remains the Tree/Timeline renderer. Migration proceeds surface-by-surface and removes the temporary Radix dependency only after all consumers use React Aria semantics.
 
 **Tech Stack:** React 19.2.8, TypeScript 7.0.2, Tailwind CSS 4.3.3, dotUI Vercel preset, React Aria Components, tailwind-variants, TanStack Query 5.102.8, SVAR React Gantt 2.7.1, Vitest 4.1.11, Playwright MCP.
 
@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Do not change taskd, REST/SSE, SQLite, Runtime Registry, Agent adapter, Session resume or Scheduler contracts.
+- Do not change daemon, REST/SSE, SQLite, Runtime Registry, Agent adapter, Session resume or Scheduler contracts.
 - Keep `ui/dist/react.html` as an offline, self-contained single-file build; no remote font, CDN, runtime registry fetch or credential.
 - Pin the official dotUI `Vercel · Geist · 8px · default` preset URL from the spec.
 - Treat React Aria event, selection, disabled and overlay semantics as an API migration; do not only swap imports.
@@ -73,7 +73,7 @@ Add the generated runtime dependencies at exact lockfile versions. Remove `class
 
 - [x] **Step 3: Merge tokens without overwriting product styles**
 
-Bring in the official Tailwind imports/plugins and Vercel preset semantic variables. Keep Tasks Recorder aliases such as Timeline/NOW/status variables below the dotUI layer; delete only selectors proven to be generic control replicas.
+Bring in the official Tailwind imports/plugins and Vercel preset semantic variables. Keep Rillo aliases such as Timeline/NOW/status variables below the dotUI layer; delete only selectors proven to be generic control replicas.
 
 - [x] **Step 4: Update existing toolchain assertions**
 

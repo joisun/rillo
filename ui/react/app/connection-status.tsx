@@ -10,7 +10,7 @@ const PRESENTATION = {
   open: {
     label: '实时连接正常',
     shortLabel: '实时',
-    detail: 'Dashboard 会在 taskd 数据变化后自动刷新。',
+    detail: 'Dashboard 会在 daemon 数据变化后自动刷新。',
     icon: Radio,
   },
   connecting: {
@@ -22,7 +22,7 @@ const PRESENTATION = {
   closed: {
     label: '实时连接已断开',
     shortLabel: '离线',
-    detail: '当前页面不会自动刷新；请确认 taskd 和浏览器连接状态。',
+    detail: '当前页面不会自动刷新；请确认 daemon 和浏览器连接状态。',
     icon: CircleAlert,
   },
 } satisfies Record<DashboardConnectionState, {

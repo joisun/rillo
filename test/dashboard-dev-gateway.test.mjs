@@ -8,7 +8,7 @@ import {
   resolveDashboardDevConfig,
 } from '../ui/dev-gateway.mjs'
 
-test('dev config defaults to a distinct loopback listener and taskd upstream', () => {
+test('dev config defaults to a distinct loopback listener and daemon upstream', () => {
   const config = resolveDashboardDevConfig({ env: {} })
   assert.deepEqual(
     { host: config.host, port: config.port, upstream: config.upstream.href },
@@ -19,28 +19,28 @@ test('dev config defaults to a distinct loopback listener and taskd upstream', (
 test('dev config accepts valid overrides and rejects unsafe endpoints', () => {
   const overridden = resolveDashboardDevConfig({
     env: {
-      TASKS_RECORDER_DEV_PORT: '44128',
-      TASKS_RECORDER_DEV_UPSTREAM: 'http://127.0.0.1:44127',
+      RILLO_DEV_PORT: '44128',
+      RILLO_DEV_UPSTREAM: 'http://127.0.0.1:44127',
     },
   })
   assert.equal(overridden.port, 44128)
   assert.equal(overridden.upstream.href, 'http://127.0.0.1:44127/')
 
   for (const env of [
-    { TASKS_RECORDER_DEV_PORT: '0' },
-    { TASKS_RECORDER_DEV_PORT: '43127' },
-    { TASKS_RECORDER_DEV_UPSTREAM: 'http://0.0.0.0:43127' },
-    { TASKS_RECORDER_DEV_UPSTREAM: 'https://127.0.0.1:43127' },
-    { TASKS_RECORDER_DEV_UPSTREAM: 'http://user:pass@127.0.0.1:43127' },
-    { TASKS_RECORDER_DEV_UPSTREAM: 'http://127.0.0.1:43127/api' },
+    { RILLO_DEV_PORT: '0' },
+    { RILLO_DEV_PORT: '43127' },
+    { RILLO_DEV_UPSTREAM: 'http://0.0.0.0:43127' },
+    { RILLO_DEV_UPSTREAM: 'https://127.0.0.1:43127' },
+    { RILLO_DEV_UPSTREAM: 'http://user:pass@127.0.0.1:43127' },
+    { RILLO_DEV_UPSTREAM: 'http://127.0.0.1:43127/api' },
   ]) assert.throws(() => resolveDashboardDevConfig({ env }), /dev|port|upstream|loopback/i)
 })
 
 test('reload client is injected once and remains absent from source HTML', () => {
   const source = '<!doctype html><body><main>Dashboard</main></body>'
   const injected = injectDashboardReloadClient(source)
-  assert.doesNotMatch(source, /__tasks_recorder_dev/)
-  assert.equal((injected.match(/__tasks_recorder_dev\/reload/g) ?? []).length, 1)
+  assert.doesNotMatch(source, /__rillo_dev/)
+  assert.equal((injected.match(/__rillo_dev\/reload/g) ?? []).length, 1)
   assert.match(injected, /new EventSource/)
   assert.match(injected, /addEventListener\(['"]reload['"]/)
   assert.match(injected, /location\.reload/)
@@ -119,7 +119,7 @@ test('gateway serves HTML and securely proxies methods, origins, bodies, and SSE
       })
       response.writeHead(207, {
         'Content-Type': 'application/json',
-        'X-Upstream': 'taskd',
+        'X-Upstream': 'daemon',
       })
       response.end('{"ok":true}')
     })
@@ -144,7 +144,7 @@ test('gateway serves HTML and securely proxies methods, origins, bodies, and SSE
     assert.match(htmlResponse.headers.get('content-security-policy'), /connect-src 'self'/)
     const html = await htmlResponse.text()
     assert.match(html, /source/)
-    assert.match(html, /__tasks_recorder_dev\/reload/)
+    assert.match(html, /__rillo_dev\/reload/)
     const favicon = await fetch(`${address.url}/favicon.ico`)
     assert.equal(favicon.status, 204)
     assert.equal(await favicon.text(), '')
@@ -155,7 +155,7 @@ test('gateway serves HTML and securely proxies methods, origins, bodies, and SSE
       body: '{"status":"done"}',
     })
     assert.equal(mutation.status, 207)
-    assert.equal(mutation.headers.get('x-upstream'), 'taskd')
+    assert.equal(mutation.headers.get('x-upstream'), 'daemon')
     assert.deepEqual(seen[0], {
       method: 'PATCH',
       url: '/api/v1/tasks/example',
@@ -201,7 +201,7 @@ test('gateway returns bounded 502 and keeps serving HTML when upstream is unavai
       ok: false,
       error: {
         code: 'DEV_UPSTREAM_UNAVAILABLE',
-        message: 'Tasks Recorder upstream is unavailable',
+        message: 'Rillo upstream is unavailable',
       },
     })
     assert.match(await fetch(address.url).then((response) => response.text()), /last good/)
@@ -220,7 +220,7 @@ test('gateway broadcasts one reload event on the dedicated dev SSE channel', asy
   const address = await gateway.listen()
   let reader
   try {
-    const response = await fetch(`${address.url}/__tasks_recorder_dev/reload`)
+    const response = await fetch(`${address.url}/__rillo_dev/reload`)
     reader = response.body.getReader()
     assert.match(await readSseEvent(reader), /event: ready/)
     gateway.broadcastReload()

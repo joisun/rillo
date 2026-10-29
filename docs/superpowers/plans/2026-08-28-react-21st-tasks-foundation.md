@@ -222,9 +222,9 @@ import { expect, test } from 'vitest'
 
 test('React UI test toolchain boots in jsdom', () => {
   const element = document.createElement('div')
-  element.textContent = 'Tasks Recorder'
+  element.textContent = 'Rillo'
   document.body.append(element)
-  expect(element).toHaveTextContent('Tasks Recorder')
+  expect(element).toHaveTextContent('Rillo')
 })
 ```
 
@@ -287,7 +287,7 @@ import { compileDashboard, compileReactDashboard } from '../ui/compiler.mjs'
 test('React preview compiles to an offline single-file document', async () => {
   const html = await compileReactDashboard()
   assert.match(html, /id="root"/)
-  assert.match(html, /Tasks Recorder/)
+  assert.match(html, /Rillo/)
   assert.equal((html.match(/<script type="module">/g) ?? []).length, 1)
   assert.equal((html.match(/<style>/g) ?? []).length, 1)
   assert.doesNotMatch(html, /<script[^>]+src=|<link[^>]+href=/)
@@ -337,7 +337,7 @@ createRoot(root).render(
 )
 ```
 
-`ui/react/app/dashboard-app.tsx` initially renders a semantic `<main>` with visible title `Tasks Recorder` and preview badge `React preview`.
+`ui/react/app/dashboard-app.tsx` initially renders a semantic `<main>` with visible title `Rillo` and preview badge `React preview`.
 
 `ui/react/index.html` contains `/*__REACT_CSS__*/` and `/*__REACT_JS__*/` replacement markers, no remote resources, and `<div id="root"></div>`.
 
@@ -486,7 +486,7 @@ npx --yes shadcn@4.19.0 add button tooltip tabs separator sheet dropdown-menu
 
 If the CLI attempts to replace build tooling, global styles, React versions, or path layout, abort and copy the official component source manually into the paths above. Do not accept generated changes outside the declared files.
 
-- [ ] **Step 3: Define Tasks Recorder tokens and compact primitives**
+- [ ] **Step 3: Define Rillo tokens and compact primitives**
 
 `tokens.css` owns semantic colors, spacing, radii, typography, control height, row height, shadows, z-index, and motion duration for light/dark themes. `app.css` imports Tailwind first and tokens second:
 
@@ -677,7 +677,7 @@ git commit -m "feat(ui): add typed dashboard data layer"
 
 Test:
 
-- `Tasks Recorder`, task count, and connection state are present;
+- `Rillo`, task count, and connection state are present;
 - `Tasks` is selected and keyboard reachable;
 - `Scheduled` has an accessible `aria-disabled="true"` migration state rather than opening incomplete UI;
 - global action group has its own padding token and no absolute edge positioning;
@@ -1014,11 +1014,11 @@ README development section must include:
 
 ```bash
 npm ci
-npm run taskd:run
+npm run daemon:run
 npm run dev:ui:react
 ```
 
-Explain that source preview rebuilds live and does not require `npm publish`, installer execution, or taskd reinstall.
+Explain that source preview rebuilds live and does not require `npm publish`, installer execution, or daemon reinstall.
 
 `docs/architecture.md` documents:
 
@@ -1087,7 +1087,7 @@ git commit -m "docs: document React dashboard preview"
 Run in separate terminal panes:
 
 ```bash
-npm run taskd:run
+npm run daemon:run
 npm run dev:ui:react
 ```
 

@@ -2,7 +2,8 @@ import { constants } from 'node:fs'
 import { lstat, open, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 
-const LABEL_PREFIX = 'com.joi.tasks-recorder.schedule.'
+// Legacy labels are retained only to stop pre-rename per-Schedule services.
+const LABEL_PREFIXES = ['com.joi.rillo.schedule.', 'com.joi.tasks-recorder.schedule.', 'com.joi.task-recorder.schedule.']
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const MAX_PLIST_BYTES = 64 * 1024
 
@@ -30,9 +31,10 @@ export async function cleanupLegacyScheduleLaunchAgents({
   const removed = []
   const skipped = []
   for (const name of names.sort()) {
-    if (!name.startsWith(LABEL_PREFIX) || !name.endsWith('.plist')) continue
+    const prefix = LABEL_PREFIXES.find(value => name.startsWith(value))
+    if (!prefix || !name.endsWith('.plist')) continue
     const label = name.slice(0, -'.plist'.length)
-    const jobId = label.slice(LABEL_PREFIX.length).toLowerCase()
+    const jobId = label.slice(prefix.length).toLowerCase()
     if (!UUID.test(jobId)) {
       skipped.push({ label, error_code: 'LEGACY_LAUNCHD_ID_INVALID' })
       continue

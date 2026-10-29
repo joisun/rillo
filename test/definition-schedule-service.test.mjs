@@ -41,7 +41,7 @@ function repository(seed = []) {
 }
 
 test('definition Schedule service validates a registered agent without probing its binary', async () => {
-  const workspace = await mkdtemp(join(tmpdir(), 'tasks-recorder-definition-service-'))
+  const workspace = await mkdtemp(join(tmpdir(), 'rillo-definition-service-'))
   const definitions = repository()
   const requested = []
   const runtimeRegistry = {
@@ -79,7 +79,7 @@ test('definition Schedule service validates a registered agent without probing i
   }
 })
 test('definition Schedule service rejects an unknown agent before writing Markdown', async () => {
-  const workspace = await mkdtemp(join(tmpdir(), 'tasks-recorder-definition-service-'))
+  const workspace = await mkdtemp(join(tmpdir(), 'rillo-definition-service-'))
   let writes = 0
   const definitions = repository()
   definitions.create = async () => { writes += 1 }

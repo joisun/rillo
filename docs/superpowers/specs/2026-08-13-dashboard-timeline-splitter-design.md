@@ -1,4 +1,4 @@
-# Tasks Recorder Dashboard Timeline Splitter Design
+# Rillo Dashboard Timeline Splitter Design
 
 > Historical baseline: 本文描述 v0.4.0 的 DHTMLX custom splitter。当前 SVAR native pointer resizer 与 application-owned keyboard separator 见 [SVAR Gantt Dashboard 替代实现设计](2026-08-16-svar-gantt-dashboard-design.md)。
 >
@@ -6,7 +6,7 @@
 
 > 日期：2026-08-13（Asia/Shanghai）
 > 状态：已实现并验证
-> 适用项目：`/Users/joi-com/Desktop/space/projects/tasks-recorder`
+> 适用项目：`/Users/joi-com/Desktop/space/projects/rillo`
 
 ## 目标
 
@@ -118,7 +118,7 @@ Timeline 折叠不会删除 `preferredGridWidth`；重新展开时按当前容�
 - key：`dashboard-grid-width`。
 - 只接受有限正数；缺失、非法、`NaN`、负数或异常大的值视为无偏好，回退到默认值。
 - `localStorage` 被浏览器策略拒绝时，拖拽仍在当前页面有效，只是不跨刷新保存。
-- 不把 UI preference 写入 SQLite，也不通过 taskd 同步；该值属于每个浏览器的显示偏好。
+- 不把 UI preference 写入 SQLite，也不通过 daemon 同步；该值属于每个浏览器的显示偏好。
 
 ## 测试与验收
 

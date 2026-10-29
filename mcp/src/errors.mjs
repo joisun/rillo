@@ -1,7 +1,7 @@
-export class TaskRecorderError extends Error {
+export class RilloError extends Error {
   constructor(code, message, details = undefined) {
     super(message)
-    this.name = 'TaskRecorderError'
+    this.name = 'RilloError'
     this.code = code
     this.details = details
   }

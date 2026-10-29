@@ -47,10 +47,10 @@ jobs:
           chmod 755 release/install.sh
           cd release
           shasum -a 256 \
-            tasks-recorder-macos.tar.gz \
-            tasks-recorder-linux.tar.gz \
-            tasks-recorder-codex-adapter.tar.gz \
-            tasks-recorder-claude-adapter.tar.gz \
+            rillo-macos.tar.gz \
+            rillo-linux.tar.gz \
+            rillo-codex-adapter.tar.gz \
+            rillo-claude-adapter.tar.gz \
             install.sh > SHA256SUMS
 
       - name: Upload release assets for Linux verification
@@ -97,12 +97,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-            release/tasks-recorder-macos.tar.gz \
-            release/tasks-recorder-linux.tar.gz \
-            release/tasks-recorder-codex-adapter.tar.gz \
-            release/tasks-recorder-claude-adapter.tar.gz \
+            release/rillo-macos.tar.gz \
+            release/rillo-linux.tar.gz \
+            release/rillo-codex-adapter.tar.gz \
+            release/rillo-claude-adapter.tar.gz \
             release/install.sh \
             release/SHA256SUMS \
             --verify-tag \
             --generate-notes \
-            --title "Tasks Recorder $GITHUB_REF_NAME"
+            --title "Rillo $GITHUB_REF_NAME"

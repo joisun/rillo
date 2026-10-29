@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { dirname } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-import { TaskRecorderError } from './errors.mjs'
+import { RilloError } from './errors.mjs'
 import { createTaskExecutionStore } from './task-execution-store.mjs'
 import { initializeTaskSchema } from './task-schema.mjs'
 import {
@@ -20,7 +20,7 @@ const TASK_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const TASK_EVENT_ACTORS = new Set(['agent', 'user', 'hook', 'importer'])
 
 function fail(code, message, details) {
-  throw new TaskRecorderError(code, message, details)
+  throw new RilloError(code, message, details)
 }
 
 function hasOwn(value, key) {

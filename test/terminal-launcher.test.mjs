@@ -15,7 +15,7 @@ test('terminal launcher builds a private self-cleaning resume script without she
     platform: 'darwin',
     env: { PATH: '/usr/local/bin:/usr/bin' },
     homeDirectory: '/Users/me',
-    runtimeDirectory: '/Users/me/.config/tasks-recorder/runtime',
+    runtimeDirectory: '/Users/me/.config/rillo/runtime',
     accessImpl: async (path) => {
       if (!existing.has(path)) throw Object.assign(new Error('missing'), { code: 'ENOENT' })
     },
@@ -37,14 +37,14 @@ test('terminal launcher builds a private self-cleaning resume script without she
 
   assert.equal(result.terminal_label, 'Terminal.app')
   assert.equal(writes.length, 1)
-  assert.equal(writes[0][0], '/Users/me/.config/tasks-recorder/runtime/resume-fixed-id.command')
+  assert.equal(writes[0][0], '/Users/me/.config/rillo/runtime/resume-fixed-id.command')
   assert.equal(writes[0][2].mode, 0o700)
   assert.match(writes[0][1], /^#!\/bin\/zsh\nrm -f -- /)
   assert.match(writes[0][1], /cd -- '\/Users\/me\/Work Folder\/project'\\''s-copy'/)
   assert.match(writes[0][1], /exec '\/usr\/local\/bin\/codex' resume '019fa297-4567-7bf0-a69a-84fd23b3aaab'/)
   assert.deepEqual(executions, [[
     '/usr/bin/open',
-    ['-na', '/System/Applications/Utilities/Terminal.app', '/Users/me/.config/tasks-recorder/runtime/resume-fixed-id.command'],
+    ['-na', '/System/Applications/Utilities/Terminal.app', '/Users/me/.config/rillo/runtime/resume-fixed-id.command'],
     { timeout: 5_000 },
   ]])
 })
@@ -185,7 +185,7 @@ test('terminal launcher safely quotes native OpenCode session IDs with underscor
   const writes = []
   const launcher = createTerminalLauncher({
     platform: 'darwin', env: { PATH: '/usr/local/bin' }, homeDirectory: '/Users/me',
-    runtimeDirectory: '/Users/me/.config/tasks-recorder/runtime',
+    runtimeDirectory: '/Users/me/.config/rillo/runtime',
     accessImpl: async () => {}, statImpl: async () => ({ isDirectory: () => true }),
     mkdirImpl: async () => {}, writeFileImpl: async (...args) => writes.push(args),
     execFileImpl: async () => {}, randomId: () => 'opencode-id',

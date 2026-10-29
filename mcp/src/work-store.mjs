@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 
-import { TaskRecorderError } from './errors.mjs'
+import { RilloError } from './errors.mjs'
 
 const EXECUTION_KINDS = new Set(['main', 'subagent'])
 const ACCEPTED_PROVENANCE = new Set([
@@ -12,7 +12,7 @@ const ACCEPTED_PROVENANCE = new Set([
 ])
 
 function fail(code, message, details) {
-  throw new TaskRecorderError(code, message, details)
+  throw new RilloError(code, message, details)
 }
 
 function requiredString(value, field, code = 'WORK_INPUT_INVALID') {

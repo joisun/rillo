@@ -40,7 +40,7 @@ test('meta exposes the runtime-registry compatibility handshake', async () => {
   })
   try {
     assert.deepEqual((await json(current.url, '/api/v1/meta')).body, {
-      service: 'tasks-recorder',
+      service: 'rillo',
       service_version: '0.6.0-test',
       api_version: 5,
       capabilities: {

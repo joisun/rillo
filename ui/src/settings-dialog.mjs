@@ -38,7 +38,7 @@ export function settingsDialogMarkup({
       <section class="settings-group" aria-labelledby="definitions-settings-title">
         <div class="settings-group-heading"><span class="settings-folder-icon" aria-hidden="true"></span><div><h4 id="definitions-settings-title">Schedule definitions</h4><p>Markdown 是 Schedule 的唯一 source of truth。</p></div></div>
         <div class="settings-row settings-directory-row">
-          <label for="schedule-definitions-dir"><strong>Definitions directory</strong><span>递归读取带 tasks-recorder/schedule marker 的 Markdown</span></label>
+          <label for="schedule-definitions-dir"><strong>Definitions directory</strong><span>递归读取带 rillo/schedule marker 的 Markdown</span></label>
           <div class="settings-directory-control"><input id="schedule-definitions-dir" data-settings-definitions-dir value="${escapeHtml(settings.schedule_definitions_dir || '')}" spellcheck="false"${loading || saving ? ' disabled' : ''}><button type="button" data-settings-save-definitions${loading || saving ? ' disabled' : ''}>Save</button></div>
         </div>
       </section>

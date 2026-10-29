@@ -8,12 +8,12 @@
 
 | 检查 | 结果 / 证据 |
 | --- | --- |
-| 后端 | 578/578，含本次 17 项；/tmp/tasks-recorder-messaging-full-tests.txt |
-| UI | 79/79；/tmp/tasks-recorder-messaging-ui-tests.txt |
-| 语法 / 类型 | 160 个源码文件、tsc 通过；/tmp/tasks-recorder-messaging-check.txt |
-| 打包 | 四个服务/adapter 包成功；/tmp/tasks-recorder-messaging-package.txt |
-| 包内实际 Codex | app-server queue 与 CLI queue 均 accepted；/tmp/tasks-recorder-packaged-codex.txt |
-| 包内实际 Claude | SDK、CLI 的 queue 与 stop 均 accepted；/tmp/tasks-recorder-packaged-claude.txt |
+| 后端 | 578/578，含本次 17 项；/tmp/rillo-messaging-full-tests.txt |
+| UI | 79/79；/tmp/rillo-messaging-ui-tests.txt |
+| 语法 / 类型 | 160 个源码文件、tsc 通过；/tmp/rillo-messaging-check.txt |
+| 打包 | 四个服务/adapter 包成功；/tmp/rillo-messaging-package.txt |
+| 包内实际 Codex | app-server queue 与 CLI queue 均 accepted；/tmp/rillo-packaged-codex.txt |
+| 包内实际 Claude | SDK、CLI 的 queue 与 stop 均 accepted；/tmp/rillo-packaged-claude.txt |
 | 临时 HOME 安装 | install.sh 安装、版本、Dashboard、SSE 检查通过；独立包运行不依赖 node_modules |
 | 文档 | 枚举 167 份 Markdown，核对 README、architecture 和活跃说明，更新新增 API/工具/降级/回执/限制；历史任务记录未重写 |
 

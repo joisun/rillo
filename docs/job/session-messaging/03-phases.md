@@ -3,7 +3,7 @@
 status: done
 current_task: none
 branch: feature/session-messaging
-worktree: /Users/joi-com/Desktop/space/projects/tasks-recorder/.worktree/feature-session-messaging
+worktree: /Users/joi-com/Desktop/space/projects/rillo/.worktree/feature-session-messaging
 
 T1–T6 全部完成。统一 MCP/HTTP 控制入口、Codex/Claude provider、有序 transport、安全降级与持久化幂等回执已实现。新增 5 个 MCP 工具，总数 25。
 

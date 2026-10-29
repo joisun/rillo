@@ -1,7 +1,7 @@
 import { access, mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
-export const SYSTEMD_UNIT = 'tasks-recorder.service'
+export const SYSTEMD_UNIT = 'rillo.service'
 
 function quote(value) {
   return `"${String(value).replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('%', '%%').replaceAll('\n', '\\n').replaceAll('\r', '\\r')}"`
@@ -12,14 +12,14 @@ function pathValue(value) {
   return value.replaceAll('%', '%%')
 }
 
-export function renderSystemdUnit({ nodePath, taskdPath, workingDirectory, homeDirectory, path, stdoutPath, stderrPath, codexHome }) {
+export function renderSystemdUnit({ nodePath, daemonPath, workingDirectory, homeDirectory, path, stdoutPath, stderrPath, codexHome }) {
   return `[Unit]
-Description=Tasks Recorder
+Description=Rillo
 After=network.target
 
 [Service]
 Type=exec
-ExecStart=${quote(`:${nodePath}`)} ${quote(taskdPath)}
+ExecStart=${quote(`:${nodePath}`)} ${quote(daemonPath)}
 WorkingDirectory=${pathValue(workingDirectory)}
 Environment=${quote(`HOME=${homeDirectory}`)} ${quote(`PATH=${path}`)}
 ${codexHome ? `Environment=${quote(`CODEX_HOME=${codexHome}`)}\n` : ''}Restart=on-failure
@@ -36,27 +36,27 @@ WantedBy=default.target
 
 export function createSystemdController({ projectRoot, config, homeDirectory, nodePath = process.execPath, nodeVersion = process.versions.node, env = process.env, unitName = SYSTEMD_UNIT, run, build, probeHealth }) {
   const unitDirectory = join(homeDirectory, '.config', 'systemd', 'user')
-  const logDirectory = join(homeDirectory, '.local', 'state', 'tasks-recorder')
+  const logDirectory = join(homeDirectory, '.local', 'state', 'rillo')
   const paths = {
     unitPath: join(unitDirectory, unitName),
-    stdoutPath: join(logDirectory, 'taskd.stdout.log'),
-    stderrPath: join(logDirectory, 'taskd.stderr.log'),
-    taskdPath: join(projectRoot, 'server', 'taskd.mjs'),
+    stdoutPath: join(logDirectory, 'daemon.stdout.log'),
+    stderrPath: join(logDirectory, 'daemon.stderr.log'),
+    daemonPath: join(projectRoot, 'server', 'daemon.mjs'),
   }
   const systemctl = (args, options) => run('systemctl', ['--user', ...args], { timeoutMs: 15000, ...options })
 
   async function status() {
     const state = await systemctl(['is-active', unitName], { allowFailure: true })
     const health = await probeHealth(config.serverBaseUrl)
-    return { label: unitName, loaded: state.code === 0, ready: health?.service === 'tasks-recorder' && health.ready !== false, url: config.serverPublicUrl ?? config.serverBaseUrl, unitPath: paths.unitPath }
+    return { label: unitName, loaded: state.code === 0, ready: health?.service === 'rillo' && health.ready !== false, url: config.serverPublicUrl ?? config.serverBaseUrl, unitPath: paths.unitPath }
   }
 
   async function install() {
-    if (Number(nodeVersion.split('.')[0]) < 24) throw new Error('tasks-recorder taskd requires Node.js 24 or newer')
+    if (Number(nodeVersion.split('.')[0]) < 24) throw new Error('rillo daemon requires Node.js 24 or newer')
     const manager = await systemctl(['show-environment'], { allowFailure: true })
     if (manager.code !== 0) throw new Error('A running systemd user manager is required; run this command in a user login session.')
     const health = await probeHealth(config.serverBaseUrl)
-    if (health && health.service !== 'tasks-recorder') throw new Error(`${config.serverBaseUrl} is occupied by another service`)
+    if (health && health.service !== 'rillo') throw new Error(`${config.serverBaseUrl} is occupied by another service`)
     await build()
     await Promise.all([mkdir(unitDirectory, { recursive: true, mode: 0o700 }), mkdir(logDirectory, { recursive: true, mode: 0o700 })])
     const unit = renderSystemdUnit({ ...paths, nodePath, workingDirectory: projectRoot, homeDirectory, codexHome: env.CODEX_HOME, path: [...new Set([dirname(nodePath), join(homeDirectory, '.local', 'bin'), ...(env.PATH ?? '/usr/local/bin:/usr/bin:/bin').split(':')])].join(':') })

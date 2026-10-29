@@ -46,7 +46,7 @@ function deferred() {
 }
 
 async function fixture(t, overrides = {}) {
-  const root = await mkdtemp(join(tmpdir(), 'tasks-recorder-run-service-'))
+  const root = await mkdtemp(join(tmpdir(), 'rillo-run-service-'))
   let nextId = 0
   const runStore = createRunStore({
     databasePath: join(root, 'runs.sqlite'),

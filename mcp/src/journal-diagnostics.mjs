@@ -160,7 +160,7 @@ export function createJournalDiagnostics({
       || schedulerState?.degraded === true
     return {
       ok: true,
-      service: 'tasks-recorder',
+      service: 'rillo',
       live: true,
       ready,
       degraded,

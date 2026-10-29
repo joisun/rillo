@@ -8,7 +8,7 @@ import {
 } from '../server/src/scheduler/schedule-definition-codec.mjs'
 
 const DAILY = `---
-type: tasks-recorder/schedule
+type: rillo/schedule
 id: 34826d22-b33b-4d1d-b9d0-8459d71009dc
 title: Codex daily news
 enabled: true
@@ -54,7 +54,7 @@ test('parses human-friendly daily front matter into the scheduler domain shape',
 
 test('normalizes weekly weekday names and supports a disabled definition', () => {
   const parsed = parseScheduleDefinition(`---
-type: tasks-recorder/schedule
+type: rillo/schedule
 id: 54c9a3ac-86e8-4bed-9514-67f42f4b4821
 title: Weekly review
 enabled: false
@@ -82,7 +82,7 @@ test('serializes and parses without changing the executable definition', () => {
     'reasoning_effort', 'timeout_seconds', 'capabilities', 'thread_mode', 'timezone_mode', 'prompt',
   ]) assert.deepEqual(roundTrip[key], original[key], key)
   assert.match(source, /^---\n/)
-  assert.match(source, /type: tasks-recorder\/schedule/)
+  assert.match(source, /type: rillo\/schedule/)
 })
 
 test('round-trips exact capability isolation and rejects unsupported policy', () => {
@@ -150,7 +150,7 @@ test('legacy definitions default to codex while new writes persist a safe agent 
 
 test('reports malformed marked YAML and invalid cadence precisely', () => {
   assert.throws(() => parseScheduleDefinition(`---
-type: tasks-recorder/schedule
+type: rillo/schedule
 id: [broken
 ---
 prompt
@@ -192,4 +192,13 @@ test('an enabled once definition remains readable and editable after its due tim
   const completed = parseScheduleDefinition(source, after)
   assert.equal(completed.enabled, true)
   assert.equal(parseScheduleDefinition(serializeScheduleDefinition({ ...completed, title: 'Reviewed' }, after), after).title, 'Reviewed')
+})
+
+test('migration reads legacy Schedule markers without changing user bytes or enabled state', () => {
+  for (const marker of ['tasks-recorder/schedule', 'task-recorder/schedule', 'tasks_recorder/schedule', 'task_recorder/schedule']) {
+    const legacy = DAILY.replace('rillo/schedule', marker)
+    const definition = parseScheduleDefinition(legacy)
+    assert.equal(definition.enabled, true); assert.equal(definition.etag, definitionEtag(legacy))
+    assert.match(serializeScheduleDefinition(definition), /type: rillo\/schedule/)
+  }
 })

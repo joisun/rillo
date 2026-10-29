@@ -1,4 +1,4 @@
-# Tasks Recorder React + dotUI 迁移设计
+# Rillo React + dotUI 迁移设计
 
 **Date:** 2026-08-28  
 **Status:** Approved; implementation in progress  
@@ -6,7 +6,7 @@
 
 ## 1. 决策摘要
 
-Tasks Recorder React Dashboard 采用 dotUI 作为唯一通用 UI system：
+Rillo React Dashboard 采用 dotUI 作为唯一通用 UI system：
 
 ```text
 React 19 + TypeScript
@@ -19,13 +19,13 @@ React 19 + TypeScript
 
 不再把 21st.dev、shadcn New York/Radix 或自建 primitive 当作并行基础。dotUI component 通过官方 registry 在开发期写入仓库，运行时、CI 与 release build 不访问 dotui.org。产品特有的 Tree、Timeline bar、NOW marker、column layout 与密集数据表达保留本地实现。
 
-此次迁移只替换 React preview 的 UI system，不改变 taskd、REST/SSE、SQLite、Runtime Registry、Agent adapter、Session resume 与 Scheduler contract。Legacy Dashboard 在 React preview 通过完整 cutover gates 前保持稳定。
+此次迁移只替换 React preview 的 UI system，不改变 daemon、REST/SSE、SQLite、Runtime Registry、Agent adapter、Session resume 与 Scheduler contract。Legacy Dashboard 在 React preview 通过完整 cutover gates 前保持稳定。
 
 ## 2. First Principles
 
 ### Goal
 
-建立一套可预测、可访问、可维护的交互语言，让 Tasks Recorder 的 Task Tree、Timeline、Scheduler、Session 与 Settings 不再依赖大量散落的原生 control 和 feature-specific CSS。
+建立一套可预测、可访问、可维护的交互语言，让 Rillo 的 Task Tree、Timeline、Scheduler、Session 与 Settings 不再依赖大量散落的原生 control 和 feature-specific CSS。
 
 ### Facts
 
@@ -55,7 +55,7 @@ React 19 + TypeScript
 ### Success Criteria
 
 1. `components.json` 固定 dotUI Vercel preset registry，团队生成结果一致。
-2. React surface 不再 import Radix；所有实际存在的通用 Button、Select、SearchField、Tabs、Tooltip 与 Drawer/Dialog 由 dotUI 提供。Tree progress、Timeline bar 与状态映射属于产品数据表达，继续由 Tasks Recorder 定义。
+2. React surface 不再 import Radix；所有实际存在的通用 Button、Select、SearchField、Tabs、Tooltip 与 Drawer/Dialog 由 dotUI 提供。Tree progress、Timeline bar 与状态映射属于产品数据表达，继续由 Rillo 定义。
 3. 通用页面不再出现裸 `select` 或重复的 button/input/select visual overrides。
 4. keyboard、focus、screen reader name、overlay dismissal 与 disabled/loading state 符合 React Aria semantics。
 5. single-file/offline build、现有 checks 与 UI tests 通过；产物不含 remote URL。
@@ -83,9 +83,9 @@ ui/react/
 ### Ownership boundaries
 
 - dotUI owns generic control appearance, focus ring, overlay, menu, tooltip, selection, disabled/loading and motion behavior。
-- Tasks Recorder owns information architecture, responsive layout, compact density decisions and domain status mapping。
+- Rillo owns information architecture, responsive layout, compact density decisions and domain status mapping。
 - SVAR owns Tree/Timeline virtualization and row geometry；adapter owns typed projection、selection、scroll、splitter 与 NOW overlay。
-- taskd remains the only mutation authority；component state 不复制 server facts。
+- daemon remains the only mutation authority；component state 不复制 server facts。
 
 ## 4. Preset and Registry Contract
 
@@ -121,7 +121,7 @@ https://dotui.org/r/init?preset=rVBrS8MwFP0r5frFQaJZO9fRf3PzWFuXNSGP6Rj97-a2qIgg
 ## 6. Styling Strategy
 
 1. Vercel preset tokens are authoritative for base, text, borders, radii, focus and semantic colors。
-2. Existing Tasks Recorder tokens are reduced to product aliases only, such as timeline grid、active task、blocked state 与 NOW marker。
+2. Existing Rillo tokens are reduced to product aliases only, such as timeline grid、active task、blocked state 与 NOW marker。
 3. Existing generic selectors for `button`、`select`、toolbar tabs、popover 和 form control are deleted as their component migration lands。
 4. Feature CSS is colocated or split by feature；`app.css` is no longer the catch-all stylesheet。
 5. Geist is bundled locally or resolved to a system-safe fallback；the release artifact never downloads a web font。
@@ -199,7 +199,7 @@ https://dotui.org/r/init?preset=rVBrS8MwFP0r5frFQaJZO9fRf3PzWFuXNSGP6Rj97-a2qIgg
 - All product choices required by this migration are resolved。
 - “Single UI system” is a final-state rule；short-lived migration coexistence is explicitly limited to the React preview and removed by the cutover gate。
 - “Vercel” is tied to the official preset export, not an informal visual reference。
-- dotUI owns generic interaction；Tasks Recorder and SVAR ownership boundaries do not overlap。
+- dotUI owns generic interaction；Rillo and SVAR ownership boundaries do not overlap。
 - Runtime/offline requirements are compatible with source-registry installation because all generated source is checked in before build。
 
 ## 11. Sources

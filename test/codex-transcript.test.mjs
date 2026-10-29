@@ -5,11 +5,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { readCodexTranscriptMetadata } from '../adapters/codex/tasks-recorder/hooks/src/codex-transcript.mjs'
-import { sendJournalEvent } from '../adapters/codex/tasks-recorder/hooks/src/taskd-client.mjs'
+import { readCodexTranscriptMetadata } from '../adapters/codex/rillo/hooks/src/codex-transcript.mjs'
+import { sendJournalEvent } from '../adapters/codex/rillo/hooks/src/daemon-client.mjs'
 
 async function transcriptFixture() {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-codex-transcript-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-codex-transcript-'))
   const sessionsRoot = join(directory, 'sessions')
   await mkdir(sessionsRoot)
   return {
@@ -124,7 +124,7 @@ test('returns structured warnings for missing, malformed, truncated, and escaped
   }
 })
 
-test('Codex hook client sends one bounded Event Envelope request to loopback taskd', async () => {
+test('Codex hook client sends one bounded Event Envelope request to loopback daemon', async () => {
   const requests = []
   const server = createServer(async (request, response) => {
     const chunks = []
@@ -139,7 +139,7 @@ test('Codex hook client sends one bounded Event Envelope request to loopback tas
   })
   await new Promise((resolveListen) => server.listen(0, '127.0.0.1', resolveListen))
   const { port } = server.address()
-  const env = { AGENT_TASKS_SERVER_URL: `http://127.0.0.1:${port}` }
+  const env = { RILLO_SERVER_URL: `http://127.0.0.1:${port}` }
   const envelope = {
     source: 'codex',
     event_type: 'execution.started',
@@ -177,7 +177,7 @@ test('Codex hook client sends one bounded Event Envelope request to loopback tas
 
 test('Codex hook client rejects non-loopback origins through its fail-open result', async () => {
   const result = await sendJournalEvent({}, {
-    AGENT_TASKS_SERVER_URL: 'http://localhost:43127',
+    RILLO_SERVER_URL: 'http://localhost:43127',
   })
   assert.deepEqual(result, {
     ok: true,

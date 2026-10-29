@@ -237,7 +237,7 @@ export function ScheduleEditorDialog({
         <DialogContent className="schedule-editor-dialog" showCloseButton={!busy}>
           <DialogHeader className="schedule-editor__header">
             <DialogTitle>{editing ? '编辑计划' : '新建计划'}</DialogTitle>
-            <p>保存后写入 Markdown definition，taskd watcher 会自动同步。</p>
+            <p>保存后写入 Markdown definition，daemon watcher 会自动同步。</p>
           </DialogHeader>
 
           <DialogBody className="schedule-editor__body">

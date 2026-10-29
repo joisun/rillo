@@ -12,10 +12,10 @@ const roots = [
   'mcp',
   'server',
   'hooks',
-  'adapters/codex/tasks-recorder/hooks',
-  'adapters/codex/tasks-recorder/mcp',
-  'adapters/claude/tasks-recorder/hooks',
-  'adapters/claude/tasks-recorder/mcp',
+  'adapters/codex/rillo/hooks',
+  'adapters/codex/rillo/mcp',
+  'adapters/claude/rillo/hooks',
+  'adapters/claude/rillo/mcp',
   'ui',
 ]
 

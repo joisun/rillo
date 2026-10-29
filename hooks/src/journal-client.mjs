@@ -12,7 +12,7 @@ function loopbackOrigin(value) {
     || url.search !== ''
     || url.hash !== ''
   ) {
-    throw new TypeError('tasks-recorder service URL must be an http://127.0.0.1 origin')
+    throw new TypeError('rillo service URL must be an http://127.0.0.1 origin')
   }
   return url.origin
 }
@@ -80,24 +80,24 @@ export function createJournalEventClient({
         signal: AbortSignal.timeout(timeoutMs),
       })
     } catch {
-      return queueAfterFailure(envelope, 'TASKD_UNAVAILABLE')
+      return queueAfterFailure(envelope, 'DAEMON_UNAVAILABLE')
     }
     if (!response.ok) {
       if (response.status >= 500 || response.status === 408 || response.status === 429) {
-        return queueAfterFailure(envelope, 'TASKD_UNAVAILABLE')
+        return queueAfterFailure(envelope, 'DAEMON_UNAVAILABLE')
       }
       return {
         ok: true,
         delivered: false,
         spooled: false,
         dropped: true,
-        error_code: 'TASKD_EVENT_REJECTED',
+        error_code: 'DAEMON_EVENT_REJECTED',
         http_status: response.status,
       }
     }
     const result = await response.json().catch(() => null)
     if (!result || result.ok !== true) {
-      return queueAfterFailure(envelope, 'TASKD_PROTOCOL_ERROR')
+      return queueAfterFailure(envelope, 'DAEMON_PROTOCOL_ERROR')
     }
     return {
       ok: true,

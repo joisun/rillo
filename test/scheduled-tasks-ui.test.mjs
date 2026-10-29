@@ -159,7 +159,7 @@ test('Scheduled view rejects Run Now locally while its durable Run is active', a
             started_at: '2026-08-26T01:00:00.000Z',
           },
         }],
-        capability: { supported: true, backend: 'taskd-clock' },
+        capability: { supported: true, backend: 'daemon-clock' },
       }),
       runScheduleNow: async () => { runCalls += 1 },
     },
@@ -263,7 +263,7 @@ test('Run now settles from the refreshed execution read model instead of emittin
               error_code: 'RUN_SPAWN_FAILED', output_count: 0,
             } : null,
           }],
-          capability: { supported: true, backend: 'taskd-clock' },
+          capability: { supported: true, backend: 'daemon-clock' },
         }
       },
       runScheduleNow: async () => { runCalls += 1; return { run: { id: 'run-1', status: 'queued' } } },

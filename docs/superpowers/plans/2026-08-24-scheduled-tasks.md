@@ -8,7 +8,7 @@
 
 **Goal:** Build a macOS-first Scheduled Tasks control plane whose Dashboard can schedule, run, review, and resume standalone unattended Codex work.
 
-**Architecture:** `launchd` owns durable calendar wake-ups, `taskd` exclusively owns `scheduler.sqlite` desired state and run facts, and an independent runner owns locks, Codex process supervision, timeout, JSONL/logs, and completion delivery. The existing Recorder plane observes the generated Codex thread through normal trusted Hooks; Scheduled Tasks never mutates semantic Tasks implicitly.
+**Architecture:** `launchd` owns durable calendar wake-ups, `daemon` exclusively owns `scheduler.sqlite` desired state and run facts, and an independent runner owns locks, Codex process supervision, timeout, JSONL/logs, and completion delivery. The existing Recorder plane observes the generated Codex thread through normal trusted Hooks; Scheduled Tasks never mutates semantic Tasks implicitly.
 
 **Tech Stack:** Node.js 24 ESM, `node:sqlite`, macOS `launchd`/`launchctl`, Unix domain sockets, Codex CLI JSONL, vanilla browser modules, React/SVAR retained only for the existing Tasks view, Node test runner, Playwright MCP for visual verification.
 
@@ -18,7 +18,7 @@
 
 - Node.js `>=24.0.0`; do not add a scheduler runtime dependency.
 - macOS `launchd` is the only implemented v1 backend; other platforms return a typed unsupported capability.
-- `taskd` is the only process that opens `tasks.sqlite` or `scheduler.sqlite`.
+- `daemon` is the only process that opens `tasks.sqlite` or `scheduler.sqlite`.
 - Prompt is transported only over the 0600 Unix socket and Codex stdin; it must not appear in plist, argv, public API logs, or structured logs.
 - Public HTTP remains `127.0.0.1` with existing Host/Origin guards; runner mutations use the private Unix socket.
 - Default sandbox is `read-only`; broader modes are explicit per Schedule.
@@ -43,7 +43,7 @@
 
 - `server/src/scheduler/launchd-backend.mjs` — owned plist rendering, install/remove/reconcile, manual kickstart, backend capability.
 - `server/src/scheduler/runner-spool.mjs` — bounded 0600 dispatch/overlap/completion evidence.
-- `server/src/scheduler/runner-protocol.mjs` — taskd Unix socket server plus runner client.
+- `server/src/scheduler/runner-protocol.mjs` — daemon Unix socket server plus runner client.
 - `server/src/scheduler/codex-run-spec.mjs` — allowlisted immutable Codex invocation spec and preflight.
 - `server/src/scheduler/codex-jsonl.mjs` — bounded stdout JSONL parser for thread ID/final message.
 - `server/src/scheduler/process-supervisor.mjs` — shell-free spawn, heartbeat, process-group TERM/KILL, logs.
@@ -53,7 +53,7 @@
 ### Service and distribution
 
 - `mcp/src/config.mjs` — scheduler DB/runtime/socket/log/spool paths and validated Codex path config.
-- `server/src/taskd-runtime.mjs` — scheduler composition and startup/shutdown reconciliation.
+- `server/src/daemon-runtime.mjs` — scheduler composition and startup/shutdown reconciliation.
 - `server/src/api-server.mjs` — typed public Schedule/Run routes only.
 - `server/src/session-resume-service.mjs` — validated resume by scheduled Run thread ID.
 - `server/src/journal-diagnostics.mjs` — scheduler degraded capability without weakening recorder readiness.
@@ -243,7 +243,7 @@ Mark phase 1 complete only after the three focused suites and `git diff --check`
 **Files:**
 - Create: `server/src/scheduler/launchd-backend.mjs`
 - Create: `test/launchd-scheduler-backend.test.mjs`
-- Modify: `server/control.mjs` only to export/reuse safe XML and command helpers where that removes duplication without changing taskd LaunchAgent behavior.
+- Modify: `server/control.mjs` only to export/reuse safe XML and command helpers where that removes duplication without changing daemon LaunchAgent behavior.
 
 **Interfaces:**
 - Produces: `renderSchedulePlist({ label, nodePath, runnerPath, jobId, calendars, stdoutPath, stderrPath }) -> string`
@@ -282,7 +282,7 @@ Use `launchctl bootout gui/<uid> <plist>` with allowed not-loaded failure, then 
 - [ ] **Step 6: Run focused and existing control regression tests**
 
 Run: `node --test test/launchd-scheduler-backend.test.mjs test/control.test.mjs`
-Expected: new backend tests and existing taskd LaunchAgent tests PASS.
+Expected: new backend tests and existing daemon LaunchAgent tests PASS.
 
 - [ ] **Step 7: Record phase evidence; commit only if explicitly authorized**
 
@@ -371,7 +371,7 @@ Feed chunk-split JSONL with `thread.started`, tool events, multiple agent messag
 
 - [ ] **Step 3: Write failing supervisor/lock tests with fake child processes**
 
-Cover lock contention → `skipped_overlap`, PID-alive stale guard, claim after lock, heartbeat, success/failure, TERM then process-group KILL, signal propagation, completion spool when taskd disconnects, and `finally` lock release.
+Cover lock contention → `skipped_overlap`, PID-alive stale guard, claim after lock, heartbeat, success/failure, TERM then process-group KILL, signal propagation, completion spool when daemon disconnects, and `finally` lock release.
 
 - [ ] **Step 4: Verify focused tests fail**
 
@@ -405,17 +405,17 @@ Expected: all phase-2 tests PASS.
 
 ## Phase 3 — Service, API, Resume, and Distribution
 
-### Task 7: taskd Composition, Public API, and Scheduled Resume
+### Task 7: daemon Composition, Public API, and Scheduled Resume
 
 **Files:**
 - Modify: `mcp/src/config.mjs`
-- Modify: `server/src/taskd-runtime.mjs`
+- Modify: `server/src/daemon-runtime.mjs`
 - Modify: `server/src/api-server.mjs`
 - Modify: `server/src/session-resume-service.mjs`
 - Modify: `server/src/journal-diagnostics.mjs`
 - Modify: `ui/src/dashboard-api.mjs`
 - Create: `test/scheduled-api.test.mjs`
-- Modify: `test/taskd-runtime.test.mjs`
+- Modify: `test/daemon-runtime.test.mjs`
 - Modify: `test/session-resume-service.test.mjs`
 - Modify: `test/journal-diagnostics.test.mjs`
 
@@ -426,7 +426,7 @@ Expected: all phase-2 tests PASS.
 
 - [ ] **Step 1: Add failing config and runtime composition tests**
 
-Assert default paths live below `~/.config/tasks-recorder`, taskd constructs/closes both stores once, protocol socket lifecycle is bounded, startup runs spool replay/stale recovery/reconcile in that order, and Scheduler startup failure degrades capability without closing the Journal service.
+Assert default paths live below `~/.config/rillo`, daemon constructs/closes both stores once, protocol socket lifecycle is bounded, startup runs spool replay/stale recovery/reconcile in that order, and Scheduler startup failure degrades capability without closing the Journal service.
 
 - [ ] **Step 2: Add failing public API tests**
 
@@ -438,7 +438,7 @@ Require a valid `thread_id`, existing transcript in `sessionInventory`, canonica
 
 - [ ] **Step 4: Run focused tests and confirm failures**
 
-Run: `node --test test/config.test.mjs test/taskd-runtime.test.mjs test/scheduled-api.test.mjs test/session-resume-service.test.mjs test/journal-diagnostics.test.mjs`
+Run: `node --test test/config.test.mjs test/daemon-runtime.test.mjs test/scheduled-api.test.mjs test/session-resume-service.test.mjs test/journal-diagnostics.test.mjs`
 Expected: new contract tests FAIL while existing Recorder tests remain green.
 
 - [ ] **Step 5: Extend config with validated scheduler paths/caps**
@@ -484,7 +484,7 @@ Expected: all phase-3 integration tests PASS.
 
 - [ ] **Step 1: Write failing CLI/controller tests**
 
-Assert exact parsing, JSON-only stdout, taskd-unavailable errors, status/reconcile client delegation, no Schedule Prompt/command flags, and `launchctl` cleanup limited to verified owned labels/arguments.
+Assert exact parsing, JSON-only stdout, daemon-unavailable errors, status/reconcile client delegation, no Schedule Prompt/command flags, and `launchctl` cleanup limited to verified owned labels/arguments.
 
 - [ ] **Step 2: Write failing installer/update/package tests**
 
@@ -497,7 +497,7 @@ Expected: FAIL only on new Scheduler expectations.
 
 - [ ] **Step 4: Implement CLI scheduler status/reconcile**
 
-Use the typed local client; do not open scheduler DB or manipulate launchd from CLI. `reconcile` requires taskd and returns per-Job bounded sync results.
+Use the typed local client; do not open scheduler DB or manipulate launchd from CLI. `reconcile` requires daemon and returns per-Job bounded sync results.
 
 - [ ] **Step 5: Implement Codex path install contract**
 
@@ -514,7 +514,7 @@ Expected: all CLI/install/package Scheduler contracts PASS.
 
 - [ ] **Step 8: Run phase-1 through phase-3 backend tests**
 
-Run: `node --test test/scheduler-*.test.mjs test/launchd-scheduler-backend.test.mjs test/codex-*.test.mjs test/scheduled-runner.test.mjs test/taskd-runtime.test.mjs test/scheduled-api.test.mjs`
+Run: `node --test test/scheduler-*.test.mjs test/launchd-scheduler-backend.test.mjs test/codex-*.test.mjs test/scheduled-runner.test.mjs test/daemon-runtime.test.mjs test/scheduled-api.test.mjs`
 Expected: all backend Scheduler tests PASS.
 
 - [ ] **Step 9: Update workflow evidence; commit only if explicitly authorized**
@@ -672,7 +672,7 @@ Expected: all Scheduled UI contracts PASS and bundle builds.
 - Modify focused implementation/tests only when this integration test proves a contract gap.
 
 **Interfaces:**
-- Uses fake `launchctl` and fake Codex executable to exercise the packaged taskd/runner boundary without network/model usage.
+- Uses fake `launchctl` and fake Codex executable to exercise the packaged daemon/runner boundary without network/model usage.
 
 - [ ] **Step 1: Build a fake Codex executable fixture**
 
@@ -680,11 +680,11 @@ The fixture reads Prompt from stdin, fails if Prompt appears in argv, emits chun
 
 - [ ] **Step 2: Write create → reconcile → trigger → review E2E**
 
-Start isolated taskd with separate data/socket/port, create a Schedule through HTTP, verify owned plist payload via fake backend, trigger runner, and assert Run success/thread/final message/log/review/SSE plus eventual Recorder Source Session fixture correlation.
+Start isolated daemon with separate data/socket/port, create a Schedule through HTTP, verify owned plist payload via fake backend, trigger runner, and assert Run success/thread/final message/log/review/SSE plus eventual Recorder Source Session fixture correlation.
 
 - [ ] **Step 3: Write concurrency and recovery E2E**
 
-Race scheduled and manual triggers, assert one Codex process plus one `skipped_overlap`; restart taskd during a running fixture, assert completion spool replay; crash runner and assert multi-evidence `lost`; timeout a TERM-ignoring process tree and assert no surviving child PID.
+Race scheduled and manual triggers, assert one Codex process plus one `skipped_overlap`; restart daemon during a running fixture, assert completion spool replay; crash runner and assert multi-evidence `lost`; timeout a TERM-ignoring process tree and assert no surviving child PID.
 
 - [ ] **Step 4: Write mutation race E2E**
 
@@ -706,9 +706,9 @@ If the E2E reveals a spec gap, update `01-plan.md`, append a new immutable task 
 **Files:**
 - Modify: `README.md`
 - Modify: `docs/superpowers/specs/2026-08-19-project-journalist-lifecycle-design.md`
-- Modify: `docs/job/tasks-recorder-scheduled-tasks/04-test-plan.md`
-- Modify: `docs/job/tasks-recorder-scheduled-tasks/05-test-cases.md`
-- Modify: `docs/job/tasks-recorder-scheduled-tasks/06-test-report.md`
+- Modify: `docs/job/rillo-scheduled-tasks/04-test-plan.md`
+- Modify: `docs/job/rillo-scheduled-tasks/05-test-cases.md`
+- Modify: `docs/job/rillo-scheduled-tasks/06-test-report.md`
 - Modify other matching Markdown files found by the required full documentation scan.
 
 **Interfaces:**
@@ -716,7 +716,7 @@ If the E2E reveals a spec gap, update `01-plan.md`, append a new immutable task 
 
 - [ ] **Step 1: Materialize test plan and case matrix from completed tasks**
 
-Include cadence/DST, schema/invariants, privacy, owned launchd units, no-overlap, timeout process tree, taskd restart/spool, API/security, install/update/uninstall, UI states/accessibility/responsive, real scheduling, Hook correlation, Review and Resume. Every risk maps to at least one case.
+Include cadence/DST, schema/invariants, privacy, owned launchd units, no-overlap, timeout process tree, daemon restart/spool, API/security, install/update/uninstall, UI states/accessibility/responsive, real scheduling, Hook correlation, Review and Resume. Every risk maps to at least one case.
 
 - [ ] **Step 2: Start an isolated source preview/backend**
 
@@ -768,7 +768,7 @@ Implementation completion does not authorize commit, push, GitHub Release, or in
 ### Spec coverage
 
 - Product entry and Scheduled panel: Tasks 9–11.
-- Separate Automation plane/database and taskd-only ownership: Tasks 2–3, 7.
+- Separate Automation plane/database and daemon-only ownership: Tasks 2–3, 7.
 - Structured cadence/system timezone/missed-run: Tasks 1, 4, 12–13.
 - launchd desired-state reconciliation and owned cleanup: Tasks 4, 8.
 - Unix socket/spool: Task 5.
@@ -792,4 +792,4 @@ The plan contains no deferred implementation placeholders. Any execution-discove
 
 ## Plan Checkpoint
 
-After user approval, create `docs/job/tasks-recorder-scheduled-tasks/02-tasks.md`, phase logs, and one immutable task contract per Task 1–13. Execution should use `subagent-driven-development` with fresh worker context and spec/plan review after each task, while preserving the no-auto-commit rule.
+After user approval, create `docs/job/rillo-scheduled-tasks/02-tasks.md`, phase logs, and one immutable task contract per Task 1–13. Execution should use `subagent-driven-development` with fresh worker context and spec/plan review after each task, while preserving the no-auto-commit rule.

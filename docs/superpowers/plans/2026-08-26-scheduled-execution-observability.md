@@ -53,9 +53,9 @@ node --test test/scheduler-store.test.mjs test/scheduler-service.test.mjs test/s
 
 **Files:**
 - Modify: `server/src/scheduler/runner-protocol.mjs`
-- Modify: `server/src/taskd-runtime.mjs`
+- Modify: `server/src/daemon-runtime.mjs`
 - Test: `test/scheduler-runner-protocol.test.mjs`
-- Test: `test/taskd-runtime.test.mjs`
+- Test: `test/daemon-runtime.test.mjs`
 - Test: `test/scheduled-runtime-e2e.test.mjs`
 
 **Interfaces:**
@@ -65,10 +65,10 @@ node --test test/scheduler-store.test.mjs test/scheduler-service.test.mjs test/s
 - [x] **Step 2: Run tests and verify RED**:
 
 ```bash
-node --test test/scheduler-runner-protocol.test.mjs test/taskd-runtime.test.mjs
+node --test test/scheduler-runner-protocol.test.mjs test/daemon-runtime.test.mjs
 ```
 
-- [x] **Step 3: Invoke `onChange({ operation })` only after a successful mutation response and wire it to `hub.publish()` in taskd runtime**.
+- [x] **Step 3: Invoke `onChange({ operation })` only after a successful mutation response and wire it to `hub.publish()` in daemon runtime**.
 - [x] **Step 4: Run focused protocol/runtime tests and the cross-process lifecycle test**.
 
 ### Task 3: File-Change Completion Evidence
@@ -78,7 +78,7 @@ node --test test/scheduler-runner-protocol.test.mjs test/taskd-runtime.test.mjs
 - Modify: `server/src/scheduler/process-supervisor.mjs`
 - Modify: `server/scheduled-runner.mjs`
 - Modify: `server/src/scheduler/runner-spool.mjs`
-- Modify: `server/src/taskd-runtime.mjs`
+- Modify: `server/src/daemon-runtime.mjs`
 - Modify: `server/src/scheduler/scheduler-schema.mjs`
 - Modify: `server/src/scheduler/scheduler-store.mjs`
 - Modify: `server/src/scheduler/scheduler-service.mjs`
@@ -134,7 +134,7 @@ node --test test/scheduled-tasks-ui.test.mjs test/scheduled-run-review.test.mjs 
 
 **Files:**
 - Modify: `README.md`
-- Modify: `docs/job/tasks-recorder-scheduled-tasks/03-phases.md`
+- Modify: `docs/job/rillo-scheduled-tasks/03-phases.md`
 - Modify: matching Scheduled docs found by documentation scan
 - Evidence: `.vdr-log/2026-08-26-scheduled-execution-observability/`
 

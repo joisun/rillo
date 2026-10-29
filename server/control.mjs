@@ -12,7 +12,7 @@ import { createSystemdController } from './control/systemd.mjs'
 import { resolveAppConfig } from '../mcp/src/config.mjs'
 import { cleanupLegacyScheduleLaunchAgents } from './src/scheduler/legacy-launchd-cleanup.mjs'
 
-export const LAUNCH_AGENT_LABEL = 'com.joi.tasks-recorder.taskd'
+export const LAUNCH_AGENT_LABEL = 'com.joi.rillo.daemon'
 
 function escapeXml(value) {
   return String(value).replace(/[&<>"']/g, (character) => ({
@@ -23,7 +23,7 @@ function escapeXml(value) {
 export function renderLaunchAgentPlist({
   label,
   nodePath,
-  taskdPath,
+  daemonPath,
   workingDirectory,
   stdoutPath,
   stderrPath,
@@ -37,7 +37,7 @@ export function renderLaunchAgentPlist({
   <key>ProgramArguments</key>
   <array>
     <string>${escapeXml(nodePath)}</string>
-    <string>${escapeXml(taskdPath)}</string>
+    <string>${escapeXml(daemonPath)}</string>
   </array>
   <key>WorkingDirectory</key>
   <string>${escapeXml(workingDirectory)}</string>
@@ -88,7 +88,7 @@ export function createInstallBuildStep({
   env = process.env,
   run = runCommand,
 }) {
-  if (env.TASKS_RECORDER_PREBUILT === '1') {
+  if (env.RILLO_PREBUILT === '1') {
     const dashboardPath = join(projectRoot, 'ui', 'dist', 'react.html')
     return async () => {
       try {
@@ -101,7 +101,7 @@ export function createInstallBuildStep({
   return () => run(nodePath, [join(projectRoot, 'ui', 'build.mjs')])
 }
 
-export function createTaskdController({
+export function createDaemonController({
   projectRoot,
   config,
   homeDirectory = homedir(),
@@ -114,12 +114,12 @@ export function createTaskdController({
   cleanupLegacySchedules = cleanupLegacyScheduleLaunchAgents,
 }) {
   const launchAgentsDirectory = join(homeDirectory, 'Library', 'LaunchAgents')
-  const logDirectory = join(homeDirectory, 'Library', 'Logs', 'tasks-recorder')
+  const logDirectory = join(homeDirectory, 'Library', 'Logs', 'rillo')
   const paths = {
     plistPath: join(launchAgentsDirectory, `${LAUNCH_AGENT_LABEL}.plist`),
-    stdoutPath: join(logDirectory, 'taskd.stdout.log'),
-    stderrPath: join(logDirectory, 'taskd.stderr.log'),
-    taskdPath: join(projectRoot, 'server', 'taskd.mjs'),
+    stdoutPath: join(logDirectory, 'daemon.stdout.log'),
+    stderrPath: join(logDirectory, 'daemon.stderr.log'),
+    daemonPath: join(projectRoot, 'server', 'daemon.mjs'),
   }
   const domain = `gui/${uid}`
   const serviceTarget = `${domain}/${LAUNCH_AGENT_LABEL}`
@@ -132,7 +132,7 @@ export function createTaskdController({
     const plist = renderLaunchAgentPlist({
       label: LAUNCH_AGENT_LABEL,
       nodePath,
-      taskdPath: paths.taskdPath,
+      daemonPath: paths.daemonPath,
       workingDirectory: projectRoot,
       stdoutPath: paths.stdoutPath,
       stderrPath: paths.stderrPath,
@@ -144,10 +144,10 @@ export function createTaskdController({
 
   async function install() {
     if (Number(nodeVersion.split('.')[0]) < 24) {
-      throw new Error('tasks-recorder taskd requires Node.js 24 or newer')
+      throw new Error('rillo daemon requires Node.js 24 or newer')
     }
     const health = await probeHealth(config.serverBaseUrl)
-    if (health && health.service !== 'tasks-recorder') {
+    if (health && health.service !== 'rillo') {
       throw new Error(`${config.serverBaseUrl} is occupied by another service`)
     }
     const legacyCleanup = await cleanupLegacySchedules({
@@ -184,7 +184,7 @@ export function createTaskdController({
     return {
       label: LAUNCH_AGENT_LABEL,
       loaded: launchd.code === 0,
-      ready: health?.service === 'tasks-recorder' && health.ready !== false,
+      ready: health?.service === 'rillo' && health.ready !== false,
       url: config.serverPublicUrl ?? config.serverBaseUrl,
       plistPath: paths.plistPath,
     }
@@ -225,13 +225,13 @@ export async function runControlCommand(command = 'status', {
   run = runCommand,
 } = {}) {
   if (!['darwin', 'linux'].includes(platform)) {
-    throw new Error('tasks-recorder supports macOS and Linux with systemd')
+    throw new Error('rillo supports macOS and Linux with systemd')
   }
   if (!['install', 'start', 'stop', 'status', 'uninstall'].includes(command)) {
-    throw new Error('usage: npm run taskd -- install|start|stop|status|uninstall')
+    throw new Error('usage: npm run daemon -- install|start|stop|status|uninstall')
   }
   const config = await configResolver({ projectRoot, env, homeDirectory })
-  const factory = controllerFactory ?? (platform === 'linux' ? createSystemdController : createTaskdController)
+  const factory = controllerFactory ?? (platform === 'linux' ? createSystemdController : createDaemonController)
   const controller = factory({ projectRoot, config, homeDirectory, env, run, build: createInstallBuildStep({ projectRoot, env, run }), probeHealth: defaultProbeHealth })
   return controller[command]()
 }

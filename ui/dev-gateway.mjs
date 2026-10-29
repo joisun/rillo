@@ -1,7 +1,7 @@
 import { createServer, request as createUpstreamRequest } from 'node:http'
 
 const LOOPBACK = '127.0.0.1'
-const DEV_RELOAD_PATH = '/__tasks_recorder_dev/reload'
+const DEV_RELOAD_PATH = '/__rillo_dev/reload'
 const HTML_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self' data:; frame-ancestors 'none'"
 const hopByHopHeaders = new Set([
   'connection',
@@ -23,10 +23,10 @@ function portValue(value, field) {
 }
 
 export function resolveDashboardDevConfig({ env = process.env } = {}) {
-  const port = portValue(env.TASKS_RECORDER_DEV_PORT ?? 43128, 'TASKS_RECORDER_DEV_PORT')
-  const upstream = new URL(env.TASKS_RECORDER_DEV_UPSTREAM ?? 'http://127.0.0.1:43127')
+  const port = portValue(env.RILLO_DEV_PORT ?? 43128, 'RILLO_DEV_PORT')
+  const upstream = new URL(env.RILLO_DEV_UPSTREAM ?? 'http://127.0.0.1:43127')
   if (upstream.protocol !== 'http:' || upstream.hostname !== LOOPBACK) {
-    throw new Error('TASKS_RECORDER_DEV_UPSTREAM must be an HTTP loopback URL')
+    throw new Error('RILLO_DEV_UPSTREAM must be an HTTP loopback URL')
   }
   if (
     upstream.username
@@ -36,15 +36,15 @@ export function resolveDashboardDevConfig({ env = process.env } = {}) {
     || upstream.hash
   ) {
     throw new Error(
-      'TASKS_RECORDER_DEV_UPSTREAM must not contain credentials, path, query, or hash',
+      'RILLO_DEV_UPSTREAM must not contain credentials, path, query, or hash',
     )
   }
-  const upstreamPort = portValue(upstream.port || 80, 'TASKS_RECORDER_DEV_UPSTREAM port')
+  const upstreamPort = portValue(upstream.port || 80, 'RILLO_DEV_UPSTREAM port')
   if (port === upstreamPort) throw new Error('dev port must differ from upstream port')
   return { host: LOOPBACK, port, upstream }
 }
 
-const reloadClient = `<script data-tasks-recorder-dev-reload>
+const reloadClient = `<script data-rillo-dev-reload>
 (() => {
   const source = new EventSource('${DEV_RELOAD_PATH}')
   source.addEventListener('reload', () => globalThis.location.reload())
@@ -52,7 +52,7 @@ const reloadClient = `<script data-tasks-recorder-dev-reload>
 </script>`
 
 export function injectDashboardReloadClient(html) {
-  if (html.includes('data-tasks-recorder-dev-reload')) return html
+  if (html.includes('data-rillo-dev-reload')) return html
   if (!html.includes('</body>')) throw new Error('Dashboard HTML is missing </body>')
   return html.replace('</body>', `${reloadClient}\n</body>`)
 }
@@ -164,7 +164,7 @@ export function createDashboardDevGateway({ host, port, upstream, getHtml } = {}
           ok: false,
           error: {
             code: 'DEV_UPSTREAM_UNAVAILABLE',
-            message: 'Tasks Recorder upstream is unavailable',
+            message: 'Rillo upstream is unavailable',
           },
         })
       }

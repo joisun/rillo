@@ -13,7 +13,7 @@ test('standalone dashboard bundle uses REST + SSE and contains no embedded MCP A
   assert.match(html, /wx-gantt/)
   assert.doesNotMatch(html, /license.?key|APEXCHARTS|trial watermark/i)
   assert.doesNotMatch(html, /Auth Refactor|Investigate API timeout/)
-  assert.doesNotMatch(html, /@modelcontextprotocol\/ext-apps|callServerTool|agent_tasks_dashboard|dashboard-v1\.html/)
+  assert.doesNotMatch(html, /@modelcontextprotocol\/ext-apps|callServerTool|rillo_dashboard|dashboard-v1\.html/)
   assert.equal((html.match(/^<script\b/gm) ?? []).length, 1)
   assert.equal((html.match(/^<\/script>/gm) ?? []).length, 1)
   assert.ok(Buffer.byteLength(html) < 2 * 1024 * 1024)

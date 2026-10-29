@@ -4,13 +4,13 @@ import { access, chmod, mkdir, stat } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { backup, DatabaseSync } from 'node:sqlite'
 
-import { TaskRecorderError } from './errors.mjs'
+import { RilloError } from './errors.mjs'
 import { checkSchemaV3Invariants, createSchemaV3, SCHEMA_V3 } from './schema-v3.mjs'
 
 const LEGACY_SCHEMA_VERSION = 2
 
 function fail(code, message, details) {
-  throw new TaskRecorderError(code, message, details)
+  throw new RilloError(code, message, details)
 }
 
 function nonEmpty(value) {

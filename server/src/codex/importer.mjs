@@ -2,7 +2,7 @@ import { readdir } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 
-import { TaskRecorderError } from '../../../mcp/src/errors.mjs'
+import { RilloError } from '../../../mcp/src/errors.mjs'
 import {
   readCodexSessionMetadata,
   readCodexTranscript,
@@ -10,7 +10,7 @@ import {
 
 function requiredString(value, field) {
   if (typeof value !== 'string' || value.trim() === '') {
-    throw new TaskRecorderError('CODEX_IMPORT_INPUT_INVALID', `${field} must be a non-empty string`, {
+    throw new RilloError('CODEX_IMPORT_INPUT_INVALID', `${field} must be a non-empty string`, {
       field,
     })
   }
@@ -40,7 +40,7 @@ async function scanMetadata(files, sessionsRoot) {
     try {
       records.push({ path, metadata: await readCodexSessionMetadata(path, { sessionsRoot }) })
     } catch (error) {
-      if (!(error instanceof TaskRecorderError)) throw error
+      if (!(error instanceof RilloError)) throw error
     }
   }
   return records
@@ -56,14 +56,14 @@ export async function resolveCodexSession({
   const metadataRecords = await scanMetadata(files, sessionsRoot)
   const candidates = metadataRecords.filter(({ metadata }) => metadata.session_id === exactSessionId)
   if (candidates.length === 0) {
-    throw new TaskRecorderError(
+    throw new RilloError(
       'CODEX_SESSION_NOT_FOUND',
       `Codex session ${exactSessionId} was not found`,
       { session_id: exactSessionId },
     )
   }
   if (candidates.length > 1) {
-    throw new TaskRecorderError(
+    throw new RilloError(
       'CODEX_SESSION_AMBIGUOUS',
       `Codex session ${exactSessionId} resolves to multiple transcripts`,
       { session_id: exactSessionId, count: candidates.length },
@@ -167,7 +167,7 @@ export async function parseCodexImport({
   const resolved = await resolveCodexSession({ sessionId, codexHome })
   const root = await readCodexTranscript(resolved.path, { sessionsRoot: resolved.sessionsRoot })
   if (root.metadata.parent_session_id !== null) {
-    throw new TaskRecorderError(
+    throw new RilloError(
       'CODEX_IMPORT_ROOT_REQUIRED',
       'Codex historical import requires a root session',
       { session_id: root.metadata.session_id },

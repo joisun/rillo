@@ -5,9 +5,9 @@
 ## 环境与计划
 
 - Ubuntu 26.04.1 x86_64；systemd user manager 正常；无桌面，已安装 tmux 和 Codex；无 Node。
-- 独立工作树 feature/linux-support，Linux 修改前源快照位于 /tmp/tasks-recorder-linux-baseline；既有 Sessions 改动保留。
+- 独立工作树 feature/linux-support，Linux 修改前源快照位于 /tmp/rillo-linux-baseline；既有 Sessions 改动保留。
 - 先补系统入口，再做聚焦测试、完整回归与远端隔离验收，最后更新文档并清理。
-- 远端实验目录：/tmp/tasks-recorder-linux-57poah5d；临时 Node 校验官方下载 SHA256。
+- 远端实验目录：/tmp/rillo-linux-57poah5d；临时 Node 校验官方下载 SHA256。
 
 用户补充：不实现 tmux 或 Linux 终端恢复；通过 Web 查到 Session ID 后由用户自行在终端 resume。Linux 不从服务器打开用户桌面应用。
 
@@ -40,11 +40,11 @@
 
 ## 清理结果
 
-- 已停止、禁用并删除tasks-recorder-linux-smoke-57poah5d.service；systemd LoadState=not-found，用户目录不存在该unit链接。
-- 已确认正常卸载保留实验配置，随后删除整个实验目录/tmp/tasks-recorder-linux-57poah5d，包括Node、源码、npm依赖/缓存、原生临时索引、SQLite和测试日志。
+- 已停止、禁用并删除rillo-linux-smoke-57poah5d.service；systemd LoadState=not-found，用户目录不存在该unit链接。
+- 已确认正常卸载保留实验配置，随后删除整个实验目录/tmp/rillo-linux-57poah5d，包括Node、源码、npm依赖/缓存、原生临时索引、SQLite和测试日志。
 - 远端残留测试进程0；原SSH环境中node仍未安装，原用户数据和配置未修改。
 - 本机测试SSH转发已停止，43163未监听；指定pane保持原SSH会话。
-- 精简验证输出保留在本机/tmp/tasks-recorder-linux-baseline/remote-results，截图位于本工作树忽略的.vdr-log/2026-10-27-linux-web/。
+- 精简验证输出保留在本机/tmp/rillo-linux-baseline/remote-results，截图位于本工作树忽略的.vdr-log/2026-10-27-linux-web/。
 
 ## 文档同步
 

@@ -43,7 +43,7 @@ export async function packageRelease({
 } = {}) {
   const manifest = JSON.parse(await readFile(join(projectRoot, 'package.json'), 'utf8'))
   const version = manifest.version
-  const stageDirectory = await mkdtemp(join(tmpdir(), 'tasks-recorder-package-'))
+  const stageDirectory = await mkdtemp(join(tmpdir(), 'rillo-package-'))
   await mkdir(outputDirectory, { recursive: true })
 
   try {
@@ -53,7 +53,7 @@ export async function packageRelease({
       buildServerVendor({ projectRoot }),
     ])
 
-    const runtimeName = `tasks-recorder-${version}`
+    const runtimeName = `rillo-${version}`
     const runtimeRoot = join(stageDirectory, runtimeName)
     await mkdir(runtimeRoot, { recursive: true })
     await copyEntries(projectRoot, runtimeRoot, [
@@ -89,14 +89,14 @@ export async function packageRelease({
 
     const artifacts = []
     for (const platform of ['macos', 'linux']) {
-      artifacts.push(await archive(stageDirectory, runtimeName, join(outputDirectory, `tasks-recorder-${platform}.tar.gz`)))
+      artifacts.push(await archive(stageDirectory, runtimeName, join(outputDirectory, `rillo-${platform}.tar.gz`)))
     }
 
     for (const host of ['codex', 'claude']) {
       const adapterStage = join(stageDirectory, `${host}-adapter`)
-      const adapterRoot = join(adapterStage, 'tasks-recorder')
+      const adapterRoot = join(adapterStage, 'rillo')
       await mkdir(adapterRoot, { recursive: true })
-      const sourceRoot = join(projectRoot, 'adapters', host, 'tasks-recorder')
+      const sourceRoot = join(projectRoot, 'adapters', host, 'rillo')
       await copyEntries(sourceRoot, adapterRoot, [
         host === 'codex' ? '.codex-plugin' : '.claude-plugin',
         '.mcp.json',
@@ -108,8 +108,8 @@ export async function packageRelease({
       await cp(join(projectRoot, 'LICENSE'), join(adapterRoot, 'LICENSE'))
       artifacts.push(await archive(
         adapterStage,
-        'tasks-recorder',
-        join(outputDirectory, `tasks-recorder-${host}-adapter.tar.gz`),
+        'rillo',
+        join(outputDirectory, `rillo-${host}-adapter.tar.gz`),
       ))
     }
 

@@ -1,6 +1,6 @@
 import { createServer } from 'node:http'
 
-import { TaskRecorderError } from '../../mcp/src/errors.mjs'
+import { RilloError } from '../../mcp/src/errors.mjs'
 import { readJson, sendJson } from './http-utils.mjs'
 import { sendRunFile } from './api-server/run-file-response.mjs'
 
@@ -74,7 +74,7 @@ function statusFor(error) {
     || error.code.startsWith('RUN_')
     || error.code.startsWith('RUNTIME_')
   )) return 400
-  if (error instanceof TaskRecorderError) return 400
+  if (error instanceof RilloError) return 400
   return 500
 }
 
@@ -352,7 +352,7 @@ function validateRunControl(action, value) {
 }
 
 export function createApiServer({
-  serviceStatus = async () => ({ ready: true, service: 'tasks-recorder', api_version: 5 }),
+  serviceStatus = async () => ({ ready: true, service: 'rillo', api_version: 5 }),
   hub,
   host = '127.0.0.1',
   port,
@@ -420,7 +420,7 @@ export function createApiServer({
         return
       }
       if (request.method === 'GET' && pathname === '/health/live') {
-        sendJson(response, 200, { ok: true, service: 'tasks-recorder' })
+        sendJson(response, 200, { ok: true, service: 'rillo' })
         return
       }
       if (request.method === 'GET' && pathname === '/health/ready') {
@@ -428,12 +428,12 @@ export function createApiServer({
         const ready = check !== null && check.integrityCheck === 'ok'
           && (check.foreignKeyViolations?.length ?? 0) === 0
           && (check.invariantViolations?.length ?? 0) === 0
-        sendJson(response, ready ? 200 : 503, { ok: ready, ready, service: 'tasks-recorder', check })
+        sendJson(response, ready ? 200 : 503, { ok: ready, ready, service: 'rillo', check })
         return
       }
       if (request.method === 'GET' && pathname === '/api/v1/meta') {
         sendJson(response, 200, {
-          service: 'tasks-recorder',
+          service: 'rillo',
           service_version: packageVersion,
           api_version: apiVersion,
           capabilities: {
@@ -451,9 +451,9 @@ export function createApiServer({
         || ['/api/v1/context', '/api/v1/snapshot', '/api/v1/heartbeat', '/api/v1/render', '/api/v1/check'].includes(pathname)
         || (request.method === 'POST' && pathname === '/api/v1/events')
       if (retired) throw httpError('TASKS_RETIRED', 'Tasks recording has been retired. Use Sessions, session_link and session_unlink; existing data files are preserved.', 410)
-      const expectedApiVersion = request.headers['x-tasks-recorder-api-version']
+      const expectedApiVersion = request.headers['x-rillo-api-version']
       if (expectedApiVersion !== undefined && expectedApiVersion !== String(apiVersion)) {
-        throw httpError('API_VERSION_MISMATCH', `Tasks Recorder API v${apiVersion} is required; update the client and service together.`, 409)
+        throw httpError('API_VERSION_MISMATCH', `Rillo API v${apiVersion} is required; update the client and service together.`, 409)
       }
       if (request.method === 'GET' && pathname === '/api/v1/runtimes' && runtimeRegistry) {
         sendJson(response, 200, { runtimes: await runtimeRegistry.list() })
@@ -769,7 +769,7 @@ export function createApiServer({
           ? []
           : (await schedulerService.listDispatches()).dispatches
         const capability = runService
-          ? { backend: 'taskd-clock', supported: true }
+          ? { backend: 'daemon-clock', supported: true }
           : await schedulerService.capability()
         const runSummaries = scheduleExecutionSummaries(runs, dispatches, clock())
         sendJson(response, 200, {

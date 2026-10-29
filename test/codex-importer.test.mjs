@@ -14,7 +14,7 @@ const FIXTURE_ROOT = new URL('./fixtures/codex/root-session.jsonl', import.meta.
 const FIXTURE_CHILD = new URL('./fixtures/codex/child-session.jsonl', import.meta.url)
 
 async function temporaryCodexHome() {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-codex-import-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-codex-import-'))
   const codexHome = join(directory, '.codex')
   const sessionsRoot = join(codexHome, 'sessions')
   await mkdir(sessionsRoot, { recursive: true })

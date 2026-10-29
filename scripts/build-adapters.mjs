@@ -11,7 +11,7 @@ export async function buildAdapters({
 } = {}) {
   const outputs = []
   for (const host of ['codex', 'claude']) {
-    const pluginRoot = resolve(projectRoot, 'adapters', host, 'tasks-recorder')
+    const pluginRoot = resolve(projectRoot, 'adapters', host, 'rillo')
     const outfile = resolve(pluginRoot, 'dist', 'mcp-server.mjs')
     const temporaryOutfile = `${outfile}.${process.pid}.${crypto.randomUUID()}.tmp`
     await mkdir(resolve(pluginRoot, 'dist'), { recursive: true })

@@ -9,7 +9,7 @@ import { createScheduleDefinitionRepository } from '../server/src/scheduler/sche
 
 function definition(id, title = 'Daily review') {
   return `---
-type: tasks-recorder/schedule
+type: rillo/schedule
 id: ${id}
 title: ${title}
 workspace: /tmp/project
@@ -23,7 +23,7 @@ Review the project.
 }
 
 async function fixture(t) {
-  const root = await mkdtemp(join(tmpdir(), 'tasks-recorder-definitions-'))
+  const root = await mkdtemp(join(tmpdir(), 'rillo-definitions-'))
   t.after(async () => (await import('node:fs/promises')).rm(root, { recursive: true, force: true }))
   return { root, repository: createScheduleDefinitionRepository({ rootDirectory: root }) }
 }
@@ -71,7 +71,7 @@ test('creates, CAS-updates, pauses and recoverably removes definitions', async (
   })
   assert.equal(created.id, id)
   assert.match(basename(created.source_path), /^daily-review--[0-9a-f]{8}\.md$/)
-  assert.equal((await readFile(created.source_path, 'utf8')).includes('type: tasks-recorder/schedule'), true)
+  assert.equal((await readFile(created.source_path, 'utf8')).includes('type: rillo/schedule'), true)
   assert.match(await readFile(created.source_path, 'utf8'), /capabilities:\n  skills: disabled\n  integrations: disabled/)
 
   const updated = await repository.update(id, created.etag, { title: 'Morning review' })
@@ -104,7 +104,7 @@ test('surfaces malformed marked files without blocking valid definitions', async
   const { root, repository } = await fixture(t)
   const id = randomUUID()
   await writeFile(join(root, 'valid.md'), definition(id))
-  await writeFile(join(root, 'broken.md'), '---\ntype: tasks-recorder/schedule\nid: [broken\n---\nPrompt\n')
+  await writeFile(join(root, 'broken.md'), '---\ntype: rillo/schedule\nid: [broken\n---\nPrompt\n')
   const result = await repository.scan()
   assert.deepEqual(result.jobs.map(({ id: value }) => value), [id])
   assert.equal(result.invalid.length, 1)

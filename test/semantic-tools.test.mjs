@@ -10,7 +10,7 @@ import { createApiServer } from '../server/src/api-server.mjs'
 import { createRevisionHub } from '../server/src/revision-hub.mjs'
 
 async function fixture() {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-semantic-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-semantic-'))
   let now = new Date('2026-08-20T11:00:00.000Z')
   const store = createJournalStore({
     databasePath: join(directory, 'tasks.sqlite'),

@@ -1,14 +1,14 @@
-# Tasks Recorder 公开发布与原生 Adapter 设计
+# Rillo 公开发布与原生 Adapter 设计
 
 日期：2026-08-13
 
 ## 目标
 
-把 Tasks Recorder 作为独立的 macOS local service 发布，并为 Codex 与 Claude Code 分别提供符合各自原生规范的 plugin adapter。用户可以通过 `install.sh` 安装或升级 service，再按所用 harness 单独安装 adapter。
+把 Rillo 作为独立的 macOS local service 发布，并为 Codex 与 Claude Code 分别提供符合各自原生规范的 plugin adapter。用户可以通过 `install.sh` 安装或升级 service，再按所用 harness 单独安装 adapter。
 
 本轮同时交付：
 
-- 公开 GitHub repository：`joisun/tasks-recorder`
+- 公开 GitHub repository：`joisun/rillo`
 - 基于 GitHub Release 的可校验安装器
 - CI 与 tag release GitHub Actions
 - Codex 与 Claude Code 的独立 plugin adapter
@@ -23,8 +23,8 @@
 
 ### Facts
 
-- `taskd` 是唯一 SQLite writer，并通过 localhost HTTP API 与 SSE 提供数据和实时更新。
-- 用户数据位于 `~/.config/tasks-recorder`，不能随程序升级被覆盖。
+- `daemon` 是唯一 SQLite writer，并通过 localhost HTTP API 与 SSE 提供数据和实时更新。
+- 用户数据位于 `~/.config/rillo`，不能随程序升级被覆盖。
 - 当前 service 只支持 macOS `launchd`。
 - Codex 与 Claude Code 都支持 plugin、hooks、skills 和 MCP，但 manifest、marketplace 与 MCP 配置格式存在差异。
 - DHTMLX Gantt Standard 9.1.0 以 GPL-2.0 分发，并被直接 bundle 到 Dashboard。
@@ -41,12 +41,12 @@
 - 不直接修改用户的 `~/.codex/config.toml` 或 Claude settings；adapter 通过各自官方 plugin marketplace 安装。
 - `install.sh` 只管理 service，不隐式安装任何 AI harness plugin。
 - adapter 不持有数据库，不写入 plugin cache，不依赖 source checkout。
-- service 只监听 `127.0.0.1`；所有状态继续持久化到 `~/.config/tasks-recorder`。
+- service 只监听 `127.0.0.1`；所有状态继续持久化到 `~/.config/rillo`。
 
 ### Success Criteria
 
 - 一条 `curl ... | bash` 命令能从 Release 安装或升级 service，并保持现有数据库。
-- 安装后的 `taskd` 能由 `launchd` 自动启动，Dashboard 可访问且实时更新。
+- 安装后的 `daemon` 能由 `launchd` 自动启动，Dashboard 可访问且实时更新。
 - Codex 与 Claude Code 能分别从 repository marketplace 安装 adapter。
 - 两个 adapter 都能调用 tasks MCP tools，并通过 hooks 写入 heartbeat/status。
 - PR/push 会执行 build、syntax check、tests 与 packaging smoke test；`v*` tag 会发布带 SHA-256 checksum 的 artifacts。
@@ -55,7 +55,7 @@
 
 ```text
 Codex adapter ── hooks / stdio MCP ──┐
-                                     ├── localhost HTTP API ── taskd ── SQLite
+                                     ├── localhost HTTP API ── daemon ── SQLite
 Claude adapter ─ hooks / stdio MCP ──┘                         └── Dashboard + SSE
 ```
 
@@ -72,26 +72,26 @@ Service 是产品核心，负责：
 版本化程序安装到：
 
 ```text
-~/.local/share/tasks-recorder/releases/<version>/
-~/.local/share/tasks-recorder/current -> releases/<version>
+~/.local/share/rillo/releases/<version>/
+~/.local/share/rillo/current -> releases/<version>
 ```
 
 用户状态保持在：
 
 ```text
-~/.config/tasks-recorder/config.json
-~/.config/tasks-recorder/tasks.sqlite
+~/.config/rillo/config.json
+~/.config/rillo/tasks.sqlite
 ```
 
 日志保持在：
 
 ```text
-~/Library/Logs/tasks-recorder/
+~/Library/Logs/rillo/
 ```
 
 ### 2. Codex adapter
 
-`adapters/codex/tasks-recorder/` 是完整、独立的 Codex plugin root，包含：
+`adapters/codex/rillo/` 是完整、独立的 Codex plugin root，包含：
 
 - `.codex-plugin/plugin.json`
 - Codex 原生 `.mcp.json`
@@ -103,7 +103,7 @@ Repository 根目录的 `.agents/plugins/marketplace.json` 将该目录发布为
 
 ### 3. Claude Code adapter
 
-`adapters/claude/tasks-recorder/` 是完整、独立的 Claude Code plugin root，包含：
+`adapters/claude/rillo/` 是完整、独立的 Claude Code plugin root，包含：
 
 - `.claude-plugin/plugin.json`
 - Claude 原生 `.mcp.json`
@@ -118,7 +118,7 @@ Repository 根目录的 `.claude-plugin/marketplace.json` 将该目录发布为 
 两个 adapter 允许少量重复。它们只依赖以下稳定 contract：
 
 - service endpoint：`http://127.0.0.1:<configured-port>`
-- config location：`~/.config/tasks-recorder/config.json`
+- config location：`~/.config/rillo/config.json`
 - REST API request/response schema
 
 每个 adapter 将自己的 MCP client bundle 成不需要 `npm install` 的单文件，并从自身 plugin root 启动。hooks 也保留在各自 adapter 内，以便分别适配宿主事件格式。MCP 与 hooks 都只通过 localhost HTTP API 连接 service；adapter 未检测到 service 时返回可操作的安装提示，而不是尝试自行安装依赖。
@@ -179,7 +179,7 @@ README 面向第一次访问 repository 的用户，依次说明：
 3. Codex adapter 安装
 4. Claude Code adapter 安装
 5. 打开 Dashboard 与常用管理命令
-6. **How it works**：hooks → adapter → taskd → SQLite → SSE Dashboard
+6. **How it works**：hooks → adapter → daemon → SQLite → SSE Dashboard
 7. 文件位置、升级、卸载与数据保留规则
 8. 从源码开发与测试
 9. 安全模型与 GPL-2.0-only 许可

@@ -8,9 +8,9 @@
 
 ## Summary
 
-Tasks Recorder will add a Live Session surface for active Runs. The Dashboard will display normalized assistant deltas and compact activity events as they happen, accept an additional user instruction for the currently running Turn, and allow the user to stop that Turn.
+Rillo will add a Live Session surface for active Runs. The Dashboard will display normalized assistant deltas and compact activity events as they happen, accept an additional user instruction for the currently running Turn, and allow the user to stop that Turn.
 
-The implementation uses Codex's native `app-server` protocol rather than attempting to make the one-shot `codex exec --json` process interactive. `taskd` owns one isolated `codex app-server --listen stdio://` process per active Run, performs the protocol handshake, starts or resumes a thread, starts a Turn, normalizes notifications into the existing bounded Run event stream, and translates typed Dashboard actions into `turn/steer` or `turn/interrupt` requests.
+The implementation uses Codex's native `app-server` protocol rather than attempting to make the one-shot `codex exec --json` process interactive. `daemon` owns one isolated `codex app-server --listen stdio://` process per active Run, performs the protocol handshake, starts or resumes a thread, starts a Turn, normalizes notifications into the existing bounded Run event stream, and translates typed Dashboard actions into `turn/steer` or `turn/interrupt` requests.
 
 This phase intentionally ends at the terminal Run boundary. A completed Run continues to use the existing Terminal Resume action. Dashboard-native follow-up Turns and cross-Run conversation lineage are not part of this change.
 
@@ -18,7 +18,7 @@ This phase intentionally ends at the terminal Run boundary. A completed Run cont
 
 ### Goal
 
-Let a user observe what an active local agent is doing and correct its direction without leaving Tasks Recorder.
+Let a user observe what an active local agent is doing and correct its direction without leaving Rillo.
 
 ### Facts
 
@@ -27,18 +27,18 @@ Let a user observe what an active local agent is doing and correct its direction
 - Codex `app-server` exposes typed `thread/start`, `thread/resume`, `turn/start`, `turn/steer`, and `turn/interrupt` methods;
 - `AgentMessageDeltaNotification` carries actual assistant deltas with `threadId`, `turnId`, and `itemId`;
 - Codex may reject steering when the active Turn is temporarily non-steerable;
-- taskd already owns Runtime resolution, Run lifecycle, event buffering, persistence, and cancellation;
-- Tasks Recorder's privacy contract forbids persisting prompt, reasoning, tool payload, assistant message, or transcript content in SQLite.
+- daemon already owns Runtime resolution, Run lifecycle, event buffering, persistence, and cancellation;
+- Rillo's privacy contract forbids persisting prompt, reasoning, tool payload, assistant message, or transcript content in SQLite.
 
 ### Constraints
 
-- the browser sends semantic Run IDs, taskd Turn revision, and bounded text only; it never submits executable paths, argv, shell commands, Workspace, session IDs, or runtime Turn IDs;
+- the browser sends semantic Run IDs, daemon Turn revision, and bounded text only; it never submits executable paths, argv, shell commands, Workspace, session IDs, or runtime Turn IDs;
 - all protocol processes use `shell: false` and the same Runtime Environment as model discovery and Run launch;
 - the daemon validates that a requested Run is active and owns the referenced protocol session;
-- intervention is optimistic and Turn-scoped: taskd exposes a monotonic public `turnRevision`, while the runtime's real `turnId` remains private to the driver; the Codex `threadId` continues through the existing public `session_id` contract for copy and Terminal Resume but is never accepted as control authority from the browser; stale or non-steerable requests return typed conflicts instead of silently starting another Turn;
+- intervention is optimistic and Turn-scoped: daemon exposes a monotonic public `turnRevision`, while the runtime's real `turnId` remains private to the driver; the Codex `threadId` continues through the existing public `session_id` contract for copy and Terminal Resume but is never accepted as control authority from the browser; stale or non-steerable requests return typed conflicts instead of silently starting another Turn;
 - event buffers, input size, process shutdown, reconnect, and protocol requests remain bounded;
 - a disconnected Dashboard must not stop or corrupt the Run;
-- transcript content remains ephemeral in taskd memory and Codex-owned session storage.
+- transcript content remains ephemeral in daemon memory and Codex-owned session storage.
 
 ### Success criteria
 
@@ -56,7 +56,7 @@ Let a user observe what an active local agent is doing and correct its direction
 
 ### Open area
 
-- Tasks Recorder already has the correct control-plane owner: `taskd`.
+- Rillo already has the correct control-plane owner: `daemon`.
 - Codex exposes a protocol intended for interactive clients.
 - SSE is sufficient for the server-to-browser direction; no WebSocket is required for user actions.
 - intervention targets only an active Turn in this phase.
@@ -69,7 +69,7 @@ Let a user observe what an active local agent is doing and correct its direction
 
 ### Blind spots
 
-- replaying raw assistant content after taskd restart would violate the current no-transcript-persistence invariant unless a separate opt-in transcript store is designed;
+- replaying raw assistant content after daemon restart would violate the current no-transcript-persistence invariant unless a separate opt-in transcript store is designed;
 - approvals requested by Codex app-server are not equivalent to steering. Scheduled Runs currently use unattended policy, so approval UI is excluded rather than half-implemented;
 - a shared, long-lived app-server would reduce process count but would couple failures and complicate ownership, shutdown, and upgrade semantics.
 
@@ -85,7 +85,7 @@ Let a user observe what an active local agent is doing and correct its direction
 ```mermaid
 flowchart LR
   UI[Dashboard Live Session]
-  UI -->|GET Run events / SSE| API[taskd typed HTTP API]
+  UI -->|GET Run events / SSE| API[daemon typed HTTP API]
   UI -->|POST steer or stop| API
   API --> RUN[RunService]
   RUN --> ACTIVE[Active Runtime Session]
@@ -142,14 +142,14 @@ Each interactive Run owns one app-server process. This is intentionally simpler 
 - protocol upgrades cannot corrupt unrelated Runs;
 - completed Runs release memory and process resources deterministically.
 
-The process is started only after the durable Run enters the normal launch path. It is closed after the Turn reaches a terminal outcome or during bounded taskd shutdown.
+The process is started only after the durable Run enters the normal launch path. It is closed after the Turn reaches a terminal outcome or during bounded daemon shutdown.
 
 ## Protocol flow
 
 ```mermaid
 sequenceDiagram
   participant D as Dashboard
-  participant T as taskd
+  participant T as daemon
   participant C as Codex app-server
   D->>T: Run now
   T->>C: initialize
@@ -187,7 +187,7 @@ Run SSE remains the public event transport. Interactive drivers emit a common en
 The Live Session consumes:
 
 - `session_started`: public session identifier and runtime metadata;
-- `turn_started`: taskd-generated `turnRevision` used only as an optimistic version token;
+- `turn_started`: daemon-generated `turnRevision` used only as an optimistic version token;
 - `assistant_delta`: append-only visible text fragment;
 - `activity_started` / `activity_completed`: bounded command, tool, or file activity summary;
 - `usage_updated`: optional token/usage facts;
@@ -215,7 +215,7 @@ Content-Type: application/json
 }
 ```
 
-The API validates loopback authorization, JSON shape, non-empty text, a bounded UTF-8 byte length, active Run ownership, interactive capability, and the exact current taskd-managed Turn revision. Success returns `202` with a typed acknowledgement. It does not echo or persist the instruction.
+The API validates loopback authorization, JSON shape, non-empty text, a bounded UTF-8 byte length, active Run ownership, interactive capability, and the exact current daemon-managed Turn revision. Success returns `202` with a typed acknowledgement. It does not echo or persist the instruction.
 
 Typed failures include:
 
@@ -267,7 +267,7 @@ The composer is disabled while connecting, after a terminal state, when no curre
 - the server derives runtime, Workspace, session, thread, and Turn from the active Run;
 - intervention text is never placed in URL, logs, SQLite, SSE acknowledgements, analytics, or error details;
 - body size is rejected before parsing unbounded content;
-- control requests use the exact taskd-generated `expectedTurnRevision` to prevent stale tabs from steering a later Turn without exposing runtime protocol identity;
+- control requests use the exact daemon-generated `expectedTurnRevision` to prevent stale tabs from steering a later Turn without exposing runtime protocol identity;
 - the driver redacts protocol errors before exposing them to UI;
 - app-server stderr is treated as bounded diagnostic output, not visible conversation content.
 
@@ -282,7 +282,7 @@ The composer is disabled while connecting, after a terminal state, when no curre
 | steer rejected | composer retains text and shows scoped retry guidance |
 | stale Turn | client refreshes from stream; instruction is not applied |
 | Stop timeout | generic bounded process termination completes cancellation |
-| taskd restarts | open Run becomes interrupted under existing recovery policy; no transcript reconstruction claim |
+| daemon restarts | open Run becomes interrupted under existing recovery policy; no transcript reconstruction claim |
 
 ## Testing strategy
 

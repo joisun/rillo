@@ -8,7 +8,7 @@ function statePath(source, sessionId) {
   if (typeof sessionId !== 'string' || sessionId.trim() === '') {
     throw new TypeError('session_id is required')
   }
-  const directory = join(homedir(), '.config', 'tasks-recorder', 'adapter-state', 'generic')
+  const directory = join(homedir(), '.config', 'rillo', 'adapter-state', 'generic')
   const name = createHash('sha256').update(`${source}\u0000${sessionId}`).digest('hex')
   return { directory, path: join(directory, `${name}.json`) }
 }

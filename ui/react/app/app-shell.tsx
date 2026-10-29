@@ -26,7 +26,7 @@ export function AppShell({
       <header className="app-shell__header">
         <div className="app-shell__brand">
           <span className="app-shell__mark" aria-hidden="true"><Waypoints /></span>
-          <h1>Tasks Recorder</h1>
+          <h1>Rillo</h1>
         </div>
         <div className="app-shell__navigation-zone">
           <Navigation view={view} onViewChange={onViewChange} />

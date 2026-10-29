@@ -9,7 +9,7 @@ import { createCodexSessionInventory } from '../server/src/codex/session-invento
 const SESSION_ID = '019fa297-4567-7bf0-a69a-84fd23b3aaab'
 
 async function fixture() {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-session-inventory-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-session-inventory-'))
   const sessionsRoot = join(directory, 'sessions')
   await mkdir(sessionsRoot, { recursive: true })
   return {

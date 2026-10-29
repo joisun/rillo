@@ -4,10 +4,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { createEventSpool as createClaudeEventSpool } from '../adapters/claude/tasks-recorder/hooks/src/event-spool.mjs'
-import { parseEventEnvelope as parseClaudeEventEnvelope } from '../adapters/claude/tasks-recorder/hooks/src/event-envelope.mjs'
-import { createEventSpool as createCodexEventSpool } from '../adapters/codex/tasks-recorder/hooks/src/event-spool.mjs'
-import { parseEventEnvelope as parseCodexEventEnvelope } from '../adapters/codex/tasks-recorder/hooks/src/event-envelope.mjs'
+import { createEventSpool as createClaudeEventSpool } from '../adapters/claude/rillo/hooks/src/event-spool.mjs'
+import { parseEventEnvelope as parseClaudeEventEnvelope } from '../adapters/claude/rillo/hooks/src/event-envelope.mjs'
+import { createEventSpool as createCodexEventSpool } from '../adapters/codex/rillo/hooks/src/event-spool.mjs'
+import { parseEventEnvelope as parseCodexEventEnvelope } from '../adapters/codex/rillo/hooks/src/event-envelope.mjs'
 import { parseEventEnvelope } from '../mcp/src/event-envelope.mjs'
 import { createEventSpool } from '../hooks/src/event-spool.mjs'
 
@@ -32,7 +32,7 @@ function event(overrides = {}) {
 }
 
 async function fixture(options = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-spool-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-spool-'))
   const spoolDirectory = join(directory, 'spool')
   return {
     directory,
@@ -45,7 +45,7 @@ async function fixture(options = {}) {
 }
 
 test('root, Codex and Claude adapters preserve the same self-contained spool contract', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-spool-parity-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-spool-parity-'))
   const implementations = [
     ['root', createEventSpool, parseEventEnvelope],
     ['codex', createCodexEventSpool, parseCodexEventEnvelope],
@@ -216,7 +216,7 @@ test('replay deletes only acknowledged events and retains the first transport fa
     const sent = []
     const partial = await current.spool.replay(async (envelope) => {
       sent.push(envelope.external_event_id)
-      if (envelope.external_event_id === 'event-2') throw new Error('taskd unavailable')
+      if (envelope.external_event_id === 'event-2') throw new Error('daemon unavailable')
     })
     assert.deepEqual(sent, ['event-1', 'event-2'])
     assert.equal(partial.replayed, 1)

@@ -1,10 +1,10 @@
-# Tasks Recorder Task Tree and Execution Lifecycle Implementation Plan
+# Rillo Task Tree and Execution Lifecycle Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended for explicitly delegated work) or `superpowers:executing-plans` to execute this plan task by task. This plan defaults to single-agent inline execution unless the user explicitly authorizes delegation.
 
-**Goal:** 将 Tasks Recorder 升级为以一层 Task tree 为业务主模型、以 session/turn/subagent execution 为独立执行记录的本机控制面，并提供实时 Codex hooks、可编辑 Dashboard 和幂等历史 importer。
+**Goal:** 将 Rillo 升级为以一层 Task tree 为业务主模型、以 session/turn/subagent execution 为独立执行记录的本机控制面，并提供实时 Codex hooks、可编辑 Dashboard 和幂等历史 importer。
 
-**Architecture:** SQLite 继续由 `taskd` 独占写入。`mcp/src/task-store.mjs` 保留兼容 façade，schema migration 与 execution repository 拆成独立模块；HTTP/MCP 只暴露 host-neutral contract。Codex adapter 自己解析 Codex hook/transcript metadata，历史 importer 在 CLI 侧读取 transcript，再把规范化 records 交给 `taskd` 单事务预览或写入。Dashboard 的 SSE snapshot 只传 Task 汇总与未绑定计数，Task events/executions 由 details sheet 按需查询。
+**Architecture:** SQLite 继续由 `daemon` 独占写入。`mcp/src/task-store.mjs` 保留兼容 façade，schema migration 与 execution repository 拆成独立模块；HTTP/MCP 只暴露 host-neutral contract。Codex adapter 自己解析 Codex hook/transcript metadata，历史 importer 在 CLI 侧读取 transcript，再把规范化 records 交给 `daemon` 单事务预览或写入。Dashboard 的 SSE snapshot 只传 Task 汇总与未绑定计数，Task events/executions 由 details sheet 按需查询。
 
 **Tech Stack:** Node.js 24、ES modules、`node:sqlite`、Node test runner、MCP SDK、DHTMLX Gantt 9.1、vanilla DOM/CSS、Server-Sent Events、macOS `launchd`。
 
@@ -12,13 +12,13 @@
 
 - 设计依据：`docs/superpowers/specs/2026-08-14-task-tree-lifecycle-design.md`。
 - Task tree 首期只允许 `root -> child` 一层；execution 永远不是 Task node。
-- SQLite 是 canonical store，运行期只有 `taskd` 可以写数据库；hook、MCP adapter、Dashboard 和 importer CLI 都必须经 HTTP API。
+- SQLite 是 canonical store，运行期只有 `daemon` 可以写数据库；hook、MCP adapter、Dashboard 和 importer CLI 都必须经 HTTP API。
 - 不保存 prompt、assistant message、tool response 正文或 token；`update_plan` 只保存结构化 plan observation。
 - Codex 与 Claude adapter 继续分别维护；本轮只为 Codex 增加 native lifecycle hooks，不把 Codex transcript parser 放进 core 或 Claude adapter。
-- 旧 `agent_tasks_*` tools、`task_sessions` 数据和 v0.3.x 调用继续可用。
+- 旧 `rillo_*` tools、`task_sessions` 数据和 v0.3.x 调用继续可用。
 - 所有 delete 都是 soft delete；不增加自动永久清理。
 - 所有 mutation 都必须在成功 commit 后只发布一次 SSE；幂等 replay/no-op 不发布。
-- 不修改真实的 `~/.config/tasks-recorder/tasks.sqlite`，直到临时数据库验证通过并取得真实数据迁移/导入授权。
+- 不修改真实的 `~/.config/rillo/tasks.sqlite`，直到临时数据库验证通过并取得真实数据迁移/导入授权。
 - 不自动 `git commit`、tag、push 或 release。每个 phase 结束只展示证据；如用户希望 phase commit，再单独确认并按 Conventional Commits 提交本 phase 文件。
 - 修改旧文件时只做局部格式化，尤其避免重排 `ui/src/dashboard.css`。
 
@@ -29,7 +29,7 @@
 - root/child 的 rename、description、status、move、reorder、cancel、archive、delete/restore 都有 event 与 revision 保护。
 - root 显示 `未完成 remaining / total` progress ring；所有 child done 后仍需显式完成 root。
 - Codex 七类 hooks 能 fail-open 地驱动 lifecycle；无法证明 Task 归属的 execution 进入未绑定 inbox。
-- `tasks-recorder import codex --session ... --dry-run` 可预览，apply 幂等。
+- `rillo import codex --session ... --dry-run` 可预览，apply 幂等。
 - Dashboard 可查看/编辑 Task，查看 activity/executions，复制 Session ID，并分配/标记 `non_work` execution。
 - focused tests、全量 tests、syntax check、build、release packaging 和 headless browser 验证全部通过。
 
@@ -282,8 +282,8 @@
 - Modify: `mcp/src/task-client.mjs`
 - Modify: `mcp/src/tools.mjs`
 - Modify: `mcp/server.mjs`
-- Modify: `adapters/codex/tasks-recorder/mcp/server.mjs`
-- Modify: `adapters/claude/tasks-recorder/mcp/server.mjs`
+- Modify: `adapters/codex/rillo/mcp/server.mjs`
+- Modify: `adapters/claude/rillo/mcp/server.mjs`
 - Modify: `test/api-server.test.mjs`
 - Modify: `test/task-client.test.mjs`
 - Modify: `test/server-integration.test.mjs`
@@ -333,10 +333,10 @@
   新增：
 
   ```text
-  agent_tasks_sync_tree
-  agent_tasks_update
-  agent_tasks_archive
-  agent_tasks_restore
+  rillo_sync_tree
+  rillo_update
+  rillo_archive
+  rillo_restore
   agent_task_executions_list
   agent_task_execution_assign
   agent_task_execution_classify
@@ -409,15 +409,15 @@
 
 **Files:**
 
-- Create: `adapters/codex/tasks-recorder/hooks/src/codex-transcript.mjs`
+- Create: `adapters/codex/rillo/hooks/src/codex-transcript.mjs`
 - Create: `test/codex-transcript.test.mjs`
-- Modify: `adapters/codex/tasks-recorder/hooks/src/taskd-client.mjs`
-- Modify: `adapters/codex/tasks-recorder/hooks/src/hook-context.mjs`
+- Modify: `adapters/codex/rillo/hooks/src/daemon-client.mjs`
+- Modify: `adapters/codex/rillo/hooks/src/hook-context.mjs`
 - Modify: `test/plugin-adapters.test.mjs`
 
 - [x] **Step 1: Write failing parser/client tests**
 
-  使用 synthetic JSONL fixtures 覆盖 root/child `session_meta`、parent thread、agent path、malformed/truncated/missing file、超出允许 sessions root 的 path，以及 taskd unavailable。
+  使用 synthetic JSONL fixtures 覆盖 root/child `session_meta`、parent thread、agent path、malformed/truncated/missing file、超出允许 sessions root 的 path，以及 daemon unavailable。
 
 - [x] **Step 2: Run focused tests and verify RED**
 
@@ -429,7 +429,7 @@
 
   `readCodexTranscriptMetadata(path, options)` 只读取足以取得首个 session metadata 的有界字节，不返回 prompt/response 正文；real path 必须落在 resolved Codex sessions root 内。解析失败返回 structured warning，不猜 parent。
 
-- [x] **Step 4: Generalize the Codex taskd client**
+- [x] **Step 4: Generalize the Codex daemon client**
 
   增加 `sendLifecycle(event, input)`、`fetchSessionContext(sessionId)`；继续限制 URL 为 `http://127.0.0.1` origin、使用短 timeout，并让 hook caller fail open。
 
@@ -443,15 +443,15 @@
 
 **Files:**
 
-- Create: `adapters/codex/tasks-recorder/hooks/session-start.mjs`
-- Create: `adapters/codex/tasks-recorder/hooks/subagent-start.mjs`
-- Create: `adapters/codex/tasks-recorder/hooks/subagent-stop.mjs`
-- Create: `adapters/codex/tasks-recorder/hooks/session-end.mjs`
-- Modify: `adapters/codex/tasks-recorder/hooks/user-prompt-task-sync.mjs`
-- Modify: `adapters/codex/tasks-recorder/hooks/task-heartbeat.mjs`
-- Modify: `adapters/codex/tasks-recorder/hooks/stop-task-check.mjs`
-- Modify: `adapters/codex/tasks-recorder/hooks/hooks.json`
-- Modify: `adapters/codex/tasks-recorder/skills/task-manager/SKILL.md`
+- Create: `adapters/codex/rillo/hooks/session-start.mjs`
+- Create: `adapters/codex/rillo/hooks/subagent-start.mjs`
+- Create: `adapters/codex/rillo/hooks/subagent-stop.mjs`
+- Create: `adapters/codex/rillo/hooks/session-end.mjs`
+- Modify: `adapters/codex/rillo/hooks/user-prompt-task-sync.mjs`
+- Modify: `adapters/codex/rillo/hooks/task-heartbeat.mjs`
+- Modify: `adapters/codex/rillo/hooks/stop-task-check.mjs`
+- Modify: `adapters/codex/rillo/hooks/hooks.json`
+- Modify: `adapters/codex/rillo/skills/task-manager/SKILL.md`
 - Modify: `test/plugin-adapters.test.mjs`
 - Modify: `package.json`
 
@@ -478,7 +478,7 @@
 
 - [x] **Step 4: Make Stop blocking state-aware**
 
-  Stop 只在 taskd 可达且 session context 显示 pending observation、未绑定 concrete execution 或需收口 active Task 时 block 一次。taskd unavailable、普通聊天已标记 `non_work`、`stop_hook_active` 时 fail open。
+  Stop 只在 daemon 可达且 session context 显示 pending observation、未绑定 concrete execution 或需收口 active Task 时 block 一次。daemon unavailable、普通聊天已标记 `non_work`、`stop_hook_active` 时 fail open。
 
 - [x] **Step 5: Update Codex task-manager instructions**
 
@@ -582,7 +582,7 @@
 - [x] Run: `npm test`
 - [x] Run: `npm run check`
 - [x] Run: `npm run build && npm run build:adapters`
-- [x] 使用临时 config/database 启动 taskd，发送 synthetic hooks，确认 SSE、details 和 inbox 实时更新。
+- [x] 使用临时 config/database 启动 daemon，发送 synthetic hooks，确认 SSE、details 和 inbox 实时更新。
 - [x] 使用 `playwright-headless` MCP 做 focused browser verification：progress ring、disclosure、sheet、inbox、Session ID copy、Timeline drag、keyboard flow。
 - [x] 已汇总证据与 changed files；phase commit 未获授权，保持未提交。
 
@@ -630,7 +630,7 @@
 
   Expected: PASS，包括 98 unique started child executions。
 
-### Task 12: Import preview/apply API and `tasks-recorder import codex` CLI
+### Task 12: Import preview/apply API and `rillo import codex` CLI
 
 **Files:**
 
@@ -657,16 +657,16 @@
 
   Expected: FAIL，CLI/import route 尚不存在，wrapper 当前只透传第一个参数。
 
-- [x] **Step 3: Add a CLI dispatcher without changing `npm run taskd`**
+- [x] **Step 3: Add a CLI dispatcher without changing `npm run daemon`**
 
   - `server/cli.mjs` 无参数默认 `status`。
   - service commands 委托 `control.mjs` 导出的 command runner。
-  - `import codex --session <id> [--dry-run] [--codex-home <path>]` 调用 Codex parser，再把 normalized batch 发给 taskd。
+  - `import codex --session <id> [--dry-run] [--codex-home <path>]` 调用 Codex parser，再把 normalized batch 发给 daemon。
   - `install.sh` wrapper 使用 `"$@"` 透传，不丢 `--session`/`--dry-run`。
 
 - [x] **Step 4: Add host-neutral normalized import endpoint**
 
-  新增 `POST /api/v1/import/executions`，body 包含 `source`、`dry_run`、normalized records。taskd 校验 payload 并在 apply 时单事务调用 `store.importExecutions()`；API 不读取 Codex filesystem。
+  新增 `POST /api/v1/import/executions`，body 包含 `source`、`dry_run`、normalized records。daemon 校验 payload 并在 apply 时单事务调用 `store.importExecutions()`；API 不读取 Codex filesystem。
 
 - [x] **Step 5: Return an auditable summary**
 
@@ -694,7 +694,7 @@
 
 - [x] **Step 2: Scan every doc for changed modules, paths, commands, and behavior**
 
-  至少搜索：`task-store`、`task_sessions`、`heartbeat`、`hooks.json`、`Dashboard`、`tasks-recorder status`、`install.sh`、`schema version`、`agent_tasks_upsert`、`completed/history`。
+  至少搜索：`task-store`、`task_sessions`、`heartbeat`、`hooks.json`、`Dashboard`、`rillo status`、`install.sh`、`schema version`、`rillo_upsert`、`completed/history`。
 
 - [x] **Step 3: Update README How it works and operations**
 
@@ -738,7 +738,7 @@
 
 - [x] **Step 3: Run a temporary end-to-end lifecycle scenario**
 
-  使用 temporary HOME/config/port 启动 packaged taskd，执行：session start -> turn start -> sync root/children -> spawn start/stop -> A/B/A focus -> session end -> Dashboard snapshot。断言 execution、progress、events、unassigned count 和 SSE revision。
+  使用 temporary HOME/config/port 启动 packaged daemon，执行：session start -> turn start -> sync root/children -> spawn start/stop -> A/B/A focus -> session end -> Dashboard snapshot。断言 execution、progress、events、unassigned count 和 SSE revision。
 
 - [x] **Step 4: Run focused browser verification with Playwright MCP**
 
@@ -746,7 +746,7 @@
 
 - [x] **Step 5: Audit the real historical session in dry-run mode only**
 
-  Run: `tasks-recorder import codex --session 019fa297-4567-7bf0-a69a-84fd23b3aaab --dry-run`
+  Run: `rillo import codex --session 019fa297-4567-7bf0-a69a-84fd23b3aaab --dry-run`
 
   Expected: exact root session，识别 98 个 unique started child executions，保留现有 3 个 root Task，不强制 Task assignment，真实 DB 零写入。
 
@@ -770,7 +770,7 @@
 验证结果（2026-08-16）：
 
 - `npm test`：163/163 passed；`npm run check`、`npm run build`、`npm run build:adapters`、`npm run package:release`、`git diff --check` 均 exit 0。
-- packaged runtime test 从 release archives 解压运行 syntax check、Codex/Claude MCP handshake、temporary taskd lifecycle、Dashboard snapshot 和 packaged CLI dry-run，未依赖 source-tree runtime。
+- packaged runtime test 从 release archives 解压运行 syntax check、Codex/Claude MCP handshake、temporary daemon lifecycle、Dashboard snapshot 和 packaged CLI dry-run，未依赖 source-tree runtime。
 - browser 验证覆盖 desktop/narrow viewport、Task disclosure、progress、Details Sheet、Inbox、status mutation、Session ID copy、Timeline splitter、SSE refresh 和 keyboard focus；证据目录被 gitignore，未进入 diff。
 - 真实 session 的 packaged CLI dry-run 识别 180 root turns、98 direct child executions、278 unique records 和 7 个 failed-spawn warnings；用于验证关联歧义的 temporary DB 中 3 个 synthetic root Tasks 完全不变，execution rows 保持 0；真实数据库未打开、未写入，也未执行 apply。
 - 最终 review 修复并覆盖跨 root parent、nested subagent parent 和 main-with-parent 三类非法 import；reviewer 复核 cleared，focused tests 8/8 与全量 tests 163/163 均通过。

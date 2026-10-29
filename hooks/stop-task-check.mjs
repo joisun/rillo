@@ -3,7 +3,7 @@
 import { fileURLToPath } from 'node:url'
 
 import { mainExecutionStoppedEvent, readHookInput, sourceKey } from './src/hook-context.mjs'
-import { sendJournalEvent } from './src/taskd-client.mjs'
+import { sendJournalEvent } from './src/daemon-client.mjs'
 import { currentTurn, explicitTurn } from './src/turn-state.mjs'
 
 try {

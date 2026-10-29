@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client'
 
 import { AppProviders } from './app/app-providers'
 import { DashboardApp } from './app/dashboard-app'
+import { migrateLegacyPreferences } from './lib/preferences/legacy-preferences'
+
+migrateLegacyPreferences()
 
 const root = document.getElementById('root')
 if (!root) throw new Error('React Dashboard root is missing')

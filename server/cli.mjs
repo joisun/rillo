@@ -3,6 +3,8 @@
 import { spawn } from 'node:child_process'
 import { realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { resolveAppConfig } from '../mcp/src/config.mjs'
@@ -13,7 +15,7 @@ const CONTROL_COMMANDS = new Set(['install', 'start', 'stop', 'status', 'uninsta
 
 function usageError() {
   return new Error(
-    'usage: tasks-recorder [install|start|stop|status|uninstall|open] | '
+    'usage: rillo [install|start|stop|status|uninstall|open] | '
     + 'scheduler (status|reconcile)',
   )
 }
@@ -33,6 +35,8 @@ export async function defaultDashboardOpener(url, { platform = process.platform 
 
 export function parseCliArguments(argv) {
   if (!Array.isArray(argv)) throw new TypeError('argv must be an array')
+  if (argv.length === 1 && ['--help', '-h'].includes(argv[0])) return { type: 'help' }
+  if (argv.length === 1 && ['--version', '-v'].includes(argv[0])) return { type: 'version' }
   if (argv.length === 0) return { type: 'control', command: 'status' }
   if (CONTROL_COMMANDS.has(argv[0])) {
     if (argv.length !== 1) throw new Error(`${argv[0]} does not accept additional arguments`)
@@ -67,6 +71,8 @@ export async function runCli(argv, {
   dashboardOpener = defaultDashboardOpener,
 } = {}) {
   const command = parseCliArguments(argv)
+  if (command.type === 'help') return { name: 'rillo', usage: 'rillo [install|start|stop|status|uninstall|open] | scheduler (status|reconcile)', description: 'Rillo: native agent sessions and scheduled automation' }
+  if (command.type === 'version') return { name: 'rillo', version: JSON.parse(await readFile(join(projectRoot, 'package.json'), 'utf8')).version }
   if (command.type === 'control') return controlRunner(command.command)
 
   if (command.type === 'open-dashboard') {

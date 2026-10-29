@@ -14,7 +14,7 @@ import { createScheduleDefinitionRepository } from '../server/src/scheduler/sche
 
 function definition(id, title) {
   return `---
-type: tasks-recorder/schedule
+type: rillo/schedule
 id: ${id}
 title: ${title}
 workspace: /tmp/project
@@ -28,7 +28,7 @@ Review the project.
 }
 
 test('relocates source definitions into a merged target registry and archives originals on commit', async (t) => {
-  const fixture = await mkdtemp(join(tmpdir(), 'tasks-recorder-relocation-'))
+  const fixture = await mkdtemp(join(tmpdir(), 'rillo-relocation-'))
   t.after(() => rm(fixture, { recursive: true, force: true }))
   const sourceRoot = join(fixture, 'source')
   const targetRoot = join(fixture, 'target')
@@ -106,7 +106,7 @@ test('definition diffs stay non-blocking during registry handoff and drain befor
 })
 
 test('failed verification never deletes a target definition changed by another writer', async (t) => {
-  const fixture = await mkdtemp(join(tmpdir(), 'tasks-recorder-relocation-race-'))
+  const fixture = await mkdtemp(join(tmpdir(), 'rillo-relocation-race-'))
   t.after(() => rm(fixture, { recursive: true, force: true }))
   const sourceRoot = join(fixture, 'source')
   const targetRoot = join(fixture, 'target')
@@ -139,7 +139,7 @@ test('failed verification never deletes a target definition changed by another w
 })
 
 test('rejects invalid source definitions and target ID or relative-path conflicts without overwriting files', async (t) => {
-  const fixture = await mkdtemp(join(tmpdir(), 'tasks-recorder-relocation-conflict-'))
+  const fixture = await mkdtemp(join(tmpdir(), 'rillo-relocation-conflict-'))
   t.after(() => rm(fixture, { recursive: true, force: true }))
   const sourceRoot = join(fixture, 'source')
   const targetRoot = join(fixture, 'target')
@@ -166,7 +166,7 @@ test('rejects invalid source definitions and target ID or relative-path conflict
     targetDirectory: targetRoot,
   }), { code: 'SCHEDULE_RELOCATION_ID_CONFLICT' })
 
-  await writeFile(join(sourceRoot, 'broken.md'), '---\ntype: tasks-recorder/schedule\nid: [broken\n---\nPrompt\n')
+  await writeFile(join(sourceRoot, 'broken.md'), '---\ntype: rillo/schedule\nid: [broken\n---\nPrompt\n')
   await assert.rejects(stageScheduleDefinitionRelocation({
     sourceRepository: source,
     targetDirectory: targetRoot,
@@ -174,7 +174,7 @@ test('rejects invalid source definitions and target ID or relative-path conflict
 })
 
 test('rollback removes only owned target copies while a cleanup race leaves the source recoverable', async (t) => {
-  const fixture = await mkdtemp(join(tmpdir(), 'tasks-recorder-relocation-rollback-'))
+  const fixture = await mkdtemp(join(tmpdir(), 'rillo-relocation-rollback-'))
   t.after(() => rm(fixture, { recursive: true, force: true }))
   const sourceRoot = join(fixture, 'source')
   const targetRoot = join(fixture, 'target')

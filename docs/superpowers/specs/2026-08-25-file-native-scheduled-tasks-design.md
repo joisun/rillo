@@ -22,14 +22,14 @@ Schedule 定义必须是用户可读、可移动、可版本控制的 Markdown �
 配置项 `schedule_definitions_dir` 指向单一 root，默认：
 
 ```text
-~/.config/tasks-recorder/schedules
+~/.config/rillo/schedules
 ```
 
-taskd 递归读取 `*.md`，但只识别带有以下 marker 的文件；其他 Markdown 完全忽略：
+daemon 递归读取 `*.md`，但只识别带有以下 marker 的文件；其他 Markdown 完全忽略：
 
 ```md
 ---
-type: tasks-recorder/schedule
+type: rillo/schedule
 id: 34826d22-b33b-4d1d-b9d0-8459d71009dc
 title: Codex daily news
 enabled: true
@@ -50,14 +50,14 @@ timeout: 2h
 
 | 字段 | 必需 | 语义 |
 | --- | --- | --- |
-| `type` | 是 | 固定为 `tasks-recorder/schedule` |
+| `type` | 是 | 固定为 `rillo/schedule` |
 | `id` | 是 | 稳定 UUID；沿用 launchd ownership、runner lock 与 Run protocol 的安全身份边界 |
 | `title` | 是 | 1–200 字符 |
 | `enabled` | 否 | 默认 `true`；Pause/Resume 实际改写该字段 |
 | `workspace` | 是 | 现有本机目录，保存 canonical absolute path |
 | `schedule` | 是 | allowlisted structured cadence |
 | `sandbox` | 否 | 默认 `read-only` |
-| `model` | 否 | bounded Codex model slug；当前可用性由 taskd 的 Codex catalog preflight 判断 |
+| `model` | 否 | bounded Codex model slug；当前可用性由 daemon 的 Codex catalog preflight 判断 |
 | `reasoning` | 否 | bounded reasoning identifier；当前支持范围由所选 Model 的 catalog entry 判断 |
 | `timeout` | 否 | `60s`–`24h`，默认 `2h` |
 
@@ -71,7 +71,7 @@ Markdown body 是 Prompt，trim 后必须非空。Cadence 文件语法使用更�
 
 timezone v1 固定为 system timezone，与现有 launchd 语义一致。启用中的 `once` 必须指向未来 366 天以内；执行完成后 service 将定义改为 `enabled: false`。已停用的 `once` 即使时间已过也仍是有效历史定义，确保重启与外部编辑后的 scan 不会把正常完成误报为 invalid；重新启用时必须先改为新的未来时间。
 
-Model catalog 以安装时记录的 canonical Codex executable 的 `codex debug models` 为唯一来源。taskd 通过 shell-free argv、5 秒 timeout 与 2 MiB output bound 读取，过滤 `visibility !== list` 的内部条目，只向 Dashboard 暴露 slug、display name、description、default reasoning 与 supported reasoning levels，并缓存成功结果 5 分钟。Markdown codec 与 immutable Run snapshot 只验证安全 identifier shape；显式设置 Model 或 Reasoning 时，create/update/resume preflight 才验证当前 catalog compatibility，两项均为 Codex default 时不依赖 catalog。因此 Codex 升级不会让历史 definition 或已 claim snapshot 因过期的应用内枚举而失效。
+Model catalog 以安装时记录的 canonical Codex executable 的 `codex debug models` 为唯一来源。daemon 通过 shell-free argv、5 秒 timeout 与 2 MiB output bound 读取，过滤 `visibility !== list` 的内部条目，只向 Dashboard 暴露 slug、display name、description、default reasoning 与 supported reasoning levels，并缓存成功结果 5 分钟。Markdown codec 与 immutable Run snapshot 只验证安全 identifier shape；显式设置 Model 或 Reasoning 时，create/update/resume preflight 才验证当前 catalog compatibility，两项均为 Codex default 时不依赖 catalog。因此 Codex 升级不会让历史 definition 或已 claim snapshot 因过期的应用内枚举而失效。
 
 ## 组件边界
 
@@ -121,9 +121,9 @@ generation 改为 definition etag 派生的 monotonic in-process generation；de
 - 现有路由保留，避免无意义的 UI 重写。
 - Job response 增加 `source_path` 与 `etag`，不再返回 integer `revision`。
 - update/pause/resume/delete 使用 `expected_etag`，冲突返回 `SCHEDULE_VERSION_CONFLICT` 并重新加载磁盘内容。
-- Settings 增加 Definitions directory。保存目录不是单纯修改 config，而是触发一次 runtime Schedule library relocation：迁移当前 definitions、热切换 repository/watcher、reconcile desired state，并在同一请求返回前生效；不要求用户重启 taskd。
+- Settings 增加 Definitions directory。保存目录不是单纯修改 config，而是触发一次 runtime Schedule library relocation：迁移当前 definitions、热切换 repository/watcher、reconcile desired state，并在同一请求返回前生效；不要求用户重启 daemon。
 - Create/Edit 直接写 Markdown；列表在 watcher 事件或 SSE invalidation 后刷新。
-- 移除 decorative kicker/microcopy：`TASKS RECORDER`、`PREFERENCES`、`AUTOMATION CONTROL PLANE`、`Local control plane`、Editor/Review 内同类英文 eyebrow。保留页面标题、字段标签、状态与可操作错误。
+- 移除 decorative kicker/microcopy：`RILLO`、`PREFERENCES`、`AUTOMATION CONTROL PLANE`、`Local control plane`、Editor/Review 内同类英文 eyebrow。保留页面标题、字段标签、状态与可操作错误。
 
 ## 迁移
 
@@ -138,7 +138,7 @@ generation 改为 definition etag 派生的 monotonic in-process generation；de
 
 ### Definitions root relocation
 
-`schedule_definitions_dir` 变化时，taskd 在一个 scheduler-level exclusive queue 中执行 relocation，期间新的 Schedule mutations 等待，读取继续使用旧 registry。该操作是一次性 library migration，不建立两个目录之间的长期同步关系。
+`schedule_definitions_dir` 变化时，daemon 在一个 scheduler-level exclusive queue 中执行 relocation，期间新的 Schedule mutations 等待，读取继续使用旧 registry。该操作是一次性 library migration，不建立两个目录之间的长期同步关系。
 
 1. canonicalize 并验证目标目录存在、非 symlink、可读写且不是当前 root。
 2. refresh 旧 repository，并分别 scan 旧、新 root。旧 root 存在 invalid/duplicate marked definition 时整体拒绝；目标 root 中普通 Markdown 忽略。

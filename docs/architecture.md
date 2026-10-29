@@ -1,11 +1,11 @@
 # Architecture
 
-本文描述 Tasks Recorder 当前必须保持的系统边界。面向用户的安装、使用与排障入口见 [`README.md`](../README.md)。历史 specs 和 job logs 记录决策过程，不代表现行 runtime contract。
+本文描述 Rillo 当前必须保持的系统边界。面向用户的安装、使用与排障入口见 [`README.md`](../README.md)。历史 specs 和 job logs 记录决策过程，不代表现行 runtime contract。
 
 ## System shape
 
 ```text
-CLI-owned sessions ◀──adapter── taskd ──HTTP──▶ Dashboard
+CLI-owned sessions ◀──adapter── daemon ──HTTP──▶ Dashboard
                                   │
 Agent session_link ──HTTP────────▶│──▶ session-links.sqlite
 Schedule Markdown ──watch───────▶│──▶ scheduler.sqlite
@@ -13,31 +13,31 @@ Schedule Markdown ──watch───────▶│──▶ scheduler.sqli
                                   └──▶ Runtime Registry ──▶ local agent CLI
 ```
 
-macOS `launchd` 与 Linux `systemd --user` 均只管理一个 `taskd` 常驻服务。`taskd` 是唯一 SQLite writer、唯一 HTTP/SSE server、唯一 scheduler 和唯一 Run supervisor。
+macOS `launchd` 与 Linux `systemd --user` 均只管理一个 `daemon` 常驻服务。`daemon` 是唯一 SQLite writer、唯一 HTTP/SSE server、唯一 scheduler 和唯一 Run supervisor。
 
 ## Host service lifecycle
 
-`server/control.mjs` 按真实平台选择 macOS LaunchAgent 或 `server/control/systemd.mjs`，Windows 不进入安装路径。Linux controller 写入用户级 `tasks-recorder.service`，确认 Node.js 24、用户 manager、端口占用与预构建资产；启用后只重启一次服务。ExecStart 固定为可信 Node 与 taskd 绝对路径，禁用 shell/环境展开，转义 systemd 百分号 specifier 与路径引号。unit 固定 HOME、与 Node executable 一致的 PATH，以及显式 CODEX_HOME，不持久化 API key。日志和 unit 使用用户私有权限。卸载停止并禁用本 unit，删除 unit 后 reload manager；数据和日志保留，不调用 sudo、不改系统 unit 或 lingering。
+`server/control.mjs` 按真实平台选择 macOS LaunchAgent 或 `server/control/systemd.mjs`，Windows 不进入安装路径。Linux controller 写入用户级 `rillo.service`，确认 Node.js 24、用户 manager、端口占用与预构建资产；启用后只重启一次服务。ExecStart 固定为可信 Node 与 daemon 绝对路径，禁用 shell/环境展开，转义 systemd 百分号 specifier 与路径引号。unit 固定 HOME、与 Node executable 一致的 PATH，以及显式 CODEX_HOME，不持久化 API key。日志和 unit 使用用户私有权限。卸载停止并禁用本 unit，删除 unit 后 reload manager；数据和日志保留，不调用 sudo、不改系统 unit 或 lingering。
 
 installer 按 Darwin/Linux 选择不同命名的自包含 archive，校验平台对应的 SHA256 后再切换 current；runtime 本身为同一份跨平台 JavaScript，Node.js 由用户安装。Linux 优先使用 sha256sum，macOS 可使用 shasum。两平台均检查 Node.js 24+、服务配置及预构建入口；健康检查固定走本机地址，展示地址可使用server_public_url。服务卸载失败时不继续删除程序文件。CI 同时运行 macos-latest 和 ubuntu-latest；Release 输出两种 service archive 和原有 adapter archive。
 
 所有archive使用USTAR，显式关闭xattrs与COPYFILE元数据，排除AppleDouble和.DS_Store，生成后检查唯一根目录与元数据条目。installer先对完整列表检查路径越界，再从非元数据条目确定唯一程序根目录；解包继续排除元数据，且根目录必须匹配package.json版本。不得根据压缩包的第一条记录推断根目录。
 
-Release分为macOS构建、Ubuntu安装验证和发布三个job。Ubuntu下载macOS产生的原始archive、installer及SHA256SUMS，在临时HOME中实际安装并直接启动随机端口的taskd，检查版本、Dashboard及SSE，不调用systemd安装。publish依赖Linux验证成功。运行入口server/taskd.mjs读取相邻package.json并注入config.packageVersion，作为/api/v1/meta的service_version；已安装runtime不应返回source。
+Release分为macOS构建、Ubuntu安装验证和发布三个job。Ubuntu下载macOS产生的原始archive、installer及SHA256SUMS，在临时HOME中实际安装并直接启动随机端口的daemon，检查版本、Dashboard及SSE，不调用systemd安装。publish依赖Linux验证成功。运行入口server/daemon.mjs读取相邻package.json并注入config.packageVersion，作为/api/v1/meta的service_version；已安装runtime不应返回source。
 
-Linux 按 Web 服务使用，不启动浏览器、桌面终端或 tmux；`tasks-recorder open` 仅返回配置的公开访问地址，未配置时返回本机地址。默认可通过 SSH loopback 转发访问，也可显式配置原生网络访问。terminalLauncher.supported=false 时 providers 的 resume=false，settings 返回 local_actions_supported=false。Sessions 不显示终端启动按钮，Scheduled 保留 Session ID 复制并禁用服务器本机文件打开操作，终端选择设置不出现；桌面操作 API 仍返回 typed unsupported。macOS 操作保持原有实现。状态读取通过已有 Codex Unix socket；没有共享服务器时只标记状态不可用，不启动任何 daemon 或使用进程反查。
+Linux 按 Web 服务使用，不启动浏览器、桌面终端或 tmux；`rillo open` 仅返回配置的公开访问地址，未配置时返回本机地址。默认可通过 SSH loopback 转发访问，也可显式配置原生网络访问。terminalLauncher.supported=false 时 providers 的 resume=false，settings 返回 local_actions_supported=false。Sessions 不显示终端启动按钮，Scheduled 保留 Session ID 复制并禁用服务器本机文件打开操作，终端选择设置不出现；桌面操作 API 仍返回 typed unsupported。macOS 操作保持原有实现。状态读取通过已有 Codex Unix socket；没有共享服务器时只标记状态不可用，不启动任何 daemon 或使用进程反查。
 
-server_listen_host只接受127.0.0.1或0.0.0.0，省略时沿用server_host；已有server_host保持本机值，旧插件无需理解新增配置。网络模式必须配置server_public_url和非空server_allowed_clients，后者只接受完整IP。serverBaseUrl与AGENT_TASKS_SERVER_URL保持loopback，供CLI/MCP及controller健康检查使用；serverPublicUrl只用于浏览器地址、允许的Host及同源Origin检查。createApiServer直接提供页面、API和SSE，无第二个代理进程。请求以socket.remoteAddress检查客户端，忽略X-Forwarded-For；本机始终允许，网络客户端必须明确列入配置。Origin必须对应当前Host，未声明的Host、跨Origin及未允许的客户端均返回403。
+server_listen_host只接受127.0.0.1或0.0.0.0，省略时沿用server_host；已有server_host保持本机值，旧插件无需理解新增配置。网络模式必须配置server_public_url和非空server_allowed_clients，后者只接受完整IP。serverBaseUrl与RILLO_SERVER_URL保持loopback，供CLI/MCP及controller健康检查使用；serverPublicUrl只用于浏览器地址、允许的Host及同源Origin检查。createApiServer直接提供页面、API和SSE，无第二个代理进程。请求以socket.remoteAddress检查客户端，忽略X-Forwarded-For；本机始终允许，网络客户端必须明确列入配置。Origin必须对应当前Host，未声明的Host、跨Origin及未允许的客户端均返回403。
 
 ## Non-negotiable invariants
 
 1. **One daemon**：不得为单个 Schedule 创建 LaunchAgent、长期 runner 或第二个 control plane。
 2. **One execution path**：manual 与 scheduled trigger 都调用 `RunService.create()`。
 3. **Durable before spawn**：Run 必须先以 `queued` 写入 SQLite，提交后才能解析或启动 runtime。
-4. **One Runtime Environment**：taskd 创建一个运行时环境实例，runtime status、model discovery、真实 Run 与 child PATH 都从这里获得 executable context。
+4. **One Runtime Environment**：daemon 创建一个运行时环境实例，runtime status、model discovery、真实 Run 与 child PATH 都从这里获得 executable context。
 5. **File-native definitions**：Schedule Markdown 是 definition source of truth；SQLite 不复制一份可编辑 definition。
-6. **Taskd-owned facts**：只有 `taskd` 写 Run state、session、file changes 与 log references。
-7. **No browser commands**：browser 只发送 semantic ID 和 typed fields，不能提交 executable、argv 或 shell text；恢复会话所用 Workspace 必须由 taskd 读取。
+6. **Daemon-owned facts**：只有 `daemon` 写 Run state、session、file changes 与 log references。
+7. **No browser commands**：browser 只发送 semantic ID 和 typed fields，不能提交 executable、argv 或 shell text；恢复会话所用 Workspace 必须由 daemon 读取。
 8. **Failure isolation**：runtime 缺失、model probe 失败或 Scheduler 故障不能让 Sessions 下线；Session provider 失败也不能中断已配置的 Scheduled Run。
 9. **Bounded operations**：probe、output、logs、events、shutdown 与 cancellation 都必须有明确上限。
 10. **Privacy by construction**：Recorder 不持久化 prompt、reasoning、tool payload、streaming assistant delta 或 transcript content；Scheduled ledger 只保留既有 terminal final message。
@@ -100,20 +100,20 @@ queued
 - cancel 与 shutdown 必须能打断 resolution 和 child process，不能无限等待第三方 CLI。
 - session ID、final message 与 usage 只能来自 normalized runtime events。file changes 优先消费 runtime evidence，并与 `RunService` 执行前后的 bounded Workspace snapshot 合并；snapshot 只在内存保留 metadata，忽略 `.git` / `node_modules`，超出 100,000 files 时 fail open，不阻塞 Run。
 - SQLite 只保存最多 128 条已经 containment 检查的 Workspace-relative change paths，不保存 Workspace snapshot 或文件内容。
-- log file path 由 taskd 构造；API 不读取 Run ledger 之外的任意 path。
+- log file path 由 daemon 构造；API 不读取 Run ledger 之外的任意 path。
 
 ## Active Live Session
 
 Codex 的 active Run 使用 one-process-per-Run `codex app-server --listen stdio://`。这不是第二个 daemon：process lifecycle、timeout、cancel、terminal persistence 与 Run status 仍由 `RunService` 独占管理。
 
 ```text
-Dashboard ──GET Run SSE──────────────▶ taskd Run Event Hub
+Dashboard ──GET Run SSE──────────────▶ daemon Run Event Hub
 Dashboard ──POST steer/stop──────────▶ RunService
                                             │
                                             └── private turnId ──▶ Codex app-server
 ```
 
-- browser authority 只有 Run ID 与 taskd-generated `turn_revision`；Codex `turnId` 不出 driver。
+- browser authority 只有 Run ID 与 daemon-generated `turn_revision`；Codex `turnId` 不出 driver。
 - `turn/steer` 只接受 bounded guidance text；`turn/interrupt` 不接受 browser command。
 - assistant delta、activity summary 与 intervention acknowledgement 只存在于 bounded memory SSE replay，不写 SQLite 或普通 logs。
 - activity normalization 只公开 command label、file count、MCP server/tool 等安全摘要，不公开 arguments、results 或 reasoning。
@@ -130,7 +130,7 @@ Codex adapter 在 spawn 前用同一 executable、cwd 与 child environment 执�
 
 ## Terminal conversation read
 
-Completed Run history does not create a Tasks Recorder transcript store:
+Completed Run history does not create a Rillo transcript store:
 
 ```text
 Dashboard ──GET /runs/:id/conversation──▶ RunService
@@ -201,17 +201,17 @@ file opener 要求 path 精确匹配该 Run 的非删除文件记录，相对路
 
 ## Schedule clock
 
-`scheduler-clock` 在 `taskd` 内根据 wall clock 和 durable occurrence key 计算到期任务。filesystem watcher 负责低延迟 definition change，周期 rescan 提供最终一致性。sleep/wake 可产生 bounded catch-up，但同一个 occurrence key 不能创建两次 Run。
+`scheduler-clock` 在 `daemon` 内根据 wall clock 和 durable occurrence key 计算到期任务。filesystem watcher 负责低延迟 definition change，周期 rescan 提供最终一致性。sleep/wake 可产生 bounded catch-up，但同一个 occurrence key 不能创建两次 Run。
 
 Definitions directory 切换是一个受控迁移：验证目标、迁移/合并、切换 repository、替换 watcher、持久化 config；任一步失败都恢复旧 repository 和 watcher。
 
 ## Dashboard views and timeline interaction
 
-Production `taskd` 明确读取自包含的 `ui/dist/react.html`。`ui/dist/index.html` 继续随 release 打包，仅用于回滚和迁移对照，不参与默认路由；source preview 与 installed runtime 因此使用同一 React entry 和同一 API contract。
+Production `daemon` 明确读取自包含的 `ui/dist/react.html`。`ui/dist/index.html` 继续随 release 打包，仅用于回滚和迁移对照，不参与默认路由；source preview 与 installed runtime 因此使用同一 React entry 和同一 API contract。
 
 顶层导航只有 Sessions 与 Scheduled；Sessions仅保留Tree。SessionsView持有childPages与按完整引用读取的ancestor元数据，通过collectSessionFamily仅遍历当前根列表可达的子页和父链；切换workspace/branch不会混入其他范围的旧子页或祖先，同一完整引用只展示一次。父会话未在当前页时，由SessionAncestorSource通过共用读取队列补读，加载期间显示读取主会话，失败后明确提示父会话暂不可读取。projectSessionTree只允许真实主会话作为一级节点：有原生父级、登记父级或is_subagent标记的会话不能因父级缺失、冲突或循环而升为一级。选中已读取子会话时按祖先路径自动展开，用户手动折叠不会因状态轮询重新展开。collectSessionRelations合并原生metadata与登记边并按端点去重；indexSessionRelations分别索引parents/children和forkSources/forks，fork永不参与父子树构造，正常fork仍作为独立主会话。标题行合并Subagent/协作标签、子会话及派生Fork数量与来源入口，数量只代表已发现的直接关系。Fork来源显示forked from标题或短ID；Codex created_at可确认时追加at时间，表示新fork会话创建时间，不用复制历史的首条消息或updated_at推算。原生时间来源见[rollout recorder](https://github.com/openai/codex/blob/main/codex-rs/rollout/src/recorder.rs)与[thread summary](https://github.com/openai/codex/blob/main/codex-rs/app-server/src/request_processors/thread_summary.rs)。浮层使用现有Dialog/Popover，点击按完整provider/store/session引用读取；Escape关闭并恢复焦点。详情关系面板合并当前已发现的边，支持从来源查看派生Fork。
 
-Cards与List均已退出产品入口，组件、专属样式和视图状态已移除；挂载时删除旧sessions模式参数与tasks-recorder.sessions-view本机偏好，不保留兼容视图。Sessions样式由feature自身的sessions.css维护。侧栏350px，sheet收起时会话树填满剩余空间；sheet打开时宽度clamp(340px,32vw,480px)，压缩树的可用宽度。复用Drawer的container portal与modal=false，不遮挡会话树；keepMounted保留正文和阅读状态，关闭只收起面板，不清空selection或重复读取消息。面板收缩时保留正文最小宽度，避免重新换行带动滚动位置。1100px及以下隐藏侧栏并提供目录选择器，680px及以下打开sheet改为全宽阅读、关闭恢复树。首次进入不自动打开会话；点击标题、搜索命中或操作热力条按需打开。主导航和侧栏分组统一使用segmented-control圆角中性底色与选中项阴影，树工具栏仅保留状态优先排序与sheet展开入口。app-shell统一40px头部、零padding，header/main/Sessions不绘制外框和外圆角，仅保留内部分隔线，切页不改变内容起点。正文12px，头部单行标题/操作，关系浮层不挤正文。Tree每行严格只有title、subtitle、timeline三个直接区域；标题单行ellipsis，状态点位于标题前，其余关系、fork与读取错误信息也只出现在标题行。subtitle只放完整workspace路径与靠右的分支。桌面条目74px、相邻间距6px，细边框与浅背景区分各项，子项缩进18px并绘制连接线；热力条12px、手机18px。中栏不显示起止时间，对话标题下方使用同一sessionTimeline查询的bounds展示创建时间至最后一条用户或助手消息的时间范围；仅在bounds已知时显示，不以updated_at或当前阅读位置代替。SessionTimeRange与TimelineSource共用查询键及分页结构，避免重复索引；过长路径从开头省略，title保留全文。正文标题右侧及每行均有带边框的常显终端继续按钮。状态按钮按Needs you、Working、Ready、Inactive计数并点击优先排序，取消后恢复最近消息顺序；保持父子层级，将命中子会话的父节点优先排列，计数不包含无法展示的孤立子会话。Needs you与官方agents分组一致：等待审批/输入或主会话systemError；子会话systemError归Inactive。行内颜色圆点标明状态，详情和搜索使用同一实时快照；目录绿点仅由原生active状态聚合。状态不可用时不把历史标记为Inactive，不影响历史浏览。
+Cards与List均已退出产品入口，组件、专属样式和视图状态已移除；挂载时删除旧sessions模式参数与rillo.sessions-view本机偏好，不保留兼容视图。Sessions样式由feature自身的sessions.css维护。侧栏350px，sheet收起时会话树填满剩余空间；sheet打开时宽度clamp(340px,32vw,480px)，压缩树的可用宽度。复用Drawer的container portal与modal=false，不遮挡会话树；keepMounted保留正文和阅读状态，关闭只收起面板，不清空selection或重复读取消息。面板收缩时保留正文最小宽度，避免重新换行带动滚动位置。1100px及以下隐藏侧栏并提供目录选择器，680px及以下打开sheet改为全宽阅读、关闭恢复树。首次进入不自动打开会话；点击标题、搜索命中或操作热力条按需打开。主导航和侧栏分组统一使用segmented-control圆角中性底色与选中项阴影，树工具栏仅保留状态优先排序与sheet展开入口。app-shell统一40px头部、零padding，header/main/Sessions不绘制外框和外圆角，仅保留内部分隔线，切页不改变内容起点。正文12px，头部单行标题/操作，关系浮层不挤正文。Tree每行严格只有title、subtitle、timeline三个直接区域；标题单行ellipsis，状态点位于标题前，其余关系、fork与读取错误信息也只出现在标题行。subtitle只放完整workspace路径与靠右的分支。桌面条目74px、相邻间距6px，细边框与浅背景区分各项，子项缩进18px并绘制连接线；热力条12px、手机18px。中栏不显示起止时间，对话标题下方使用同一sessionTimeline查询的bounds展示创建时间至最后一条用户或助手消息的时间范围；仅在bounds已知时显示，不以updated_at或当前阅读位置代替。SessionTimeRange与TimelineSource共用查询键及分页结构，避免重复索引；过长路径从开头省略，title保留全文。正文标题右侧及每行均有带边框的常显终端继续按钮。状态按钮按Needs you、Working、Ready、Inactive计数并点击优先排序，取消后恢复最近消息顺序；保持父子层级，将命中子会话的父节点优先排列，计数不包含无法展示的孤立子会话。Needs you与官方agents分组一致：等待审批/输入或主会话systemError；子会话systemError归Inactive。行内颜色圆点标明状态，详情和搜索使用同一实时快照；目录绿点仅由原生active状态聚合。状态不可用时不把历史标记为Inactive，不影响历史浏览。
 
 
 每条热力条使用独立会话起止范围，不再使用全局7天或日/时/分切换，不聚合项目曲线。secondHeatCells按真实UTC秒计数，空秒稀疏表示；Canvas绘制矩形，以每秒消息数的对数映射颜色深度。物理像素容不下所有秒格时保留该像素内最高每秒计数，不能叠加alpha伪造密度。TimelineSource在行进入屏幕120px附近时持续分页，离屏暂停补页，原生并发最多4。SessionChildrenSource、SessionAncestorSource与TimelineSource共用sessionReadRequests最多4并发；树中接近视口的会话挂载子会话读取源，缺失祖先通过共享队列补读元数据。子页缓存60秒、gcTime5分钟，只为确有子节点的行提供展开按钮；useLayoutEffect在paint前同步子节点。无时间、unavailable或unsupported不持续伪造索引。
@@ -228,7 +228,7 @@ Scheduler schema v4 是当前 unified Run ledger。v1–v3 tables 只保留在 m
 
 历史 Task schema 与生成资产只供历史对照；当前不提供 Task import/migrate，不打开旧库，也不启动旧文件重建。Session links schema v1 独立于 Scheduled schema。
 
-安装或卸载时可以清理由 Tasks Recorder 明确拥有的旧 per-Schedule LaunchAgents；cleanup 必须验证 owner、mode、symlink 和 canonical program path，无法确认的文件 fail closed。
+安装或卸载时可以清理由 Rillo 明确拥有的旧 per-Schedule LaunchAgents；cleanup 必须验证 owner、mode、symlink 和 canonical program path，无法确认的文件 fail closed。
 
 ## Verification gates
 
@@ -246,7 +246,7 @@ git diff --check
 - runtime resolution 卡住时 cancel/shutdown 能及时完成；
 - missing runtime/model catalog 返回 typed state，不返回 missing route；
 - release artifact 包含 registry、adapter、Run service 与 migration，且不包含 legacy scheduled runner；
-- source Dashboard 与 taskd API version/capability 不兼容时显式失败。
+- source Dashboard 与 daemon API version/capability 不兼容时显式失败。
 - fake app-server E2E 必须覆盖 Run-specific SSE、mouse steer、Stop、terminal authoritative refresh 与 CLI-owned conversation read；runtime `turnId` 和 guidance 不得进入 Run response、SQLite 或 logs。
 - Schedule capability E2E 必须覆盖 Markdown/REST policy、immutable Run snapshot、integration argv overrides、Skill thread config、mixed policies与 Web Search 不受影响。
 
@@ -297,7 +297,7 @@ OpenCode 不支持 OS sandbox 或独立禁用 Skills/MCP。定义与执行边界
 
 Codex 使用明确授权方法列表的共享 app-server 客户端；状态读取客户端默认仍是只读。原生 queue/steer/interrupt 优先，CLI queue 仅是 queue 的备用实现。Claude SDK 和 stream-json CLI 通过相同的受控 worker 语义接入；恢复前验证 transcript 的 sessionId/cwd、数据源与原生 agent 目录，不创建与外部活跃进程并发的 worker。Otty 最后通道仅做明确匹配的 queue，不承担无条件打断。
 
-`session-messages.sqlite` 由 taskd 独占，保存请求指纹、投递阶段及回执，不保存消息正文。初始化时 sending 变为 unknown；同一请求 ID 的目标、文本和操作不可改变。只读核对能证明原生接受时更新回执；未找到记录不构成失败证据。MCP/HTTP 都使用同一控制服务，工具列表及示例见 README。
+`session-messages.sqlite` 由 daemon 独占，保存请求指纹、投递阶段及回执，不保存消息正文。初始化时 sending 变为 unknown；同一请求 ID 的目标、文本和操作不可改变。只读核对能证明原生接受时更新回执；未找到记录不构成失败证据。MCP/HTTP 都使用同一控制服务，工具列表及示例见 README。
 
 Claude 从用户回显或回复流的 user_message_uuid/user_message_uuids 确认对应输入，忽略迟到的重复回显，同一轮消费的合并输入一起结束；打断必须收到指定受控轮次的 aborted_streaming/aborted_tools 结果，普通结束不视为打断成功。没有对应消息 ID 证明时保留 unknown，不凭队列文本推断。
 

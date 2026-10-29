@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
 
-import { TaskRecorderError } from './errors.mjs'
+import { RilloError } from './errors.mjs'
 
 function fail(code, message, details) {
-  throw new TaskRecorderError(code, message, details)
+  throw new RilloError(code, message, details)
 }
 
 function requiredString(value, field) {

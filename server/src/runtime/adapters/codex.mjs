@@ -100,7 +100,7 @@ export function createCodexRuntimeDefinition({
       try {
         await client.started
         await client.request('initialize', {
-          clientInfo: { name: 'tasks-recorder', title: 'Tasks Recorder', version: 'source' },
+          clientInfo: { name: 'rillo', title: 'Rillo', version: 'source' },
         })
         try {
           return await readConversationPages(client, threadId)

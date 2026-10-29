@@ -112,7 +112,7 @@ export interface DashboardSettingsResponse {
 }
 
 export interface DashboardMeta {
-  service: 'tasks-recorder'
+  service: 'rillo'
   service_version: string
   api_version: string
   capabilities: {

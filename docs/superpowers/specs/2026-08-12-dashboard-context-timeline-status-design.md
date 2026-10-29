@@ -1,16 +1,16 @@
-# Tasks Recorder Dashboard Context, Timeline, and Status Design
+# Rillo Dashboard Context, Timeline, and Status Design
 
-> Historical baseline: 本文描述 v0.4.0 的 DHTMLX renderer。当前 renderer architecture 已由 [SVAR Gantt Dashboard 替代实现设计](2026-08-16-svar-gantt-dashboard-design.md) 取代；Project-first hierarchy、rollup、显式归档与 History projection 以 [Project Journalist Lifecycle Design](2026-08-19-project-journalist-lifecycle-design.md) 为准。taskd、REST/SSE 与 mutation contracts 仍沿用本文。
+> Historical baseline: 本文描述 v0.4.0 的 DHTMLX renderer。当前 renderer architecture 已由 [SVAR Gantt Dashboard 替代实现设计](2026-08-16-svar-gantt-dashboard-design.md) 取代；Project-first hierarchy、rollup、显式归档与 History projection 以 [Project Journalist Lifecycle Design](2026-08-19-project-journalist-lifecycle-design.md) 为准。daemon、REST/SSE 与 mutation contracts 仍沿用本文。
 >
 > 当前 Grid 不再把九个存储字段全部平铺。SVAR 版本使用 `任务 | 最近活跃 | 状态/进度 | Workspace | Branch | Session ID` 六列决策视图；Workspace 表示 source session cwd，旧 `worktree` 只作为缺失时的兼容 fallback。
 
 > 日期：2026-08-12（Asia/Shanghai）  
 > 状态：已实现并验证
-> 适用项目：`/Users/joi-com/Desktop/space/projects/tasks-recorder`
+> 适用项目：`/Users/joi-com/Desktop/space/projects/rillo`
 
 ## 目标
 
-升级 standalone Tasks Recorder Dashboard，使它能够：
+升级 standalone Rillo Dashboard，使它能够：
 
 1. 直接展示任务最近活动 session 的 Session ID、工作目录、worktree 和 branch，并允许复制完整 Session ID。
 2. 把右侧 Timeline 作为可展开/折叠的面板；折叠后 Grid 占满宽度。
@@ -22,7 +22,7 @@
 ## 第一原则
 
 - **Goal**：Dashboard 既能解释任务正在什么工作上下文中执行，也能对 Hook 漏掉的状态收口做最小人工修正。
-- **Facts**：`task_sessions` 已保存 `session_id`、`workfolder`、`worktree`、`branch` 和 `last_seen_at`；taskd 是唯一 SQLite owner；Dashboard 使用 REST snapshot + SSE invalidation；DHTMLX Gantt Standard 9.1 支持自定义列、custom layout、独立 scrollbar 和 Grid/Timeline view switching。
+- **Facts**：`task_sessions` 已保存 `session_id`、`workfolder`、`worktree`、`branch` 和 `last_seen_at`；daemon 是唯一 SQLite owner；Dashboard 使用 REST snapshot + SSE invalidation；DHTMLX Gantt Standard 9.1 支持自定义列、custom layout、独立 scrollbar 和 Grid/Timeline view switching。
 - **Assumptions**：任务的“当前上下文”定义为 `last_seen_at` 最新的有效 session，不代表实时扫描本机进程；本工具运行在单用户 macOS 环境，本机进程属于信任边界。
 - **Constraints**：只监听 `127.0.0.1`；SQLite 仍是唯一真源；不引入 DHTMLX PRO、WebSocket、第二份业务状态、完整编辑器或账号系统。
 - **Success Criteria**：Session ID 与三项 Git/路径上下文可见，完整 Session ID 可复制；Timeline 切换不丢 UI state；状态修改具备事务、并发、父子一致性与错误恢复；项目中不再存在 token/Bearer runtime contract。
@@ -235,12 +235,12 @@ updateStatus(input: {
 彻底删除现有 token/Bearer contract：
 
 - 删除 `server/src/auth-token.mjs` 与 token tests。
-- 删除 config 中 `tokenPath`、`AGENT_TASKS_TOKEN_PATH`。
+- 删除 config 中 `tokenPath`、`RILLO_TOKEN_PATH`。
 - 删除 controller 的 `ensureToken` 和 install token lifecycle。
-- 删除 taskd/MCP/Hook 读取 token 的代码。
+- 删除 daemon/MCP/Hook 读取 token 的代码。
 - 删除 task client 的 `Authorization` header。
 - API server 不再接收 token，也不再对 Agent routes 执行 Bearer validation。
-- 删除 `~/.config/tasks-recorder/auth-token`。
+- 删除 `~/.config/rillo/auth-token`。
 - README 的用户状态目录只包含 `config.json` 与 `tasks.sqlite`。
 
 ### Loopback trust model
@@ -252,7 +252,7 @@ updateStatus(input: {
 - mutation 继续要求 non-simple method + `application/json`；request body 上限 64 KiB。
 - 本机 native client 可以不带 Origin；所有能访问本机 loopback 的进程被视为受信任。
 
-明确接受的风险：同一台机器上的其他进程可以读取和修改 Tasks Recorder 数据。这是单用户 local-first 工具的产品 trust boundary，不声称提供同用户进程隔离。
+明确接受的风险：同一台机器上的其他进程可以读取和修改 Rillo 数据。这是单用户 local-first 工具的产品 trust boundary，不声称提供同用户进程隔离。
 
 ## 错误处理
 
@@ -263,7 +263,7 @@ updateStatus(input: {
 | 版本冲突 | `409 TASK_VERSION_CONFLICT` | 立即刷新 snapshot，提示任务已被其他 Agent 或页面更新 |
 | 父任务有未完成子项 | `409 CHILD_TASKS_INCOMPLETE` | 保留旧值，提示先完成列出的子任务 |
 | Host / Origin 不合法 | `403 HOST_REJECTED / ORIGIN_REJECTED` | 不修改数据，显示安全拒绝提示 |
-| taskd/network 不可用 | connectivity error | 保留最后一次 snapshot，菜单恢复可用，沿用 SSE 重连 |
+| daemon/network 不可用 | connectivity error | 保留最后一次 snapshot，菜单恢复可用，沿用 SSE 重连 |
 
 Server error message 不包含任务正文之外的新敏感信息；未完成 child details 只包含 IDs。
 
@@ -321,17 +321,17 @@ Server error message 不包含任务正文之外的新敏感信息；未完成 c
 
 - `npm run build && npm test && npm run check` 全绿。
 - 重装 LaunchAgent 后 `/health/ready` 成功。
-- 无 token 的 MCP client 可以写入临时 taskd。
+- 无 token 的 MCP client 可以写入临时 daemon。
 - 实际 Dashboard 修改状态后只收到一次 `changed`，snapshot 与 SQLite 一致。
-- taskd 重启后 Timeline preference 与 Dashboard 数据恢复。
-- `~/.config/tasks-recorder/auth-token` 不存在。
+- daemon 重启后 Timeline preference 与 Dashboard 数据恢复。
+- `~/.config/rillo/auth-token` 不存在。
 
 ## 文档更新
 
 结构性/public contract 变化要求扫描完整 Markdown 树，并同步：
 
 - `README.md`：数据目录、loopback trust model、可写 Dashboard、Timeline toggle、API 示例与无 token 安装。
-- `skills/task-manager/SKILL.md`：删除任何 token 假设；继续要求 Agent 经 taskd/MCP 操作，Dashboard 人工 status correction 不替代 semantic task maintenance。
+- `skills/task-manager/SKILL.md`：删除任何 token 假设；继续要求 Agent 经 daemon/MCP 操作，Dashboard 人工 status correction 不替代 semantic task maintenance。
 - 现有 standalone migration spec/plan 作为历史执行记录保留，不重写已经发生的迁移事实。
 
 ## 不做

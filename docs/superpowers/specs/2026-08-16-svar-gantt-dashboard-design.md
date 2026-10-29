@@ -2,13 +2,13 @@
 
 ## 目的
 
-在不改变 taskd、SQLite、REST、SSE、MCP、Hook 与 adapter contracts 的前提下，用另一个真正可开源的 Gantt/Timeline/Tree library 替换 DHTMLX Gantt，交付一个可与现有 v0.4.0 Dashboard 逐项比较、可独立运行和可回归验证的生产级版本。
+在不改变 daemon、SQLite、REST、SSE、MCP、Hook 与 adapter contracts 的前提下，用另一个真正可开源的 Gantt/Timeline/Tree library 替换 DHTMLX Gantt，交付一个可与现有 v0.4.0 Dashboard 逐项比较、可独立运行和可回归验证的生产级版本。
 
 如果本方案在 contract spike、完整测试或视觉验收中无法满足关键要求，则不把不稳定实现描述为完成；后续必须在第二个独立 worktree 中自研 Grid/Tree/Timeline renderer。
 
 ## 实施结论
 
-SVAR 方案已通过 pinned-package contract、完整功能矩阵、1,000-task virtualization smoke、isolated taskd runtime、release packaging 与 PC 1440 × 900 visual-driven review。随后又按“desktop Agent 项目控制面”而不是“数据库字段表”的产品目标完成二次打磨：默认周视图、可切换日/周/月粒度、summary 时间包络、六列决策 Grid、30px 行高、分组 toolbar 与精确的今天定位。浏览器审计为 Critical 0 / High 0 / Medium 0，因此 fallback gate 未触发，不创建原生 renderer worktree。最新视觉证据记录在实施计划末尾和 `.vdr-log/20260816-product-redesign-pc/`。
+SVAR 方案已通过 pinned-package contract、完整功能矩阵、1,000-task virtualization smoke、isolated daemon runtime、release packaging 与 PC 1440 × 900 visual-driven review。随后又按“desktop Agent 项目控制面”而不是“数据库字段表”的产品目标完成二次打磨：默认周视图、可切换日/周/月粒度、summary 时间包络、六列决策 Grid、30px 行高、分组 toolbar 与精确的今天定位。浏览器审计为 Critical 0 / High 0 / Medium 0，因此 fallback gate 未触发，不创建原生 renderer worktree。最新视觉证据记录在实施计划末尾和 `.vdr-log/20260816-product-redesign-pc/`。
 
 ## First Principles
 
@@ -24,7 +24,7 @@ SVAR 方案已通过 pinned-package contract、完整功能矩阵、1,000-task v
 
 ### Facts
 
-- taskd 是唯一 SQLite owner；Dashboard 通过 GET /api/v1/snapshot 与 SSE invalidation 获取 authoritative state。
+- daemon 是唯一 SQLite owner；Dashboard 通过 GET /api/v1/snapshot 与 SSE invalidation 获取 authoritative state。
 - dashboard-api.mjs、task-details-sheet.mjs、execution-inbox.mjs、event-stream.mjs 与 snapshot-coordinator.mjs 已独立于 DHTMLX。
 - DHTMLX coupling 集中在 ui/src/dashboard.mjs、dashboard-state.mjs 的 layout helpers、dashboard.css 的 .gantt_* selectors，以及 ui/build.mjs 的 DHTMLX assets。
 - 当前正式数据模型只需要 root + 一层 child；Timeline 是 readonly projection，Task mutation 仍通过现有 status menu 与 Details Sheet。
@@ -54,7 +54,7 @@ SVAR 方案已通过 pinned-package contract、完整功能矩阵、1,000-task v
 2. npm run check、npm run build、release packaging、packaged runtime 与 adapter tests 通过。
 3. 单文件 Dashboard bundle 不含 DHTMLX、CDN、license key、watermark 或 PRO module。
 4. 全部功能验收矩阵通过；没有 Critical/High/Medium 视觉 finding。
-5. 真实 runtime smoke 使用隔离端口与数据库，不修改用户 ~/.config/tasks-recorder/tasks.sqlite。
+5. 真实 runtime smoke 使用隔离端口与数据库，不修改用户 ~/.config/rillo/tasks.sqlite。
 6. PC 1440 × 900 完整 visual-driven review 通过；responsive 不属于本轮授权范围。
 7. 1440px 首屏 Grid 无水平滚动；Toolbar 右侧保留至少 10px 安全边距；summary bar 在像素几何上包含全部可见 descendants。
 
@@ -97,7 +97,7 @@ Frappe Gantt 为 MIT、轻量、维护活跃，但只解决 SVG Timeline。Grid�
 
 ## Architecture
 
-    taskd snapshot + SSE
+    daemon snapshot + SSE
             |
     SnapshotCoordinator
             |
@@ -233,7 +233,7 @@ React components 只渲染可见 cell/bar：
 
 - SSE ready/changed/reconnect 行为不变。
 - snapshot failure 保留 last good render 并显示 stale message。
-- renderer initialization failure 显示可读 error state，不使 taskd 崩溃。
+- renderer initialization failure 显示可读 error state，不使 daemon 崩溃。
 - no-op snapshot 不丢失 view state；快速连续 SSE refresh 仍由 coordinator 合并。
 
 ### Security、privacy 与 packaging
@@ -247,7 +247,7 @@ React components 只渲染可见 cell/bar：
 
 | 场景 | 行为 |
 | --- | --- |
-| SVAR mount/render 失败 | React Error Boundary 在 #gantt_here 显示不泄露实现细节的 `role=alert`；下一次 render 可 reset，taskd 不受影响 |
+| SVAR mount/render 失败 | React Error Boundary 在 #gantt_here 显示不泄露实现细节的 `role=alert`；下一次 render 可 reset，daemon 不受影响 |
 | rapid snapshot during render | 只保留最新 model；完成后再恢复最新 view state |
 | stale Task trigger | 按 stable task ID 查 replacement trigger，再 fallback 到 active tab |
 | Grid width 超出 container | 按 240px minimum 与至少 320px Timeline clamp |
@@ -285,7 +285,7 @@ React components 只渲染可见 cell/bar：
 
 ### Browser
 
-- isolated temporary taskd/database，覆盖 status success/conflict、SSE refresh、sheet/inbox state。
+- isolated temporary daemon/database，覆盖 status success/conflict、SSE refresh、sheet/inbox state。
 - real pointer/keyboard disclosure、copy、resize、toggle、locate、horizontal/vertical scroll。
 - console/network clean；同一行 Grid/Timeline geometry 对齐。
 
@@ -336,7 +336,7 @@ Fallback worktree 必须独立于本 branch，复用本 spec 的验收矩阵，�
 
 ### Open Area
 
-- taskd/API/SSE/Details/Inbox contracts 已有测试与真实运行证据。
+- daemon/API/SSE/Details/Inbox contracts 已有测试与真实运行证据。
 - SVAR open-source core 明确提供 tree、custom columns、readonly、resizer、display modes 与 actions。
 - React island 可以把 framework 影响限制在 renderer boundary。
 

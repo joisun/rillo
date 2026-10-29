@@ -1,4 +1,4 @@
-import { TaskRecorderError } from './errors.mjs'
+import { RilloError } from './errors.mjs'
 import { normalizeGitRemote } from './git-context.mjs'
 
 const SOURCES = new Set(['codex', 'claude', 'dashboard', 'importer'])
@@ -32,7 +32,7 @@ const ACTIVITIES = new Set(['host_event', 'tool_use'])
 const END_REASONS = new Set(['completed', 'stopped', 'interrupted', 'error', 'canceled'])
 
 function fail(code, message, details) {
-  throw new TaskRecorderError(code, message, details)
+  throw new RilloError(code, message, details)
 }
 
 function requireObject(value, field, code = 'EVENT_ENVELOPE_INVALID') {

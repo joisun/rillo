@@ -1,10 +1,10 @@
 {
-  "name": "tasks-recorder",
-  "version": "0.14.0",
+  "name": "rillo",
+  "version": "0.15.0",
   "private": true,
   "type": "module",
   "bin": {
-    "tasks-recorder": "server/cli.mjs"
+    "rillo": "server/cli.mjs"
   },
   "engines": {
     "node": ">=24.0.0"
@@ -15,8 +15,8 @@
     "dev:ui:react": "node ui/dev-server.mjs --entry=react",
     "check": "node scripts/check-syntax.mjs && npm run check:types",
     "check:types": "tsc --noEmit",
-    "taskd": "node server/control.mjs",
-    "taskd:run": "node server/taskd.mjs",
+    "daemon": "node server/control.mjs",
+    "daemon:run": "node server/daemon.mjs",
     "test": "node --test test/*.test.mjs",
     "test:ui": "vitest run",
     "build:adapters": "node scripts/build-adapters.mjs",
@@ -66,10 +66,10 @@
   "license": "GPL-2.0-only",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/joisun/tasks-recorder.git"
+    "url": "git+https://github.com/joisun/rillo.git"
   },
-  "homepage": "https://github.com/joisun/tasks-recorder#readme",
+  "homepage": "https://github.com/joisun/rillo#readme",
   "bugs": {
-    "url": "https://github.com/joisun/tasks-recorder/issues"
+    "url": "https://github.com/joisun/rillo/issues"
   }
 }

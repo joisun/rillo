@@ -9,7 +9,7 @@ import { createTaskStore } from '../mcp/src/task-store.mjs'
 import { taskInput, temporaryStore } from './helpers.mjs'
 
 test('opens a schema-v1 database by adding nullable task_sessions.agent', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tasks-recorder-migration-'))
+  const directory = await mkdtemp(join(tmpdir(), 'rillo-migration-'))
   const databasePath = join(directory, 'tasks.sqlite')
   const db = new DatabaseSync(databasePath)
   db.exec(`

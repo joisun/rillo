@@ -9,7 +9,7 @@ async function fixture(apiOverrides = {}) {
   const hub = createRevisionHub({ instanceId: 'server-test', keepaliveMs: 60_000 })
   const api = createApiServer({
     hub, host: '127.0.0.1', port: 0,
-    dashboardHtml: '<!doctype html><title>Tasks Recorder</title>',
+    dashboardHtml: '<!doctype html><title>Rillo</title>',
     ...apiOverrides,
   })
   const address = await api.listen()
@@ -138,7 +138,7 @@ test('all retired Task routes return 410 without reading bodies or publishing re
       assert.equal(response.status, 410, `${method} ${path}`)
       assert.equal((await response.json()).error.code, 'TASKS_RETIRED')
     }
-    const oldClient = await fetch(`${current.url}/api/v1/tasks`, { headers: { 'X-Tasks-Recorder-API-Version': '4' } })
+    const oldClient = await fetch(`${current.url}/api/v1/tasks`, { headers: { 'X-Rillo-API-Version': '4' } })
     assert.equal(oldClient.status, 410)
     assert.equal(current.hub.current().revision, 0)
   } finally { await current.cleanup() }
@@ -242,11 +242,11 @@ test('API v5 health and status need no Task store and mismatch errors are explic
     assert.equal((await fetch(`${current.url}/api/v1/meta`).then(response => response.json())).api_version, 5)
     const status = await fetch(`${current.url}/api/v1/status`).then(response => response.json())
     assert.equal(status.scheduler.degraded, true)
-    const mismatch = await fetch(`${current.url}/api/v1/runtimes`, { headers: { 'X-Tasks-Recorder-API-Version': '4' } })
+    const mismatch = await fetch(`${current.url}/api/v1/runtimes`, { headers: { 'X-Rillo-API-Version': '4' } })
     assert.equal(mismatch.status, 409)
     assert.equal((await mismatch.json()).error.code, 'API_VERSION_MISMATCH')
     const html = await fetch(current.url)
-    assert.match(await html.text(), /Tasks Recorder/)
+    assert.match(await html.text(), /Rillo/)
     assert.equal((await fetch(`${current.url}/favicon.ico`)).status, 204)
   } finally { await current.cleanup() }
 })

@@ -6,7 +6,7 @@
 
 **Architecture:** Codex Runs use one isolated `codex app-server` stdio process managed by a focused interactive driver. RunService retains lifecycle ownership, publishes normalized bounded events through the existing Run Event Hub, and exposes typed Turn-revision control methods to HTTP; Dashboard renders ephemeral Live Session state and posts semantic steer/stop intents.
 
-**Tech Stack:** Node.js ESM, `node:child_process`, newline-delimited JSON-RPC 2.0 over stdio, taskd HTTP/SSE, vanilla browser modules/CSS, Node test runner, existing Playwright MCP.
+**Tech Stack:** Node.js ESM, `node:child_process`, newline-delimited JSON-RPC 2.0 over stdio, daemon HTTP/SSE, vanilla browser modules/CSS, Node test runner, existing Playwright MCP.
 
 **Spec:** `docs/superpowers/specs/2026-08-27-live-session-control-design.md`
 
@@ -14,8 +14,8 @@
 
 - Implement only active-Turn observation, steer, and stop; completed Runs continue through Terminal Resume.
 - Use one app-server process per interactive Run; do not add a shared daemon or a second control plane.
-- The browser sends Run ID, taskd-generated `expected_turn_revision`, and bounded text only.
-- Runtime `turnId` remains inside taskd's Codex driver. Codex `threadId` continues as the existing public `session_id` for copy and Terminal Resume, but the browser never submits it as control authority.
+- The browser sends Run ID, daemon-generated `expected_turn_revision`, and bounded text only.
+- Runtime `turnId` remains inside daemon's Codex driver. Codex `threadId` continues as the existing public `session_id` for copy and Terminal Resume, but the browser never submits it as control authority.
 - Do not persist prompt, guidance, reasoning, tool payload, assistant message, or transcript content in SQLite or logs.
 - Spawn with argv and `shell: false`; use the existing Runtime Environment for child environment repair.
 - Preserve the existing one-shot Process Supervisor for non-interactive runtime definitions.
@@ -42,13 +42,13 @@
 - `server/src/runtime/runtime-event.mjs`: accept the normalized interactive event vocabulary.
 - `server/src/runs/run-service.mjs`: select interactive execution, own public Turn revisions, expose `steer()` and `stop()`.
 - `server/src/runs/run-event-hub.mjs`: report replay gaps deterministically, including an expired empty buffer.
-- `server/src/taskd-runtime.mjs`: inject shared Runtime Environment and interactive session factory.
+- `server/src/daemon-runtime.mjs`: inject shared Runtime Environment and interactive session factory.
 - `server/src/api-server.mjs`: typed steer/stop routes, status mapping, request limits, and SSE reset consistency.
 - `ui/src/dashboard-api.mjs`: typed steer/stop methods.
 - `ui/src/scheduled-run-review.mjs`: Live Session state reducer, event rendering, composer, stop, and read-only fallback.
 - `ui/src/dashboard.css`: Live Session sheet, stream, activity, composer, responsive, focus, and reduced-motion styles.
-- `test/run-service.test.mjs`, `test/run-event-hub.test.mjs`, `test/run-api.test.mjs`, `test/runtime-api.test.mjs`, `test/scheduled-run-review.test.mjs`, `test/dashboard-build.test.mjs`, `test/taskd-runtime.test.mjs`: focused regression and integration coverage.
-- `README.md`, `docs/architecture.md`, `docs/job/tasks-recorder-scheduled-tasks/04-test-plan.md`, and `docs/job/tasks-recorder-scheduled-tasks/06-test-report.md`: public behavior, privacy boundary, protocol health, test coverage, and evidence.
+- `test/run-service.test.mjs`, `test/run-event-hub.test.mjs`, `test/run-api.test.mjs`, `test/runtime-api.test.mjs`, `test/scheduled-run-review.test.mjs`, `test/dashboard-build.test.mjs`, `test/daemon-runtime.test.mjs`: focused regression and integration coverage.
+- `README.md`, `docs/architecture.md`, `docs/job/rillo-scheduled-tasks/04-test-plan.md`, and `docs/job/rillo-scheduled-tasks/06-test-report.md`: public behavior, privacy boundary, protocol health, test coverage, and evidence.
 
 ---
 
@@ -71,10 +71,10 @@ const client = createCodexAppServerClient({
   spawnImpl: fakeSpawn.child,
   runtimeEnvironment: { childEnvironment: () => ({ PATH: '/opt/bin' }) },
 })
-const pending = client.request('initialize', { clientInfo: { name: 'tasks-recorder', version: 'source' } })
+const pending = client.request('initialize', { clientInfo: { name: 'rillo', version: 'source' } })
 assert.deepEqual(JSON.parse(fakeSpawn.stdin.at(-1)), {
   jsonrpc: '2.0', id: 1, method: 'initialize',
-  params: { clientInfo: { name: 'tasks-recorder', version: 'source' } },
+  params: { clientInfo: { name: 'rillo', version: 'source' } },
 })
 fakeSpawn.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, result: { userAgent: 'codex' } })}\n`)
 assert.deepEqual(await pending, { userAgent: 'codex' })
@@ -444,17 +444,17 @@ Expected: PASS and `ui/dist/index.html` contains the updated bundled Live Sessio
 ### Task 7: Composition, end-to-end behavior, docs, and visual verification
 
 **Files:**
-- Modify: `server/src/taskd-runtime.mjs`
-- Modify: `test/taskd-runtime.test.mjs`
+- Modify: `server/src/daemon-runtime.mjs`
+- Modify: `test/daemon-runtime.test.mjs`
 - Modify: `test/scheduled-runtime-e2e.test.mjs`
 - Modify: `README.md`
 - Modify: `docs/architecture.md`
-- Modify: `docs/job/tasks-recorder-scheduled-tasks/04-test-plan.md`
-- Modify: `docs/job/tasks-recorder-scheduled-tasks/06-test-report.md`
+- Modify: `docs/job/rillo-scheduled-tasks/04-test-plan.md`
+- Modify: `docs/job/rillo-scheduled-tasks/06-test-report.md`
 
 **Interfaces:**
-- Consumes: Codex interactive session factory, RunService, taskd API, Dashboard bundle.
-- Produces: one source `taskd` process that can execute, stream, steer, stop, recover, and report protocol failures without disabling Scheduled Tasks.
+- Consumes: Codex interactive session factory, RunService, daemon API, Dashboard bundle.
+- Produces: one source `daemon` process that can execute, stream, steer, stop, recover, and report protocol failures without disabling Scheduled Tasks.
 
 - [ ] **Step 1: Write failing composition and fixture end-to-end tests**
 
@@ -468,7 +468,7 @@ The end-to-end fixture must prove: Markdown Schedule → manual Run → initiali
 
 - [ ] **Step 2: Run composition/e2e tests and verify missing wiring**
 
-Run: `node --test test/taskd-runtime.test.mjs test/scheduled-runtime-e2e.test.mjs`
+Run: `node --test test/daemon-runtime.test.mjs test/scheduled-runtime-e2e.test.mjs`
 
 Expected: FAIL until the interactive factory is composed.
 
@@ -488,7 +488,7 @@ Do not create another resolver, database, server, or long-lived service. A proto
 
 - [ ] **Step 4: Run the focused implementation suite**
 
-Run: `node --test test/codex-app-server-client.test.mjs test/codex-interactive-session.test.mjs test/codex-runtime-adapter.test.mjs test/run-service.test.mjs test/run-api.test.mjs test/run-event-stream.test.mjs test/scheduled-dashboard-api.test.mjs test/scheduled-run-review.test.mjs test/taskd-runtime.test.mjs test/scheduled-runtime-e2e.test.mjs`
+Run: `node --test test/codex-app-server-client.test.mjs test/codex-interactive-session.test.mjs test/codex-runtime-adapter.test.mjs test/run-service.test.mjs test/run-api.test.mjs test/run-event-stream.test.mjs test/scheduled-dashboard-api.test.mjs test/scheduled-run-review.test.mjs test/daemon-runtime.test.mjs test/scheduled-runtime-e2e.test.mjs`
 
 Expected: PASS.
 
@@ -496,7 +496,7 @@ Expected: PASS.
 
 Run: `git diff --name-only HEAD && find . -name "*.md" -not -path "*/node_modules/*" -not -path "*/.git/*"`
 
-Update every live document that describes Runtime execution, Run Review, privacy, taskd health, or manual verification. README must explain that only taskd-launched active Codex Runs stream and steer; external hook-observed sessions do not expose transcript content. Maintenance docs must include `tasks-recorder status`, runtime capability inspection, a real Live Session smoke procedure, protocol failure codes, and fallback to Terminal Resume.
+Update every live document that describes Runtime execution, Run Review, privacy, daemon health, or manual verification. README must explain that only daemon-launched active Codex Runs stream and steer; external hook-observed sessions do not expose transcript content. Maintenance docs must include `rillo status`, runtime capability inspection, a real Live Session smoke procedure, protocol failure codes, and fallback to Terminal Resume.
 
 - [ ] **Step 6: Run full repository verification**
 

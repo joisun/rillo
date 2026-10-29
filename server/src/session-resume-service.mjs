@@ -1,9 +1,9 @@
 import { isAbsolute } from 'node:path'
 
-import { TaskRecorderError } from '../../mcp/src/errors.mjs'
+import { RilloError } from '../../mcp/src/errors.mjs'
 
 function resumeError(code, message, details) {
-  return new TaskRecorderError(code, message, details)
+  return new RilloError(code, message, details)
 }
 
 function scheduledRunTarget(run) {

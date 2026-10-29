@@ -1,14 +1,14 @@
 {
-  "name": "tasks-recorder",
+  "name": "rillo",
   "interface": {
-    "displayName": "Tasks Recorder"
+    "displayName": "Rillo"
   },
   "plugins": [
     {
-      "name": "tasks-recorder",
+      "name": "rillo",
       "source": {
         "source": "local",
-        "path": "./adapters/codex/tasks-recorder"
+        "path": "./adapters/codex/rillo"
       },
       "policy": {
         "installation": "AVAILABLE",
