@@ -8,7 +8,7 @@
 
 | 检查 | 结果 / 证据 |
 | --- | --- |
-| 后端 | 577/577，含本次 16 项；/tmp/tasks-recorder-messaging-full-tests.txt |
+| 后端 | 578/578，含本次 17 项；/tmp/tasks-recorder-messaging-full-tests.txt |
 | UI | 79/79；/tmp/tasks-recorder-messaging-ui-tests.txt |
 | 语法 / 类型 | 160 个源码文件、tsc 通过；/tmp/tasks-recorder-messaging-check.txt |
 | 打包 | 四个服务/adapter 包成功；/tmp/tasks-recorder-messaging-package.txt |
@@ -34,3 +34,5 @@ Codex 连接既有共享服务；不启动另一个服务冒充活跃归属。Cl
 ## 当前会话消费确认
 
 测试消息 selftest-20261029-1793262759659 已作为当前会话的真实输入到达，并已回复相同标记。T6 后完整后端回归 578/578 通过。用户随后授权提交、发布和本地升级；新增测试文件按仓库规则仅保留本地。
+
+发布前以 0.14.0 重新构建 service/adapter，578 项后端、79 项 UI、语法和类型检查全部通过，自包含安装包再次通过临时 HOME 安装验证。发布工作流另在 Linux 验证同一批构建产物后公开 Release。

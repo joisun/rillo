@@ -31255,7 +31255,7 @@ function handler(operation) {
 }
 function createTasksRecorderServer({ service }) {
   const server = new McpServer(
-    { name: "tasks-recorder", version: "0.13.0" },
+    { name: "tasks-recorder", version: "0.14.0" },
     { instructions: SERVER_INSTRUCTIONS }
   );
   server.registerTool("session_sources", {

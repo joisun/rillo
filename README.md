@@ -7,7 +7,7 @@ Tasks Recorder 是运行在本机的 coding-agent 会话与自动化控制台。
 当前状态：
 
 - 支持 macOS 和具有 systemd 用户服务的 Linux；React Dashboard 可用；Legacy bundle 仅作为回滚资产保留，不是 production entry；
-- Codex 和 Claude Code 插件提供会话关系登记工具；Sessions 数据读取当前支持 Codex；
+- Codex 和 Claude Code 插件提供会话查询、关系登记、消息发送与控制工具；Sessions 正文浏览当前支持 Codex；
 - Scheduled Task runtime 支持 Codex 和 OpenCode；
 - Sessions 支持按项目目录浏览 Codex 会话、按活跃时间排列和搜索正文；macOS 可一键打开终端，Linux 复制 Session ID 后自行恢复；
 - runtime registry 已按 multi-CLI contract 设计，后续 runtime 只增加 adapter，不增加第二套调度链路；
@@ -33,7 +33,7 @@ tasks-recorder status
 普通安装不需要 clone repository、`npm install` 或 `npm ci`。更谨慎的固定版本安装方式：
 
 ```bash
-version=v0.13.0
+version=v0.14.0
 curl -fsSLO "https://raw.githubusercontent.com/joisun/tasks-recorder/${version}/install.sh"
 less install.sh
 bash install.sh --version "$version"
