@@ -53,11 +53,50 @@ jobs:
             tasks-recorder-claude-adapter.tar.gz \
             install.sh > SHA256SUMS
 
+      - name: Upload release assets for Linux verification
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-assets
+          path: release/
+          if-no-files-found: error
+          retention-days: 1
+
+  verify-linux:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: Download the exact macOS-built release assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-assets
+          path: release/
+      - name: Verify Linux installer and installed runtime
+        run: bash scripts/verify-release-install.sh release "$GITHUB_REF_NAME"
+
+  publish:
+    needs: [release, verify-linux]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download verified release assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-assets
+          path: release/
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
             release/tasks-recorder-macos.tar.gz \
             release/tasks-recorder-linux.tar.gz \
             release/tasks-recorder-codex-adapter.tar.gz \

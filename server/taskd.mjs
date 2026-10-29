@@ -12,6 +12,11 @@ const dashboardPath = join(projectRoot, 'ui', 'dist', 'react.html')
 
 try {
   const config = await resolveAppConfig({ projectRoot })
+  const manifest = JSON.parse(await readFile(join(projectRoot, 'package.json'), 'utf8'))
+  if (typeof manifest.version !== 'string' || !manifest.version.trim()) {
+    throw new Error('Tasks Recorder package.json must declare a version')
+  }
+  config.packageVersion = manifest.version
   const dashboardHtml = await readFile(dashboardPath, 'utf8')
   const runtime = await startTaskd({ config, dashboardPath, dashboardHtml })
   let stopping = false

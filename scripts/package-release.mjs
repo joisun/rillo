@@ -21,7 +21,19 @@ async function copyEntries(projectRoot, targetRoot, entries) {
 }
 
 async function archive(sourceDirectory, rootName, outputPath) {
-  await execFileAsync('tar', ['-czf', outputPath, '-C', sourceDirectory, rootName])
+  await execFileAsync('tar', [
+    '--format=ustar', '--no-xattrs',
+    '--exclude=._*', '--exclude=*/._*', '--exclude=.DS_Store', '--exclude=*/.DS_Store',
+    '-czf', outputPath, '-C', sourceDirectory, rootName,
+  ], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
+  const { stdout } = await execFileAsync('tar', ['-tzf', outputPath])
+  const entries = stdout.trim().split('\n')
+  if (entries[0] !== `${rootName}/` || entries.some(entry => entry !== rootName && !entry.startsWith(`${rootName}/`))) {
+    throw new Error(`Release archive must contain exactly one root: ${rootName}`)
+  }
+  if (entries.some(entry => entry.split('/').some(part => part.startsWith('._') || part === '.DS_Store'))) {
+    throw new Error('Release archive contains macOS metadata')
+  }
   return outputPath
 }
 

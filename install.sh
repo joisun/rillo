@@ -138,12 +138,15 @@ while IFS= read -r entry; do
   esac
 done < "$archive_entries"
 
-archive_root="$(sed -n '1{s#/.*##;p;}' "$archive_entries")"
+program_entries="$temporary_directory/program-entries.txt"
+awk -F/ '{ for (i = 1; i <= NF; i++) if ($i ~ /^\._/ || $i == ".DS_Store") next; print }' "$archive_entries" > "$program_entries"
+[ -s "$program_entries" ] || die 'release archive contains no program files'
+archive_root="$(sed -n '1{s#/.*##;p;}' "$program_entries")"
 case "$archive_root" in
   tasks-recorder-*) ;;
   *) die "unexpected release archive root: $archive_root" ;;
 esac
-if awk -F/ -v root="$archive_root" '$1 != root { exit 1 }' "$archive_entries"; then
+if awk -F/ -v root="$archive_root" '$1 != root { exit 1 }' "$program_entries"; then
   :
 else
   die 'release archive contains more than one root directory'
@@ -151,7 +154,7 @@ fi
 
 extract_root="$temporary_directory/extracted"
 mkdir -p "$extract_root"
-tar -xzf "$archive_path" -C "$extract_root"
+COPYFILE_DISABLE=1 tar --exclude='._*' --exclude='*/._*' --exclude='.DS_Store' --exclude='*/.DS_Store' -xzf "$archive_path" -C "$extract_root"
 runtime_source="$extract_root/$archive_root"
 [ -f "$runtime_source/ui/dist/index.html" ] || die 'prebuilt Dashboard is missing from the release'
 [ -f "$runtime_source/server/taskd.mjs" ] || die 'taskd runtime is missing from the release'
@@ -162,6 +165,7 @@ installed_version="$(node -e 'const fs=require("node:fs"); const p=JSON.parse(fs
 case "$installed_version" in
   ''|*[!0-9A-Za-z.+-]*) die 'release contains an invalid version' ;;
 esac
+[ "$archive_root" = "tasks-recorder-$installed_version" ] || die 'release archive root does not match its package version'
 if [ "$requested_version" != 'latest' ]; then
   normalized_requested_version="${requested_version#v}"
   [ "$normalized_requested_version" = "$installed_version" ] || die "release version $installed_version does not match requested tag $requested_version"
