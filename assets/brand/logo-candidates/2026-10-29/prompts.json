@@ -1,0 +1,87 @@
+{
+  "product": "Rillo",
+  "date": "2026-10-29",
+  "provider": "Built-in image_gen; model identifier not exposed by the tool",
+  "constraint_delivery": "main-prompt constraints",
+  "skill": "https://github.com/s1dashu/ip-as-logo-skill/blob/main/SKILL.md",
+  "candidates": [
+    {
+      "label": "A1",
+      "subject": "armadillo",
+      "corner": "lower-left",
+      "palette": "warm ivory and deep midnight indigo on muted periwinkle",
+      "detail": "A tiny friendly armadillo with a single large smooth domed indigo shell merging into its tucked body, and a warm ivory face emerging toward the right. Its defining feature is the broad unsegmented shell: absolutely no scales, stripes or shell grooves. Both short round ears visible. No claws, feet or tail. Two small indigo dot eyes on the ivory face; avoid a realistic narrow snout. The simple dome-and-face silhouette should feel like a quietly dependable little companion.",
+      "filename": "rillo-a1-armadillo.png",
+      "prompt": "Create one full-bleed square character image, approximately 1536 by 1536. Make it extraordinarily simple, warm and endearing, with a baby-like large head and heavy rounded shapes. Build one unmistakable continuous silhouette from only four to seven broad geometric shapes. Use exactly two purposeful character color families plus the named solid background. Reuse those two colors for the two simple eyes. One small mouth only if essential. The character is upright and fills almost the whole square, emerging from the lower-left corner. Preserve both paired ears. Keep the opposite upper corner open with the same uniform background. Make all tips blunt and all curves broad; no thin anatomy or explanatory detail. Maintain readability at 32 by 32. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment. Constraints: one character, no text, lettering, watermark, border, frame, rounded outer mask, scenery, props, outlines, textures, glossy highlights, strong three-dimensional rendering or external cast shadow. Uniform background with square outer corners.\nSubject: A tiny friendly armadillo with a single large smooth domed indigo shell merging into its tucked body, and a warm ivory face emerging toward the right. Its defining feature is the broad unsegmented shell: absolutely no scales, stripes or shell grooves. Both short round ears visible. No claws, feet or tail. Two small indigo dot eyes on the ivory face; avoid a realistic narrow snout. The simple dome-and-face silhouette should feel like a quietly dependable little companion.\nPalette: use warm ivory and deep midnight indigo on muted periwinkle. The named background fills all unoccupied space. Composition: emerge specifically from the lower-left, not the center.",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "label": "A2",
+      "subject": "armadillo",
+      "corner": "lower-right",
+      "palette": "apricot and dark aubergine on muted lilac",
+      "detail": "A very young armadillo, its body one smooth large dark aubergine shell embracing a broad apricot cheek and face oriented gently left. One completely smooth domed shell, no scales, no stripes or grooves. Both short rounded ears visible. Tucked body, no claws or fragile tail. Two tiny aubergine dot eyes in the apricot face. Make the uninterrupted shell contour especially distinctive and compact.",
+      "filename": "rillo-a2-armadillo.png",
+      "prompt": "Create one full-bleed square character image, approximately 1536 by 1536. Make it extraordinarily simple, warm and endearing, with a baby-like large head and heavy rounded shapes. Build one unmistakable continuous silhouette from only four to seven broad geometric shapes. Use exactly two purposeful character color families plus the named solid background. Reuse those two colors for the two simple eyes. One small mouth only if essential. The character is upright and fills almost the whole square, emerging from the lower-right corner. Preserve both paired ears. Keep the opposite upper corner open with the same uniform background. Make all tips blunt and all curves broad; no thin anatomy or explanatory detail. Maintain readability at 32 by 32. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment. Constraints: one character, no text, lettering, watermark, border, frame, rounded outer mask, scenery, props, outlines, textures, glossy highlights, strong three-dimensional rendering or external cast shadow. Uniform background with square outer corners.\nSubject: A very young armadillo, its body one smooth large dark aubergine shell embracing a broad apricot cheek and face oriented gently left. One completely smooth domed shell, no scales, no stripes or grooves. Both short rounded ears visible. Tucked body, no claws or fragile tail. Two tiny aubergine dot eyes in the apricot face. Make the uninterrupted shell contour especially distinctive and compact.\nPalette: use apricot and dark aubergine on muted lilac. The named background fills all unoccupied space. Composition: emerge specifically from the lower-right, not the center.",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "label": "B1",
+      "subject": "raccoon",
+      "corner": "lower-left",
+      "palette": "pale warm cream and deep blue indigo on muted cornflower blue",
+      "detail": "A baby raccoon, reduced to one oversized broad cream head and a compact neck disappearing below the frame. Two rounded ears. Its sole identifying feature is one broad continuous indigo mask across the face; two simple cream eyes in that mask, with no glints or pupils. No nose detail, fur, paws or tail stripes. Calm curious expression and wonderfully rounded cheeks.",
+      "filename": "rillo-b1-raccoon.png",
+      "prompt": "Create one full-bleed square character image, approximately 1536 by 1536. Make it extraordinarily simple, warm and endearing, with a baby-like large head and heavy rounded shapes. Build one unmistakable continuous silhouette from only four to seven broad geometric shapes. Use exactly two purposeful character color families plus the named solid background. Reuse those two colors for the two simple eyes. One small mouth only if essential. The character is upright and fills almost the whole square, emerging from the lower-left corner. Preserve both paired ears. Keep the opposite upper corner open with the same uniform background. Make all tips blunt and all curves broad; no thin anatomy or explanatory detail. Maintain readability at 32 by 32. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment. Constraints: one character, no text, lettering, watermark, border, frame, rounded outer mask, scenery, props, outlines, textures, glossy highlights, strong three-dimensional rendering or external cast shadow. Uniform background with square outer corners.\nSubject: A baby raccoon, reduced to one oversized broad cream head and a compact neck disappearing below the frame. Two rounded ears. Its sole identifying feature is one broad continuous indigo mask across the face; two simple cream eyes in that mask, with no glints or pupils. No nose detail, fur, paws or tail stripes. Calm curious expression and wonderfully rounded cheeks.\nPalette: use pale warm cream and deep blue indigo on muted cornflower blue. The named background fills all unoccupied space. Composition: emerge specifically from the lower-left, not the center.",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "label": "B2",
+      "subject": "raccoon",
+      "corner": "lower-right",
+      "palette": "soft peach and deep plum on muted sage green",
+      "detail": "A tiny relaxed raccoon with a big peach rounded head, short compact neck, two round ears, and one connected broad plum facial mask. The two eyes are simple peach dots within the plum mask. No fur tufts, nose detail, paws, tail or stripes. Use a softly squared rounded head for a strong silhouette, subtly different from a circle. Quiet playful personality.",
+      "filename": "rillo-b2-raccoon.png",
+      "prompt": "Create one full-bleed square character image, approximately 1536 by 1536. Make it extraordinarily simple, warm and endearing, with a baby-like large head and heavy rounded shapes. Build one unmistakable continuous silhouette from only four to seven broad geometric shapes. Use exactly two purposeful character color families plus the named solid background. Reuse those two colors for the two simple eyes. One small mouth only if essential. The character is upright and fills almost the whole square, emerging from the lower-right corner. Preserve both paired ears. Keep the opposite upper corner open with the same uniform background. Make all tips blunt and all curves broad; no thin anatomy or explanatory detail. Maintain readability at 32 by 32. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment. Constraints: one character, no text, lettering, watermark, border, frame, rounded outer mask, scenery, props, outlines, textures, glossy highlights, strong three-dimensional rendering or external cast shadow. Uniform background with square outer corners.\nSubject: A tiny relaxed raccoon with a big peach rounded head, short compact neck, two round ears, and one connected broad plum facial mask. The two eyes are simple peach dots within the plum mask. No fur tufts, nose detail, paws, tail or stripes. Use a softly squared rounded head for a strong silhouette, subtly different from a circle. Quiet playful personality.\nPalette: use soft peach and deep plum on muted sage green. The named background fills all unoccupied space. Composition: emerge specifically from the lower-right, not the center.",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "label": "C1",
+      "subject": "elephant",
+      "corner": "lower-left",
+      "palette": "fresh seafoam and dark petrol teal on muted lavender",
+      "detail": "A tiny elephant with a huge seafoam rounded head, two large simple rounded ears and one very short thick downward trunk ending in a generous rounded tip. The trunk is its defining feature. Use a single broad dark petrol teal inner-ear color region, echoed only by the two small dot eyes. No tusks, feet, trunk wrinkles, nostrils or ear outlines. Gentle attentive expression.",
+      "filename": "rillo-c1-elephant.png",
+      "prompt": "Create one full-bleed square character image, approximately 1536 by 1536. Make it extraordinarily simple, warm and endearing, with a baby-like large head and heavy rounded shapes. Build one unmistakable continuous silhouette from only four to seven broad geometric shapes. Use exactly two purposeful character color families plus the named solid background. Reuse those two colors for the two simple eyes. One small mouth only if essential. The character is upright and fills almost the whole square, emerging from the lower-left corner. Preserve both paired ears. Keep the opposite upper corner open with the same uniform background. Make all tips blunt and all curves broad; no thin anatomy or explanatory detail. Maintain readability at 32 by 32. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment. Constraints: one character, no text, lettering, watermark, border, frame, rounded outer mask, scenery, props, outlines, textures, glossy highlights, strong three-dimensional rendering or external cast shadow. Uniform background with square outer corners.\nSubject: A tiny elephant with a huge seafoam rounded head, two large simple rounded ears and one very short thick downward trunk ending in a generous rounded tip. The trunk is its defining feature. Use a single broad dark petrol teal inner-ear color region, echoed only by the two small dot eyes. No tusks, feet, trunk wrinkles, nostrils or ear outlines. Gentle attentive expression.\nPalette: use fresh seafoam and dark petrol teal on muted lavender. The named background fills all unoccupied space. Composition: emerge specifically from the lower-left, not the center.",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "label": "C2",
+      "subject": "elephant",
+      "corner": "lower-right",
+      "palette": "butter yellow and deep ink navy on muted dusty sky blue",
+      "detail": "A small baby elephant with a chunky butter-yellow head and short thick curved trunk, both ears fully visible as broad rounded lobes. Its only defining feature is the oversized blunt curved trunk. Navy is used for one broad ear region and the two small eyes. Avoid tusks, legs, wrinkles, nostrils, cheek marks or separated small decorations. Endearing calm character with a clean instantly readable contour.",
+      "filename": "rillo-c2-elephant.png",
+      "prompt": "Create one full-bleed square character image, approximately 1536 by 1536. Make it extraordinarily simple, warm and endearing, with a baby-like large head and heavy rounded shapes. Build one unmistakable continuous silhouette from only four to seven broad geometric shapes. Use exactly two purposeful character color families plus the named solid background. Reuse those two colors for the two simple eyes. One small mouth only if essential. The character is upright and fills almost the whole square, emerging from the lower-right corner. Preserve both paired ears. Keep the opposite upper corner open with the same uniform background. Make all tips blunt and all curves broad; no thin anatomy or explanatory detail. Maintain readability at 32 by 32. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment. Constraints: one character, no text, lettering, watermark, border, frame, rounded outer mask, scenery, props, outlines, textures, glossy highlights, strong three-dimensional rendering or external cast shadow. Uniform background with square outer corners.\nSubject: A small baby elephant with a chunky butter-yellow head and short thick curved trunk, both ears fully visible as broad rounded lobes. Its only defining feature is the oversized blunt curved trunk. Navy is used for one broad ear region and the two small eyes. Avoid tusks, legs, wrinkles, nostrils, cheek marks or separated small decorations. Endearing calm character with a clean instantly readable contour.\nPalette: use butter yellow and deep ink navy on muted dusty sky blue. The named background fills all unoccupied space. Composition: emerge specifically from the lower-right, not the center.",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    }
+  ]
+}

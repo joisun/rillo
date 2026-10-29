@@ -1,6 +1,6 @@
 import type { PropsWithChildren, ReactNode } from 'react'
-import { Waypoints } from 'lucide-react'
 
+import { RILLO_LOGO_URL } from '@/branding'
 import type { DashboardConnectionState } from '@/lib/events/dashboard-event-source'
 import type { DashboardView } from '@/lib/preferences/dashboard-preferences'
 import { ConnectionStatus } from './connection-status'
@@ -25,7 +25,7 @@ export function AppShell({
     <div className="app-shell">
       <header className="app-shell__header">
         <div className="app-shell__brand">
-          <span className="app-shell__mark" aria-hidden="true"><Waypoints /></span>
+          <img className="app-shell__mark" src={RILLO_LOGO_URL} alt="" width={24} height={24} />
           <h1>Rillo</h1>
         </div>
         <div className="app-shell__navigation-zone">

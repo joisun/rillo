@@ -6,8 +6,8 @@
 
 - 源码与本机程序已更名。命令为 `rillo`，数据目录为 `~/.config/rillo`，安装目录为 `~/.local/share/rillo`，macOS 活动日志为 `~/Library/Logs/rillo`。Linux unit 为 `rillo.service`，macOS label 为 `com.joi.rillo.daemon`。
 - 本机 Codex 和 Claude 插件均为 `rillo@rillo`，MCP server 为 `rillo`。本地 marketplace 镜像位于 `~/.local/share/rillo/marketplace`，与公开下载状态无关。
-- 用户补充授权后，远端仓库已实际更名为 [joisun/rillo](https://github.com/joisun/rillo)，本地 origin 同步到新地址。仓库 ID `1332808132` 不变；更名前后的 4 个分支 SHA、28 个 Release 及其资产 ID、名称、大小和 digest 完全一致。本次源码尚未推送，远端 main 仍为更名前版本。
-- 没有发布 Rillo 0.15.0，也没有操作 sun。公开下载与 marketplace Git 安装命令需等新源码推送和正式发布后再使用。当前本机使用已校验的本地构建包。
+- 用户补充授权后，远端仓库已实际更名为 [joisun/rillo](https://github.com/joisun/rillo)，本地 origin 同步到新地址。仓库 ID `1332808132` 不变；更名前后的 4 个分支 SHA、28 个 Release 及其资产 ID、名称、大小和 digest 完全一致。源码提交与 Release 发布分别进行，仓库更名不改变历史版本内容。
+- 没有发布 Rillo 0.15.0，也没有操作 sun。公开下载与 marketplace Git 安装命令需等 Rillo 0.15.0 正式发布后再使用。当前本机使用已校验的本地构建包。
 
 ## 安装迁移行为
 

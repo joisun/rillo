@@ -1,5 +1,7 @@
 # Rillo
 
+<img src="ui/assets/rillo.png" alt="Rillo 吉祥物刺刺" width="96" height="96">
+
 Rillo 是运行在本机的 coding-agent 会话与自动化控制台。Sessions 直接浏览 CLI 保存的会话，按 workspace、分支和时间查找对话，以主子会话树和消息热力时间轴展示，支持侧边 sheet 阅读。侧栏支持 Workspace / Branch 分组，同名分支可以汇总多个项目的会话。
 
 它还支持由 Markdown 定义 Scheduled Task。到期后，常驻的 `daemon` 直接调用本机 code-agent CLI，并把 session ID、结果、文件变更和日志引用写入统一 Run ledger；对话正文仍由本机 agent CLI 持有。
@@ -13,7 +15,7 @@ Rillo 是运行在本机的 coding-agent 会话与自动化控制台。Sessions 
 - runtime registry 已按 multi-CLI contract 设计，后续 runtime 只增加 adapter，不增加第二套调度链路；
 - 所有数据都保存在本机，不需要 cloud account 或 auth token。
 
-当前为 Rillo 更名后的本地构建。GitHub 仓库已更名为 `joisun/rillo`；本次源码尚未推送，Rillo 0.15.0 尚未公开发布。下列下载与 Git marketplace 命令需等新源码推送和正式发布后再使用，当前 latest 仍是旧名称的历史版本。本地迁移与旧标识保留原因见[更名与安装迁移](docs/migrations/rillo-rename.md)。
+当前为 Rillo 0.15.0 开发版本，GitHub 仓库为 `joisun/rillo`。Rillo 0.15.0 尚未公开发布；下列下载与 Git marketplace 命令需等正式发布后再使用，当前 latest 仍是旧名称的历史版本。本地迁移与旧标识保留原因见[更名与安装迁移](docs/migrations/rillo-rename.md)。
 
 ## Quick start
 

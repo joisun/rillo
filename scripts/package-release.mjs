@@ -84,6 +84,7 @@ export async function packageRelease({
       'mcp/src/work-store.mjs',
       'hooks/src/event-spool.mjs',
       'ui/dist',
+      'ui/assets',
       'ui/THIRD_PARTY_NOTICES.md',
     ])
 
@@ -100,6 +101,7 @@ export async function packageRelease({
       await copyEntries(sourceRoot, adapterRoot, [
         host === 'codex' ? '.codex-plugin' : '.claude-plugin',
         '.mcp.json',
+        'assets',
         'hooks/hooks.json',
         'skills',
         'dist/mcp-server.mjs',

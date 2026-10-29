@@ -1,4 +1,5 @@
 import { createServer, request as createUpstreamRequest } from 'node:http'
+import { readFile } from 'node:fs/promises'
 
 const LOOPBACK = '127.0.0.1'
 const DEV_RELOAD_PATH = '/__rillo_dev/reload'
@@ -204,6 +205,18 @@ export function createDashboardDevGateway({ host, port, upstream, getHtml } = {}
           },
         })
       }
+      return
+    }
+    if (request.method === 'GET' && url.pathname === '/rillo.png') {
+      readFile(new URL('./assets/rillo.png', import.meta.url)).then((logo) => {
+        response.writeHead(200, {
+          'Content-Type': 'image/png',
+          'Content-Length': logo.byteLength,
+          'Cache-Control': 'no-cache',
+          'X-Content-Type-Options': 'nosniff',
+        })
+        response.end(logo)
+      }).catch(() => sendJson(response, 404, { error: { code: 'NOT_FOUND', message: 'logo not found' } }))
       return
     }
     if (request.method === 'GET' && url.pathname === '/favicon.ico') {

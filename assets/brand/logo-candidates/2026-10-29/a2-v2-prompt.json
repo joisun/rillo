@@ -1,0 +1,12 @@
+{
+  "label": "A2-v2",
+  "based_on": "rillo-a2-armadillo.png",
+  "provider": "Built-in image_gen; model identifier not exposed by the tool",
+  "constraint_delivery": "main-prompt constraints",
+  "prompt": "Refine the attached character image into one more distinctive, extremely simplified baby armadillo. Preserve its apricot and dark aubergine character palette, muted lilac square background, quiet friendly personality, upright orientation and emergence from the lower-right. Keep the same overall soft rounded visual language, but improve the silhouette and make the animal unmistakably an armadillo.\nMake the aubergine shell one elegant compact sweeping dome wrapping the BACK and lower body, like a gentle protective curl. The shell must clearly sit behind the apricot head, not become a helmet or fringe on the forehead. Give the head a short broad softly rounded armadillo muzzle oriented left, with two small blunt upright ears visibly attached to the head. Keep the face simple and expressive with just two small aubergine eyes; no nose or mouth is needed. Make the head a little larger relative to the body. Merge the lower body and feet into one clean tucked rounded base instead of three separate padded paws. Use only four to seven broad geometric shapes, thick rounded contours and two broad character color families. No shell stripes, grooves, scales, tail, claws, fur or ornamental details. Emphasize a bold memorable uninterrupted outer contour that reads clearly at 32 by 32.\nKeep the character large and visually dominant, close-cropped from the lower-right, with a small calm area of lilac at the upper-left. Keep every feature upright; no head tilt. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment.\nCreate one complete full-bleed 1:1 square image, approximately 1536 by 1536, with normal square outer corners. Constraints: one character only. No text, watermark, border, frame, scenery, floating props, thin lines, sharp tips, harsh shading, photorealistic texture, glossy hotspots, strong three-dimensional rendering or external cast shadow. The muted lilac background is perfectly uniform.",
+  "filename": "rillo-a2-armadillo-v2.png",
+  "dimensions": [
+    1254,
+    1254
+  ]
+}

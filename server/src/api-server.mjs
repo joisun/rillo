@@ -1,4 +1,5 @@
 import { createServer } from 'node:http'
+import { readFile } from 'node:fs/promises'
 
 import { RilloError } from '../../mcp/src/errors.mjs'
 import { readJson, sendJson } from './http-utils.mjs'
@@ -412,6 +413,17 @@ export function createApiServer({
           'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self' data:; frame-ancestors 'none'",
         })
         response.end(dashboardHtml)
+        return
+      }
+      if (request.method === 'GET' && pathname === '/rillo.png') {
+        const logo = await readFile(new URL('../../ui/assets/rillo.png', import.meta.url))
+        response.writeHead(200, {
+          'Content-Type': 'image/png',
+          'Content-Length': logo.byteLength,
+          'Cache-Control': 'public, max-age=3600',
+          'X-Content-Type-Options': 'nosniff',
+        })
+        response.end(logo)
         return
       }
       if (request.method === 'GET' && pathname === '/favicon.ico') {

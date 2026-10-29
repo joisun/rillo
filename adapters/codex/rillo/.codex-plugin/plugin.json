@@ -18,6 +18,8 @@
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
+    "composerIcon": "./assets/rillo.png",
+    "logo": "./assets/rillo.png",
     "displayName": "Rillo",
     "shortDescription": "Sessions and scheduled automation",
     "longDescription": "Search native sessions, read conversation history and manage scheduled automation.",

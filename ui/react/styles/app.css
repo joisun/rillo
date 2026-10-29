@@ -216,19 +216,12 @@
 }
 
 .app-shell__mark {
-  display: grid;
+  display: block;
   width: 24px;
   height: 24px;
   flex: 0 0 auto;
-  place-items: center;
   border-radius: 6px;
-  color: var(--accent-strong);
-  background: color-mix(in oklab, var(--accent) 12%, transparent);
-}
-
-.app-shell__mark svg {
-  width: 14px;
-  height: 14px;
+  object-fit: cover;
 }
 
 .app-navigation {
