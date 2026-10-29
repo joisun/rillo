@@ -254,6 +254,14 @@ git diff --check
 
 Schedule Markdown 与 CRUD API 的可选 `fast_mode` 为 boolean 或 null，仅 Codex 支持显式 boolean。省略/null 继承运行时默认，true 开启，false 使用普通速度；旧 definition 无需迁移。Run 沿用完整不可变 snapshot 保存选择。Codex interactive adapter 将显式值映射为 `turn/start.serviceTier` 的 `fast` / `default`；CLI invocation 对应 `-c service_tier="fast"` / `"default"`，继承时不传覆盖值。不要用降低 reasoning effort 实现 Fast mode，也不要修改用户的全局 Codex 配置。
 
+### Codex 临时失败恢复
+
+codex-interactive-session 在已确认的 turn/completed.failed 后读取 error.message 与 codexErrorInfo，必要时使用同轮 error 通知补全诊断，不再将所有 provider 失败折叠为 RUNTIME_PROCESS_FAILED。容量不足和限流使用独立错误码；未知失败仍保留泛化错误。
+
+同一个存活的 app-server、Thread 和 Run 中最多新增 3 个恢复 Turn，延迟 10/30/90 秒并增加最多 20% jitter。恢复输入只请求继续未完成工作，保留原 model、effort、serviceTier、workspace、sandbox 和已确认文件变更。RunService 仍只启动一次、持有一个 completion；原 occurrence 防重与 single-active-run 约束不变。重试期间不写终态、不重置任务总超时，也不重新提交初始 prompt。实时流复用 activity_started/completed 和递增 Turn revision，日志只记录有上限的 provider 错误与重试元数据。
+
+非只读 item 尚未完成或失败结果不确定时不自动继续。RPC 超时、IPC 关闭和进程退出不被当作可安全重放的模型错误。取消、任务超时和 shutdown 同时清理 retry timer；Stop 在 backoff 中验证旧 Turn revision 后直接结束 Run，不向已结束的 Turn 发 interrupt。旧 turn/start 响应不得复活已进入 backoff 的 Turn。OpenCode 不进入此恢复链路。
+
 ### Codex 连接关闭
 
 App-server client 的 `onClose` 是一次性生命周期通知，覆盖无 pending RPC 时的进程退出、pipe error 与主动关闭；晚订阅者立即收到已保存的关闭结果。启动未完成时关闭也必须拒绝 `started`，不能留下无限等待。Interactive session 在启动请求前订阅，完成时退订，异常关闭立即 settle 为 failed，保留数字 exit code、已有 session ID 和已确认 file changes；不把原始 stderr、RPC payload 或未完成回复写入错误字段。主动取消与正常 Turn 完成先 settle 再关连接，避免被错误覆盖。RunService 沿用 terminal persistence 与 SSE 更新界面。

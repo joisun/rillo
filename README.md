@@ -316,6 +316,16 @@ Codex Schedule 支持 `fast_mode: true`（开启 Fast mode）、`false`（明确
 Codex 的 `workspace-write` 只表示文件写入权限，不等于允许联网。联网采集任务可显式设置 `network_access: true`；`false` 禁止网络，省略/null 继承 Codex 默认。该字段只控制 workspace-write 下的 shell 网络访问，独立于 Fast mode、Web Search 和 MCP 设置；后台审批策略为 `never`，不会弹出额外授权。Dashboard 的“沙箱网络访问”与此对应，选择随 Run 快照保存，不修改全局 Codex 配置。完整采集、编稿、构建与浏览器检查应设置足够的 `timeout`（例如 `2h`），超时仍会终止运行。
 
 
+### Codex 临时错误重试
+
+Codex 定时 Run 遇到模型容量不足、临时限流、模型连接失败或 5xx 服务错误时，在原会话中最多自动重试 3 次。等待时间依次为 10、30、90 秒，并增加最多 20% 随机延迟。重试使用同一个 Run 和 Session，不切换模型，不重建调度记录；恢复提示要求核对已有结果，只完成未完成的工作。
+
+等待期间 Run 保持 running，实时活动显示重试次数与等待时间，stderr 日志记录原因。任务原有 timeout_seconds 覆盖所有尝试和等待，不因重试延长。点击停止、取消任务或关闭服务会清理等待，不再启动后续尝试。
+
+只在 Codex 明确报告轮次失败后重试。鉴权、余额或用量耗尽、参数和权限错误不重试；工具执行结果尚未确认、进程退出或控制连接断开时，不自动重放任务。达到上限后保留原生错误说明，容量不足返回 RUNTIME_MODEL_AT_CAPACITY，临时限流返回 RUNTIME_RATE_LIMITED，其余 provider 错误返回 RUNTIME_PROVIDER_ERROR。
+
+该机制用于 Codex 定时执行器；OpenCode 继续使用其原生重试行为。已有失败的 Run 不会被自动重新执行。
+
 ### OpenCode 定时执行器
 
 安装并配置本机 OpenCode 后，Editor 可选择 `OpenCode`。可通过 `OPENCODE_BIN` 指定可执行文件；模型使用 `provider/model`（例如 `openai/gpt-5.4`），Variant 对应 OpenCode 模型变体，留空继承本机默认设置。模型目录仅显示已连接 provider 的模型。

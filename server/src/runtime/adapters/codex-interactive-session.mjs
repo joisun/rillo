@@ -3,6 +3,9 @@ import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { skillsThreadConfig } from '../codex-capability-policy.mjs'
 
 const FINAL_MESSAGE_BYTES = 8 * 1024
+const RETRY_DELAYS_MS = [10_000, 30_000, 90_000]
+const RETRY_PROMPT = 'The previous turn failed because of a temporary model or network error. Continue the original task from this conversation. Check existing results and complete only unfinished work. Do not repeat successful file changes, commands, or external actions.'
+const READ_ONLY_ITEMS = new Set(['userMessage', 'agentMessage', 'reasoning', 'plan', 'webSearch', 'imageView', 'contextCompaction', 'enteredReviewMode', 'exitedReviewMode'])
 const FILE_CHANGE_KINDS = new Set(['add', 'update', 'delete'])
 
 export function createCodexInteractiveSessionFactory({
@@ -10,16 +13,18 @@ export function createCodexInteractiveSessionFactory({
   resolveCapabilityLaunch = async () => ({ disabledFeatures: [], configOverrides: [] }),
   setTimer = setTimeout,
   clearTimer = clearTimeout,
+  random = Math.random,
 } = {}) {
   if (typeof createClient !== 'function' || typeof setTimer !== 'function'
-    || typeof clearTimer !== 'function' || typeof resolveCapabilityLaunch !== 'function') {
+    || typeof clearTimer !== 'function' || typeof resolveCapabilityLaunch !== 'function'
+    || typeof random !== 'function') {
     throw new TypeError('Codex interactive session requires createClient')
   }
 
   return Object.freeze({
     create(options) {
       return createSession({
-        ...options, createClient, resolveCapabilityLaunch, setTimer, clearTimer,
+        ...options, createClient, resolveCapabilityLaunch, setTimer, clearTimer, random,
       })
     },
   })
@@ -27,7 +32,7 @@ export function createCodexInteractiveSessionFactory({
 
 function createSession({
   launch, run, signal, emit, onSpawn, createClient, resolveCapabilityLaunch,
-  setTimer, clearTimer,
+  setTimer, clearTimer, random, logs,
 }) {
   if (typeof launch?.executable !== 'string' || !run || typeof run !== 'object'
     || typeof run.workspace !== 'string' || typeof run.prompt !== 'string'
@@ -43,13 +48,26 @@ function createSession({
   let turnId = null
   let turnRevision = 0
   let finalMessage = ''
+  let retryTimer = null
+  let retries = 0
+  let requestRevision = 0
+  let providerError = null
+  let uncertainOperation = false
+  const pendingOperations = new Set()
   const fileChanges = new Map()
   let settled = false
   let resolveCompletion
   const completion = new Promise((resolve) => { resolveCompletion = resolve })
 
   const handleNotification = ({ method, params }) => {
+    if (settled) return
+    if (method === 'error' && params?.threadId === threadId
+      && turnId !== null && (!params.turnId || params.turnId === turnId)) {
+      providerError = params.error
+      return
+    }
     if (method === 'turn/started') {
+      if (retryTimer !== null) return
       const nextTurnId = params?.turn?.id
       if (params?.threadId !== threadId || typeof nextTurnId !== 'string') return
       if (turnId !== nextTurnId) {
@@ -77,6 +95,13 @@ function createSession({
       if (params?.threadId !== threadId || params?.turnId !== turnId
         || typeof params?.item?.id !== 'string') return
       const item = params.item
+      if (!READ_ONLY_ITEMS.has(item.type)) {
+        if (method === 'item/started') pendingOperations.add(item.id)
+        else {
+          pendingOperations.delete(item.id)
+          if (item.status !== 'completed' && item.success !== true) uncertainOperation = true
+        }
+      }
       if (method === 'item/completed' && item.type === 'agentMessage'
         && typeof item.text === 'string') {
         finalMessage = appendBounded('', item.text, FINAL_MESSAGE_BYTES)
@@ -106,9 +131,22 @@ function createSession({
     }
     if (method === 'turn/completed') {
       if (params?.threadId !== threadId || params?.turn?.id !== turnId) return
+      const failure = providerFailure(params.turn.error ?? providerError, finalMessage)
+      if (params.turn.status === 'failed') {
+        for (const item of params.turn.items ?? []) {
+          if (!READ_ONLY_ITEMS.has(item.type) && item.status !== 'completed' && item.success !== true) uncertainOperation = true
+        }
+        if (failure.retryable && pendingOperations.size === 0 && !uncertainOperation
+          && retries < RETRY_DELAYS_MS.length) {
+          scheduleRetry(failure)
+          return
+        }
+        writeRetryLog({ event: 'turn_failed', attempt: retries + 1, code: failure.code, message: failure.message })
+      }
       finish(turnResult(params.turn, {
         threadId,
         finalMessage,
+        failure,
         fileChanges: [...fileChanges.values()],
       }))
     }
@@ -170,32 +208,58 @@ function createSession({
         throw sessionError('RUNTIME_PROTOCOL_INVALID')
       }
       safeEmit(emit, { type: 'session', payload: { session_id: threadId } })
-      safeEmit(emit, {
-        type: 'user_message',
-        payload: { kind: 'prompt', text: run.prompt },
-      })
-      const startedTurn = await client.request('turn/start', compact({
-        threadId,
-        input: [{ type: 'text', text: run.prompt }],
-        cwd: run.workspace,
-        model: run.model,
-        effort: run.reasoning_effort,
-        serviceTier: run.fast_mode == null ? undefined : run.fast_mode ? 'fast' : 'default',
-      }))
-      if (settled) return completion
-      const startedTurnId = startedTurn?.turn?.id
-      if (typeof startedTurnId !== 'string' || startedTurnId.length === 0) {
-        throw sessionError('RUNTIME_PROTOCOL_INVALID')
-      }
-      if (turnId === null) {
-        turnId = startedTurnId
-        turnRevision += 1
-        safeEmit(emit, { type: 'turn_started', payload: { turn_revision: turnRevision } })
-      }
+      await startTurn(run.prompt, 'prompt')
     } catch (error) {
       finish(failedResult(error))
     }
     return completion
+  }
+
+  async function startTurn(text, kind) {
+    const request = ++requestRevision
+    try {
+      providerError = null
+      finalMessage = ''
+      safeEmit(emit, { type: 'user_message', payload: { kind, text } })
+      const result = await client.request('turn/start', compact({
+        threadId, input: [{ type: 'text', text }], cwd: run.workspace,
+        model: run.model, effort: run.reasoning_effort,
+        serviceTier: run.fast_mode == null ? undefined : run.fast_mode ? 'fast' : 'default',
+      }))
+      if (settled || request !== requestRevision || retryTimer !== null) return
+      const nextTurnId = result?.turn?.id
+      if (typeof nextTurnId !== 'string' || !nextTurnId) throw sessionError('RUNTIME_PROTOCOL_INVALID')
+      if (turnId === null) {
+        turnId = nextTurnId
+        turnRevision += 1
+        safeEmit(emit, { type: 'turn_started', payload: { turn_revision: turnRevision } })
+      }
+    } catch (error) {
+      if (!settled && request === requestRevision && retryTimer === null) finish(failedResult(error))
+    }
+  }
+
+  function scheduleRetry(failure) {
+    const delay = Math.ceil(RETRY_DELAYS_MS[retries] * (1 + random() * 0.2))
+    retries += 1
+    requestRevision += 1
+    turnId = null
+    const activity = { item_id: `runtime-retry-${retries}`, turn_revision: turnRevision,
+      label: `${Math.ceil(delay / 1000)} 秒后重试（${retries}/${RETRY_DELAYS_MS.length}）`,
+      attempt: retries, delay_ms: delay, error_code: failure.code }
+    writeRetryLog({ event: 'retry_scheduled', ...activity, message: failure.message })
+    safeEmit(emit, { type: 'activity_started', payload: activity })
+    retryTimer = setTimer(() => {
+      retryTimer = null
+      if (settled || signal.aborted) return
+      safeEmit(emit, { type: 'activity_completed', payload: { ...activity, state: 'completed' } })
+      void startTurn(RETRY_PROMPT, 'retry')
+    }, delay)
+    retryTimer?.unref?.()
+  }
+
+  function writeRetryLog(value) {
+    try { Promise.resolve(logs?.writeStderr?.(JSON.stringify(value) + '\n')).catch(() => {}) } catch {}
   }
 
   async function steer({ expectedTurnRevision, text } = {}) {
@@ -216,6 +280,11 @@ function createSession({
   }
 
   async function interrupt({ expectedTurnRevision } = {}) {
+    if (!settled && retryTimer !== null) {
+      if (expectedTurnRevision !== turnRevision) throw sessionError('TURN_CHANGED')
+      finish(failedResult(sessionError('RUN_CANCELED')))
+      return { accepted: true, turnRevision }
+    }
     assertCurrentTurn(expectedTurnRevision)
     await client.request('turn/interrupt', { threadId, turnId })
     return { accepted: true, turnRevision }
@@ -232,6 +301,8 @@ function createSession({
     if (settled) return
     settled = true
     clearTimer(timeout)
+    if (retryTimer !== null) clearTimer(retryTimer)
+    retryTimer = null
     signal.removeEventListener('abort', onAbort)
     unsubscribe()
     unsubscribeClosed()
@@ -251,7 +322,7 @@ function createSession({
     close: () => finish(failedResult(sessionError('RUN_CANCELED'))),
     completion,
     get turnRevision() { return turnRevision },
-    get steerable() { return !settled && turnRevision > 0 },
+    get steerable() { return !settled && turnId !== null && turnRevision > 0 },
   })
 }
 
@@ -260,17 +331,38 @@ function normalizedCapabilities(value) {
   return { skills: mode('skills'), integrations: mode('integrations') }
 }
 
-function turnResult(turn, { threadId, finalMessage, fileChanges }) {
+function turnResult(turn, { threadId, finalMessage, fileChanges, failure }) {
   const succeeded = turn?.status === 'completed'
   return {
     status: succeeded ? 'succeeded' : (turn?.status === 'interrupted' ? 'canceled' : 'failed'),
     exit_code: succeeded ? 0 : null,
-    error_code: succeeded ? null : (turn?.status === 'interrupted' ? 'RUN_CANCELED' : 'RUNTIME_PROCESS_FAILED'),
+    error_code: succeeded ? null : (turn?.status === 'interrupted' ? 'RUN_CANCELED' : failure.code),
     session_id: threadId,
-    final_message: finalMessage || null,
+    final_message: succeeded ? (finalMessage || null) : (failure.message || finalMessage || null),
     usage: null,
     file_changes: fileChanges,
   }
+}
+
+function providerFailure(error, fallbackMessage) {
+  const message = appendBounded('', typeof error?.message === 'string' ? error.message : fallbackMessage, FINAL_MESSAGE_BYTES)
+  const info = error?.codexErrorInfo
+  const kind = typeof info === 'string' ? info : Object.keys(info ?? {})[0] ?? ''
+  const normalized = kind.toLowerCase()
+  const detail = typeof info?.[kind] === 'object' ? info[kind] : info
+  const status = detail?.httpStatusCode
+  const permanent = ['contextwindowexceeded', 'usagelimitexceeded', 'badrequest', 'unauthorized', 'sandboxerror'].includes(normalized)
+    || /insufficient.quota|exceeded.{0,40}quota|quota.{0,40}exceeded|credit.balance|billing|usage.limit|spend.limit|account.deactivated|payment.required|invalid.api.key|unauthorized|authentication|permission.denied/i.test(message)
+    || (Number.isInteger(status) && status >= 400 && ![408, 429, 500, 502, 503, 504, 529].includes(status))
+  if (permanent) return { code: 'RUNTIME_PROVIDER_ERROR', message, retryable: false }
+  if (/selected model is at capacity|server.is.overloaded|model.{0,40}(?:overloaded|at capacity)/i.test(message)) {
+    return { code: 'RUNTIME_MODEL_AT_CAPACITY', message, retryable: true }
+  }
+  if (status === 429 || /rate.limit|too many requests/i.test(message)) return { code: 'RUNTIME_RATE_LIMITED', message, retryable: true }
+  const retryable = [408, 500, 502, 503, 504, 529].includes(status)
+    || ['httpconnectionfailed', 'responsestreamconnectionfailed', 'responsestreamdisconnected', 'responsetoomanyfailedattempts', 'internalservererror'].includes(normalized)
+    || /^(?:error: )?(?:error sending request|stream disconnected before completion|request timed out|connection (?:reset|refused|timed out))/i.test(message)
+  return { code: error ? 'RUNTIME_PROVIDER_ERROR' : 'RUNTIME_PROCESS_FAILED', message, retryable }
 }
 
 function failedResult(error) {
