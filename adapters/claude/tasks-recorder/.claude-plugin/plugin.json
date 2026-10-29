@@ -1,8 +1,8 @@
 {
   "name": "tasks-recorder",
   "displayName": "Tasks Recorder",
-  "version": "0.12.0",
-  "description": "Browse native sessions and register explicit session delegation relations.",
+  "version": "0.13.0",
+  "description": "Search native sessions, read conversation history and manage scheduled automation.",
   "author": {
     "name": "Joi Sun",
     "url": "https://github.com/joisun"

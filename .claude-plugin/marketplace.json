@@ -7,8 +7,8 @@
   "plugins": [
     {
       "name": "tasks-recorder",
-      "description": "Browse native agent sessions and register collaboration links in a local dashboard",
-      "version": "0.12.0",
+      "description": "Search native agent sessions, read conversation history, and manage scheduled automation",
+      "version": "0.13.0",
       "source": "./adapters/claude/tasks-recorder",
       "author": {
         "name": "Joi Sun"

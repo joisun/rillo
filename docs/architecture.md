@@ -21,6 +21,10 @@ macOS `launchd` 与 Linux `systemd --user` 均只管理一个 `taskd` 常驻服�
 
 installer 按 Darwin/Linux 选择不同命名的自包含 archive，校验平台对应的 SHA256 后再切换 current；runtime 本身为同一份跨平台 JavaScript，Node.js 由用户安装。Linux 优先使用 sha256sum，macOS 可使用 shasum。两平台均检查 Node.js 24+、服务配置及预构建入口；健康检查固定走本机地址，展示地址可使用server_public_url。服务卸载失败时不继续删除程序文件。CI 同时运行 macos-latest 和 ubuntu-latest；Release 输出两种 service archive 和原有 adapter archive。
 
+所有archive使用USTAR，显式关闭xattrs与COPYFILE元数据，排除AppleDouble和.DS_Store，生成后检查唯一根目录与元数据条目。installer先对完整列表检查路径越界，再从非元数据条目确定唯一程序根目录；解包继续排除元数据，且根目录必须匹配package.json版本。不得根据压缩包的第一条记录推断根目录。
+
+Release分为macOS构建、Ubuntu安装验证和发布三个job。Ubuntu下载macOS产生的原始archive、installer及SHA256SUMS，在临时HOME中实际安装并直接启动随机端口的taskd，检查版本、Dashboard及SSE，不调用systemd安装。publish依赖Linux验证成功。运行入口server/taskd.mjs读取相邻package.json并注入config.packageVersion，作为/api/v1/meta的service_version；已安装runtime不应返回source。
+
 Linux 按 Web 服务使用，不启动浏览器、桌面终端或 tmux；`tasks-recorder open` 仅返回配置的公开访问地址，未配置时返回本机地址。默认可通过 SSH loopback 转发访问，也可显式配置原生网络访问。terminalLauncher.supported=false 时 providers 的 resume=false，settings 返回 local_actions_supported=false。Sessions 不显示终端启动按钮，Scheduled 保留 Session ID 复制并禁用服务器本机文件打开操作，终端选择设置不出现；桌面操作 API 仍返回 typed unsupported。macOS 操作保持原有实现。状态读取通过已有 Codex Unix socket；没有共享服务器时只标记状态不可用，不启动任何 daemon 或使用进程反查。
 
 server_listen_host只接受127.0.0.1或0.0.0.0，省略时沿用server_host；已有server_host保持本机值，旧插件无需理解新增配置。网络模式必须配置server_public_url和非空server_allowed_clients，后者只接受完整IP。serverBaseUrl与AGENT_TASKS_SERVER_URL保持loopback，供CLI/MCP及controller健康检查使用；serverPublicUrl只用于浏览器地址、允许的Host及同源Origin检查。createApiServer直接提供页面、API和SSE，无第二个代理进程。请求以socket.remoteAddress检查客户端，忽略X-Forwarded-For；本机始终允许，网络客户端必须明确列入配置。Origin必须对应当前Host，未声明的Host、跨Origin及未允许的客户端均返回403。
@@ -173,7 +177,9 @@ Codex timeline的from/to均省略时，scope=session，主读thread/items/list�
 
 workspaces返回每个目录可选的去重branch_names，直接从同一100条原生元数据页聚合，不增加索引扫描；跨页分支名由前端去重，未知分支不生成子节点。新增GET /api/v1/session-browser/:provider/branches返回分支名、已观测会话数、去重workspace_paths、session_ids与next_cursor；只读取同一来源的100条元数据页，与目录及列表复用缓存。branch参数按完整名称精确筛选列表与原生正文搜索结果，不向原生接口发送未经支持的分支过滤参数。过滤后的空页保留原生cursor，前端自动继续；分支目录跨页按会话ID去重，绿点由已载入会话ID与live presence匹配。没有分支元数据的会话仍可在全部会话中访问。React Aria空结果占位使用display:contents，分页观察器跳过无布局尺寸的占位，转而观察真实分页标记。
 
-API v5 的 MCP 仅公开 session_sources、session_link 与 session_unlink。Task lifecycle、attribution、checkpoint、summary、projection、spool 不再进入运行链路。旧 Task 路由统一 410 TASKS_RETIRED，正常请求还校验客户端 API version；旧插件不能静默继续写入。
+API v5 的 MCP 通过 mcp/src/session-client.mjs 转发已有 HTTP 接口，提供原生会话查询、正文搜索、关系查询及登记，和定时任务 CRUD、启停、立即执行、执行记录与 runtime 查询。完整工具表见 README。修改类工具保留 expected_etag 并发检查，schedule_run 要求幂等键。查询保留游标和搜索范围，不保存另一份对话正文。Task lifecycle、attribution、checkpoint、summary、projection、spool 不再进入运行链路。旧 Task 路由统一 410 TASKS_RETIRED，正常请求还校验客户端 API version；旧插件不能静默继续写入。
+
+MCP 的 session_messages 保持默认 page 分页，并增加 head/tail/all 历史读取模式。head/all 请求 REST messages 的 order=asc，由 Codex 原生 thread/items/list 或 thread/turns/list 正向翻页；tail 使用 desc，所有输出批次内部均按时间正序排列。历史读取游标包含 provider/store/session/mode 作用域、原生页游标与页内偏移，不保存正文。单次聚合限制为 50 页、25 秒与 max_chars；完整性依据历史是否读完及原生/聚合截断标记，不把局部内容称为全部。原生消息方向通过响应 order 校验，旧服务必须先升级，禁止静默把最近页当作开头。
 
 codex-rollout-timing仅在可展示消息缺少原生时间时启用。路径来自thread/read的私有path，通过WeakMap传给时间读取器，不公开给浏览器；realpath后必须位于配置数据根的sessions或archived_sessions内。最多读取64MiB文件、单行4Mi字符、50,000条消息；缓存16份时间/ID/摘要索引、5分钟TTL，文件大小或mtime变化即失效，合并同路径并发扫描。精确role/item ID优先；生成ID仅允许turnId/role/完整文本摘要唯一匹配，歧义保留未知。正文只在扫描时临时解析，不缓存、写库或日志；图表和正文使用同一补齐结果。
 

@@ -33,7 +33,7 @@ tasks-recorder status
 普通安装不需要 clone repository、`npm install` 或 `npm ci`。更谨慎的固定版本安装方式：
 
 ```bash
-version=v0.12.0
+version=v0.13.0
 curl -fsSLO "https://raw.githubusercontent.com/joisun/tasks-recorder/${version}/install.sh"
 less install.sh
 bash install.sh --version "$version"
@@ -192,7 +192,64 @@ Live Session 只干预当前 active Turn，不在 Dashboard 内创建第二轮�
 
 ### Register collaboration links
 
-插件只暴露三个 MCP 工具：`session_sources` 查询已配置的 provider 与 store_id，`session_link` 登记协作关系，`session_unlink` 解除已登记关系。每个端点使用完整引用 `{ provider, store_id, session_id }`；Codex 的 session_id 必须是具体 `thread.id`，不能用 fork 共享的 root sessionId。
+插件暴露以下 MCP 工具，共用 Dashboard 的 HTTP API v5 和原生数据来源：
+
+| 工具 | 用途 |
+| --- | --- |
+| `runtime_list` | 查询已配置的 agent runtime 及可用性 |
+| `schedule_list`、`schedule_get` | 列出定时任务，读取完整定义、Prompt 和 `etag` |
+| `schedule_create`、`schedule_update`、`schedule_delete` | 创建、按字段修改、将定义移入 `.trash`，保留执行记录 |
+| `schedule_pause`、`schedule_resume` | 暂停或启用后续调度，不停止已经开始的执行 |
+| `schedule_run`、`schedule_runs`、`run_read` | 立即执行、查询最近执行记录、查看状态和可选对话 |
+| `session_sources` | 查询会话 provider 与准确的 `store_id` |
+| `session_list`、`session_search` | 按 workspace、branch 分页查询，搜索用户和助手正文 |
+| `session_read`、`session_messages` | 读取会话元数据、分页正文，可在单个会话中搜索或按时间定位 |
+| `session_children`、`session_relations` | 查询子会话及委派、subagent、fork 关系 |
+| `session_link`、`session_unlink` | 登记或解除手动委派关系 |
+
+修改、删除、启停需传入 `schedule_get` 返回的最新 `etag`，字段名为 `expected_etag`。发生 `SCHEDULE_VERSION_CONFLICT` 后重新读取并核对修改，工具不会自动覆盖。`schedule_create` 创建启用状态的任务，默认只读 sandbox、禁用 skills 和 integrations；`cadence` 支持 once、hourly、daily、weekly、monthly，周期时间使用服务所在机器的时区，weekly 的 weekdays 为周一 1 至周日 7。workspace 必须是服务器上存在的绝对路径。
+
+例如，每天 09:00 执行：
+
+```json
+{
+  "title": "每日项目检查",
+  "prompt": "检查项目变化并生成报告。",
+  "workspace": "/srv/project",
+  "agent": "codex",
+  "cadence": { "kind": "daily", "hour": 9, "minute": 0 }
+}
+```
+
+`schedule_run` 必须传入 `idempotency_key`，重试同一次执行时复用该值。创建任务本身不支持幂等重试，响应丢失后先查询任务，避免重复创建。`schedule_runs` 默认返回最近 20 条，最多 100 条，`truncated` 表示还有更多记录。会话查询与搜索返回 `next_cursor`，有游标的空搜索页不代表查无结果；继续使用相同筛选与下一页游标。`session_messages` 的 `query` 与时间定位 `at` 不能同时使用。
+
+`session_messages` 还支持 `mode`：
+
+| mode | 行为 |
+| --- | --- |
+| `page`（默认） | 沿用原生分页，使用 `limit`、`cursor`，可搜索 `query` 或定位 `at` |
+| `head` | 从开头取 `count` 条消息，默认 20，最多 1000 |
+| `tail` | 从结尾取 `count` 条消息，默认 20，最多 1000 |
+| `all` | 从开头自动翻页，读取整个会话的用户和助手消息 |
+
+head、tail、all 返回的每批消息均按时间正序排列，不包括工具执行记录与 reasoning。它们不能与 `limit`、`query`、`at` 混用。head/all 直接使用原生正向分页，无需扫描最近历史才能取得第一条。tail 的继续游标指向更早的消息；head/all 的继续游标指向更晚的消息。继续读取时传相同 mode、完整 SessionRef 及返回的 cursor，不要将历史游标用于 page。
+
+例如，读取会话最后 10 条消息：
+
+```json
+{
+  "provider": "codex",
+  "store_id": "session_sources 返回的 store_id",
+  "session_id": "实际 thread.id",
+  "mode": "tail",
+  "count": 10
+}
+```
+
+将 mode 改为 head 可读开头 10 条；改为 all 并去掉 count 可自动读取完整历史。单次历史读取最多 50 页、25 秒，`max_chars` 默认 200000，可设为 1000 至 1000000。到达上限会返回 `truncated: true` 和 `next_cursor`，继续读取不会跳过页内剩余消息。若单条消息超过预算，返回空消息数组和 `required_chars`，增大 max_chars 后用原游标重试。`complete: true` 只表示已经到达整个历史边界且内容没有截断；head/tail 满足条数但还有历史时，complete 仍为 false。原生展示接口的长消息文本最多 16 KiB，截断会如实标记，不能将此时的 all 结果称为完整原文。旧服务不支持正向读取时明确报错，需要同时更新服务与插件。
+
+
+每个端点使用完整引用 `{ provider, store_id, session_id }`；Codex 的 session_id 必须是具体 `thread.id`，不能用 fork 共享的 root sessionId。
 
 例如，先查询来源，再将实际创建的子会话登记到主会话下（以下为假设引用）：
 
@@ -362,6 +419,7 @@ curl -fsSL https://raw.githubusercontent.com/joisun/tasks-recorder/main/install.
 
 ```bash
 curl -fsS http://127.0.0.1:43127/health/ready
+curl -fsS http://127.0.0.1:43127/api/v1/meta
 curl -fsS http://127.0.0.1:43127/api/v1/status
 curl -fsS http://127.0.0.1:43127/api/v1/runtimes
 tail -n 100 ~/Library/Logs/tasks-recorder/taskd.stderr.log
@@ -416,6 +474,16 @@ npm run taskd -- status
 ```bash
 npm run package:release
 ```
+
+打包脚本使用 USTAR，关闭扩展属性与 AppleDouble，排除 `._*` 和 `.DS_Store`，并验证每个压缩包的唯一根目录。服务启动时从自身的 `package.json` 读取版本，`/api/v1/meta.service_version` 应与安装包版本一致。
+
+发布目录备齐 `install.sh` 和 `SHA256SUMS` 后，在目标平台直接验证安装包：
+
+```bash
+bash scripts/verify-release-install.sh release "$(node -p 'require("./package.json").version')"
+```
+
+验证使用临时 HOME、空任务目录和随机端口，实际执行目录中的安装脚本，再检查 Dashboard、健康接口、SSE 和运行版本；结束后清理临时文件与进程，不注册后台服务。Release workflow 将 macOS 构建的同一批文件交给 Ubuntu 运行此检查，通过后才发布 GitHub Release。
 
 ## Security and privacy
 

@@ -1,7 +1,7 @@
 {
   "name": "tasks-recorder",
-  "version": "0.12.0",
-  "description": "Browse native sessions and register explicit session delegation relations.",
+  "version": "0.13.0",
+  "description": "Search native sessions, read conversation history and manage scheduled automation.",
   "author": {
     "name": "Joi Sun",
     "url": "https://github.com/joisun"
@@ -19,8 +19,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Tasks Recorder",
-    "shortDescription": "Browse native agent sessions",
-    "longDescription": "Browse native agent sessions and register explicit session relations in the local Sessions dashboard.",
+    "shortDescription": "Sessions and scheduled automation",
+    "longDescription": "Search native sessions, read conversation history and manage scheduled automation.",
     "developerName": "Joi Sun",
     "category": "Developer Tools",
     "capabilities": [
@@ -29,8 +29,9 @@
       "Write"
     ],
     "defaultPrompt": [
-      "List session providers and their store IDs.",
-      "Link a delegated child session to its parent."
+      "Find a previous session by keyword.",
+      "Read the last 10 messages of a session.",
+      "Create or update a scheduled task."
     ],
     "websiteURL": "https://github.com/joisun/tasks-recorder"
   }
