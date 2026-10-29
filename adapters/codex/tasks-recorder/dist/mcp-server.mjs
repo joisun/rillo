@@ -6695,7 +6695,7 @@ var require_formats = __commonJS({
     }
     var TIME = /^(\d\d):(\d\d):(\d\d(?:\.\d+)?)(z|([+-])(\d\d)(?::?(\d\d))?)?$/i;
     function getTime(strictTimeZone) {
-      return function time3(str) {
+      return function time4(str) {
         const matches = TIME.exec(str);
         if (!matches)
           return false;
@@ -6741,10 +6741,10 @@ var require_formats = __commonJS({
     }
     var DATE_TIME_SEPARATOR = /t|\s/i;
     function getDateTime(strictTimeZone) {
-      const time3 = getTime(strictTimeZone);
+      const time4 = getTime(strictTimeZone);
       return function date_time(str) {
         const dateTime = str.split(DATE_TIME_SEPARATOR);
-        return dateTime.length === 2 && date5(dateTime[0]) && time3(dateTime[1]);
+        return dateTime.length === 2 && date5(dateTime[0]) && time4(dateTime[1]);
       };
     }
     function compareDateTime(dt1, dt2) {
@@ -8560,13 +8560,13 @@ function time(args) {
   return new RegExp(`^${timeSource(args)}$`);
 }
 function datetime(args) {
-  const time3 = timeSource({ precision: args.precision });
+  const time4 = timeSource({ precision: args.precision });
   const opts = ["Z"];
   if (args.local)
     opts.push("");
   if (args.offset)
     opts.push(`([+-](?:[01]\\d|2[0-3]):[0-5]\\d)`);
-  const timeRegex2 = `${time3}(?:${opts.join("|")})`;
+  const timeRegex2 = `${time4}(?:${opts.join("|")})`;
   return new RegExp(`^${dateSource}T(?:${timeRegex2})$`);
 }
 var string = (params) => {
@@ -23098,7 +23098,7 @@ function localOrigin(value) {
 }
 function createSessionClient({ baseUrl, fetchImpl = globalThis.fetch, timeoutMs = 35e3 }) {
   const origin = localOrigin(baseUrl);
-  async function request(path, { method = "GET", body } = {}) {
+  async function request(path, { method = "GET", body, signal } = {}) {
     let response;
     try {
       response = await fetchImpl(`${origin}${path}`, {
@@ -23109,7 +23109,7 @@ function createSessionClient({ baseUrl, fetchImpl = globalThis.fetch, timeoutMs 
           ...body === void 0 ? {} : { "Content-Type": "application/json" }
         },
         ...body === void 0 ? {} : { body: JSON.stringify(body) },
-        signal: AbortSignal.timeout(timeoutMs)
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs)
       });
     } catch {
       throw new TaskRecorderError("SERVICE_UNAVAILABLE", "Tasks Recorder service is unavailable. Run `tasks-recorder status` or install the service.");
@@ -23123,13 +23123,121 @@ function createSessionClient({ baseUrl, fetchImpl = globalThis.fetch, timeoutMs 
     return result;
   }
   async function compatibleRequest(path, options) {
-    const meta3 = await request("/api/v1/meta");
+    const meta3 = await request("/api/v1/meta", { signal: options?.signal });
     if (meta3.api_version !== API_VERSION) {
       throw new TaskRecorderError("API_VERSION_MISMATCH", `Tasks Recorder API v${API_VERSION} is required (service reports ${meta3.api_version ?? "unknown"}). Update the client and service together.`);
     }
     return request(path, options);
   }
+  function queryPath(path, input = {}) {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(input)) {
+      if (value !== void 0 && value !== null) params.set(key, String(value));
+    }
+    return `${path}?${params}`;
+  }
+  function sessionPath({ provider, session_id }, action) {
+    return `/api/v1/session-browser/${encodeURIComponent(provider)}/sessions/${encodeURIComponent(session_id)}/${action}`;
+  }
+  async function sessionMessages(input) {
+    const { mode = "page", count = 20, max_chars = 2e5, ...filters2 } = input;
+    const path = sessionPath(filters2, "messages");
+    if (mode === "page") return compatibleRequest(queryPath(path, filters2));
+    if (filters2.query || filters2.at || filters2.limit !== void 0) {
+      throw new TaskRecorderError("SESSION_BROWSER_INPUT_INVALID", "head, tail and all cannot be combined with query, at or limit; use count instead.");
+    }
+    const scope = JSON.stringify([filters2.provider, filters2.store_id, filters2.session_id, mode]);
+    let cursor = null;
+    let offset = 0;
+    if (filters2.cursor) {
+      try {
+        if (!filters2.cursor.startsWith("history:")) throw new Error();
+        const saved = JSON.parse(Buffer.from(filters2.cursor.slice(8), "base64url").toString("utf8"));
+        if (saved.scope !== scope || !(saved.cursor === null || typeof saved.cursor === "string") || !Number.isSafeInteger(saved.offset) || saved.offset < 0 || saved.offset > 1e3) throw new Error();
+        cursor = saved.cursor;
+        offset = saved.offset;
+      } catch {
+        throw new TaskRecorderError("SESSION_BROWSER_INPUT_INVALID", "History cursor is invalid for this session and mode.");
+      }
+    }
+    const continuation = (nativeCursor, position) => "history:" + Buffer.from(JSON.stringify({ scope, cursor: nativeCursor, offset: position })).toString("base64url");
+    const messages = [];
+    let characters = 0;
+    let truncated = false;
+    let session = null;
+    const visited = /* @__PURE__ */ new Set();
+    const deadline = Date.now() + 25e3;
+    for (let pageNumber = 0; pageNumber < 50; pageNumber += 1) {
+      if (Date.now() >= deadline) return result(continuation(cursor, offset), true);
+      if (visited.has(cursor)) throw new TaskRecorderError("SESSION_BROWSER_READ_FAILED", "History pagination repeated a cursor.");
+      visited.add(cursor);
+      let page2;
+      try {
+        page2 = await compatibleRequest(queryPath(path, { store_id: filters2.store_id, cursor, order: mode === "tail" ? "desc" : "asc", limit: 100 }), { signal: AbortSignal.timeout(Math.max(1, deadline - Date.now())) });
+      } catch (error51) {
+        if (Date.now() >= deadline) return result(continuation(cursor, offset), true);
+        throw error51;
+      }
+      if (page2.order !== (mode === "tail" ? "desc" : "asc")) throw new TaskRecorderError("SESSION_BROWSER_UNSUPPORTED", "Update the Tasks Recorder service before using head, tail or all history modes.");
+      session = page2.session;
+      truncated ||= page2.truncated === true;
+      const rows = mode === "tail" ? [...page2.messages].reverse() : page2.messages;
+      for (let index = offset; index < rows.length; index += 1) {
+        const row = rows[index];
+        const size = JSON.stringify(row).length;
+        if (characters + size > max_chars) return { ...result(continuation(cursor, index), true), ...messages.length ? {} : { required_chars: size } };
+        messages.push(row);
+        characters += size;
+        truncated ||= row.truncated === true;
+        if (mode !== "all" && messages.length >= count) {
+          const next = index + 1 < rows.length ? continuation(cursor, index + 1) : page2.next_cursor ? continuation(page2.next_cursor, 0) : null;
+          return result(next, false);
+        }
+      }
+      cursor = page2.next_cursor;
+      offset = 0;
+      if (!cursor) return result(null, false);
+    }
+    return result(continuation(cursor, offset), true);
+    function result(next_cursor, limited) {
+      return {
+        session,
+        mode,
+        messages: mode === "tail" ? [...messages].reverse() : messages,
+        returned_count: messages.length,
+        order: "asc",
+        next_cursor,
+        has_more: next_cursor !== null,
+        complete: next_cursor === null && !truncated && !limited,
+        truncated: truncated || limited
+      };
+    }
+  }
   return {
+    runtimes: () => compatibleRequest("/api/v1/runtimes"),
+    listSchedules: () => compatibleRequest("/api/v1/schedules"),
+    getSchedule: ({ schedule_id }) => compatibleRequest(`/api/v1/schedules/${encodeURIComponent(schedule_id)}`),
+    createSchedule: (input) => compatibleRequest("/api/v1/schedules", { method: "POST", body: input }),
+    updateSchedule: ({ schedule_id, ...body }) => compatibleRequest(`/api/v1/schedules/${encodeURIComponent(schedule_id)}`, { method: "PATCH", body }),
+    deleteSchedule: ({ schedule_id, ...body }) => compatibleRequest(`/api/v1/schedules/${encodeURIComponent(schedule_id)}`, { method: "DELETE", body }),
+    pauseSchedule: ({ schedule_id, ...body }) => compatibleRequest(`/api/v1/schedules/${encodeURIComponent(schedule_id)}/pause`, { method: "POST", body }),
+    resumeSchedule: ({ schedule_id, ...body }) => compatibleRequest(`/api/v1/schedules/${encodeURIComponent(schedule_id)}/resume`, { method: "POST", body }),
+    runSchedule: ({ schedule_id, ...body }) => compatibleRequest(`/api/v1/schedules/${encodeURIComponent(schedule_id)}/run`, { method: "POST", body }),
+    async scheduleRuns({ schedule_id, limit = 20 }) {
+      const result = await compatibleRequest(`/api/v1/schedules/${encodeURIComponent(schedule_id)}/runs`);
+      return { ...result, runs: result.runs.slice(0, limit), truncated: result.runs.length > limit };
+    },
+    async readRun({ run_id, include_conversation = false }) {
+      const path = `/api/v1/runs/${encodeURIComponent(run_id)}`;
+      const result = await compatibleRequest(path);
+      if (!include_conversation) return result;
+      return { ...result, conversation: await compatibleRequest(`${path}/conversation`) };
+    },
+    listSessions: ({ provider, ...filters2 }) => compatibleRequest(queryPath(`/api/v1/session-browser/${encodeURIComponent(provider)}/sessions`, filters2)),
+    readSession: (ref) => compatibleRequest(queryPath(sessionPath(ref, "read"), { store_id: ref.store_id })),
+    sessionMessages,
+    sessionChildren: ({ provider, session_id, ...filters2 }) => compatibleRequest(queryPath(sessionPath({ provider, session_id }, "children"), filters2)),
+    sessionRelations: (ref) => compatibleRequest(queryPath("/api/v1/session-browser/relations", ref)),
     providers: () => compatibleRequest("/api/v1/session-browser/providers"),
     link: (input) => compatibleRequest("/api/v1/session-browser/links", { method: "POST", body: input }),
     unlink: (input) => compatibleRequest("/api/v1/session-browser/links", { method: "DELETE", body: input }),
@@ -31072,12 +31180,54 @@ var EMPTY_COMPLETION_RESULT = {
 };
 
 // mcp/src/tools.mjs
-var SERVER_INSTRUCTIONS = `Browse native sessions in the Sessions dashboard. Use session_sources to obtain the exact provider and store_id before registering relations. SessionRef is {provider, store_id, session_id}; for Codex session_id is thread.id. After a delegated child session exists, register its actual identity with session_link. Never guess a session ID from an execution, agent key, PID, worktree, or title. Use session_unlink only to remove an explicitly registered relation; native subagent/fork relations are read-only. No Task, heartbeat, attribution, checkpoint or automatic summary recording is needed. Never edit local databases directly.`;
+var SERVER_INSTRUCTIONS = `Query native sessions and manage scheduled automation through these tools. Use runtime_list before choosing a schedule agent. Read schedule_get before changing a schedule and pass its latest etag as expected_etag; on SCHEDULE_VERSION_CONFLICT read again and reconsider the change, never silently overwrite. schedule_create creates an enabled task; cadence uses the service machine timezone. Reuse the same idempotency_key when retrying schedule_run. Session search covers user and assistant text, not just previews. Follow next_cursor even when a search page has no matches; do not claim that a partial page is the complete result. Use session_sources to obtain the exact provider and store_id before registering relations. SessionRef is {provider, store_id, session_id}; for Codex session_id is thread.id. After a delegated child session exists, register its actual identity with session_link. Never guess a session ID from an execution, agent key, PID, worktree, or title. Use session_unlink only to remove an explicitly registered relation; native subagent/fork relations are read-only. No Task, heartbeat, attribution, checkpoint or automatic summary recording is needed. Never edit local databases directly.`;
 var sessionRef = external_exports.object({
   provider: external_exports.string().min(1),
   store_id: external_exports.string().min(1),
   session_id: external_exports.string().min(1)
 }).strict();
+var page = {
+  limit: external_exports.number().int().min(1).max(100).optional(),
+  cursor: external_exports.string().max(8192).optional()
+};
+var filters = {
+  provider: external_exports.string().min(1),
+  workspace: external_exports.string().min(1).max(4096).describe("Absolute workspace directory on the service machine.").optional(),
+  branch: external_exports.string().min(1).max(200).optional(),
+  archived: external_exports.boolean().optional(),
+  ...page
+};
+var scheduleId = { schedule_id: external_exports.string().uuid() };
+var scheduleVersion = {
+  ...scheduleId,
+  expected_etag: external_exports.string().regex(/^[0-9a-f]{64}$/).describe("Latest etag from schedule_get. A stale value fails with SCHEDULE_VERSION_CONFLICT.")
+};
+var timezone = { timezone_mode: external_exports.literal("system").optional() };
+var time3 = { hour: external_exports.number().int().min(0).max(23), minute: external_exports.number().int().min(0).max(59) };
+var cadence = external_exports.discriminatedUnion("kind", [
+  external_exports.object({ kind: external_exports.literal("once"), ...timezone, at: external_exports.string().min(1).describe("Future ISO timestamp within 366 days; include an explicit UTC offset.") }).strict(),
+  external_exports.object({ kind: external_exports.literal("hourly"), ...timezone, minute: time3.minute }).strict(),
+  external_exports.object({ kind: external_exports.literal("daily"), ...timezone, ...time3 }).strict(),
+  external_exports.object({ kind: external_exports.literal("weekly"), ...timezone, weekdays: external_exports.array(external_exports.number().int().min(1).max(7)).min(1).max(7).describe("Monday=1 through Sunday=7."), ...time3 }).strict(),
+  external_exports.object({ kind: external_exports.literal("monthly"), ...timezone, day: external_exports.number().int().min(1).max(31), ...time3 }).strict()
+]).describe("Recurring schedules use the service machine timezone.");
+var scheduleFields = {
+  title: external_exports.string().trim().min(1).max(200),
+  prompt: external_exports.string().trim().min(1).max(2e4),
+  workspace: external_exports.string().min(1).max(4096).describe("Existing absolute directory on the service machine."),
+  cadence,
+  agent: external_exports.string().min(1).max(64).optional(),
+  sandbox_mode: external_exports.enum(["read-only", "workspace-write", "danger-full-access"]).optional(),
+  model: external_exports.string().max(256).nullable().optional(),
+  reasoning_effort: external_exports.string().max(64).nullable().optional(),
+  fast_mode: external_exports.boolean().nullable().optional(),
+  network_access: external_exports.boolean().nullable().optional(),
+  timeout_seconds: external_exports.number().int().min(60).max(86400).optional(),
+  capabilities: external_exports.object({
+    skills: external_exports.enum(["inherit", "disabled"]).optional(),
+    integrations: external_exports.enum(["inherit", "disabled"]).optional()
+  }).strict().optional()
+};
 var outputSchema = external_exports.object({}).catchall(external_exports.unknown());
 function handler(operation) {
   return async (input) => {
@@ -31090,7 +31240,7 @@ function handler(operation) {
         ok: false,
         error: {
           code: known ? error51.code : "INTERNAL_ERROR",
-          message: known ? error51.message : "Session operation failed.",
+          message: known ? error51.message : "Tasks Recorder operation failed.",
           ...known && error51.details !== void 0 ? { details: error51.details } : {}
         }
       };
@@ -31100,7 +31250,7 @@ function handler(operation) {
 }
 function createTasksRecorderServer({ service }) {
   const server = new McpServer(
-    { name: "tasks-recorder", version: "0.8.8" },
+    { name: "tasks-recorder", version: "0.13.0" },
     { instructions: SERVER_INSTRUCTIONS }
   );
   server.registerTool("session_sources", {
@@ -31121,6 +31271,30 @@ function createTasksRecorderServer({ service }) {
     outputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false }
   }, handler((input) => service.unlink(input)));
+  const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+  const write = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+  const tools = [
+    ["runtime_list", "List installed agent runtimes and their availability before creating a schedule.", {}, "runtimes", readOnly],
+    ["schedule_list", "List scheduled tasks, current etags, execution summaries and invalid Markdown definitions.", {}, "listSchedules", readOnly],
+    ["schedule_get", "Read a scheduled task including its prompt and latest etag before an edit, delete, pause or resume.", scheduleId, "getSchedule", readOnly],
+    ["schedule_create", "Create an enabled scheduled task backed by Markdown. Does not execute it immediately. Default sandbox is read-only; skills and integrations are disabled unless specified.", scheduleFields, "createSchedule", { ...write, idempotentHint: false }],
+    ["schedule_update", "Patch only supplied fields of a scheduled task using its latest etag. Rejects concurrent changes.", { ...scheduleVersion, patch: external_exports.object(scheduleFields).partial().strict().refine((value) => Object.keys(value).length > 0, "Provide at least one field to update.") }, "updateSchedule", write],
+    ["schedule_delete", "Move a scheduled task definition to .trash using its latest etag. Preserves previous execution records.", scheduleVersion, "deleteSchedule", { ...write, destructiveHint: true }],
+    ["schedule_pause", "Disable future scheduled executions using the latest etag. Does not stop an already running execution.", scheduleVersion, "pauseSchedule", write],
+    ["schedule_resume", "Enable future scheduled executions using the latest etag.", scheduleVersion, "resumeSchedule", write],
+    ["schedule_run", "Start one execution now, including for a paused task. Reuse the same idempotency_key when retrying to prevent duplicate execution.", { ...scheduleId, idempotency_key: external_exports.string().min(1).max(128) }, "runSchedule", { ...write, openWorldHint: true }],
+    ["schedule_runs", "Read recent execution records for a scheduled task. Returns truncated=true when more records exist.", { ...scheduleId, limit: page.limit }, "scheduleRuns", readOnly],
+    ["run_read", "Read execution status and result. Optionally include the recorded conversation.", { run_id: external_exports.string().min(1).max(256), include_conversation: external_exports.boolean().optional() }, "readRun", readOnly],
+    ["session_list", "List native sessions by provider, workspace or branch. Follow next_cursor for more results; includes parent and fork relations.", filters, "listSessions", readOnly],
+    ["session_search", "Search user and assistant message bodies across native sessions. Returns matching snippets and pagination; an empty page with next_cursor is not the end.", { ...filters, query: external_exports.string().trim().min(1).max(256) }, "listSessions", readOnly],
+    ["session_read", "Read metadata for one native session using the exact provider, store_id and session_id.", sessionRef.shape, "readSession", readOnly],
+    ["session_messages", "Read session messages: page (default) preserves native pagination and query/time seek; head reads the first count messages, tail the last count, all follows history automatically. History modes return chronological messages, complete/truncated and a continuation cursor. Continue using the same mode and SessionRef; count defaults to 20. all is bounded by max_chars, 50 pages and a time budget. Does not include tool or reasoning events.", { ...sessionRef.shape, ...page, mode: external_exports.enum(["page", "head", "tail", "all"]).optional(), count: external_exports.number().int().min(1).max(1e3).describe("Number of messages for head/tail; default 20.").optional(), max_chars: external_exports.number().int().min(1e3).max(1e6).optional(), query: external_exports.string().trim().min(1).max(256).optional(), at: external_exports.string().min(1).max(64).optional() }, "sessionMessages", readOnly],
+    ["session_children", "List delegated and native subagent child sessions. Follow next_cursor; fork relations are separate.", { ...sessionRef.shape, ...page }, "sessionChildren", readOnly],
+    ["session_relations", "Read native subagent, fork and explicitly registered delegation relations for a session.", sessionRef.shape, "sessionRelations", readOnly]
+  ];
+  for (const [name, description, inputSchema, operation, annotations] of tools) {
+    server.registerTool(name, { description, inputSchema, outputSchema, annotations }, handler((input) => service[operation](input)));
+  }
   return server;
 }
 

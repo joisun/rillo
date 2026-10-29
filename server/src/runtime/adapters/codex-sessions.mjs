@@ -277,17 +277,22 @@ export function createCodexSessionAdapter({
     return { ...result, sessions: result.sessions.filter((row) => row.native_parent?.session_id === sessionId) }
   }
 
-  async function messages(sessionId, { cursor, query = '', limit = 5, at = null, item_id = null }) {
+  async function messages(sessionId, { cursor, query = '', limit = 5, at = null, item_id = null, order = 'desc' }) {
     const metadata = await readSession(sessionId)
-    if ((!query && !cursor) || cursor?.startsWith('items:')) {
+    const itemPrefix = order === 'asc' ? 'items-asc:' : 'items:'
+    if ((!query && !cursor) || cursor?.startsWith(itemPrefix)) {
       try {
-        const nativeCursor = cursor?.startsWith('items:') ? Buffer.from(cursor.slice(6), 'base64url').toString('utf8') : null
-        const page = await timeIndex.messagePage(metadata, { cursor: nativeCursor, at, itemId: item_id })
+        const nativeCursor = cursor?.startsWith(itemPrefix) ? Buffer.from(cursor.slice(itemPrefix.length), 'base64url').toString('utf8') : null
+        let page
+        if (order === 'asc') {
+          const result = nativePage(await request('thread/items/list', { threadId: sessionId, cursor: nativeCursor, limit: 100, sortDirection: 'asc' }))
+          page = { entries: result.data, next: result.cursor, state: 'ready', target: null }
+        } else page = await timeIndex.messagePage(metadata, { cursor: nativeCursor, at, itemId: item_id })
         if (page.state !== 'unavailable') {
           const output = []
           let characters = 0
           let truncated = false
-          for (const entry of [...page.entries].reverse()) {
+          for (const entry of order === 'asc' ? page.entries : [...page.entries].reverse()) {
             const item = entry.item
             let role, body = ''
             if (item?.type === 'userMessage') { role = 'user'; body = (item.content ?? []).filter((part) => part.type === 'text').map((part) => part.text ?? '').join('\n') }
@@ -302,9 +307,9 @@ export function createCodexSessionAdapter({
             output.push({ id: item.id, turn_id: entry.turnId, role, text: excerpt, truncated: excerpt.length !== body.length, at: time, time_precision: time ? 'message' : 'unknown' })
           }
           if (page.target && !output.some((item) => item.id === page.target.item_id)) throw sessionBrowserError('SESSION_BROWSER_READ_FAILED', '会话消息已变化，请刷新后重新定位', 409)
-          return { session: metadata, messages: output, match: null,
+          return { session: metadata, order, messages: output, match: null,
             seek: at ? { at: page.target?.at ?? at, precision: page.target ? 'message' : 'unknown', turn_id: page.target?.turn_id ?? null, item_id: page.target?.item_id ?? null, state: page.state } : null,
-            next_cursor: page.next ? 'items:' + Buffer.from(page.next).toString('base64url') : null, truncated }
+            next_cursor: page.next ? itemPrefix + Buffer.from(page.next).toString('base64url') : null, truncated }
         }
       } catch (error) {
         if (error.code !== 'SESSION_BROWSER_UNSUPPORTED' || item_id) throw error
@@ -335,7 +340,7 @@ export function createCodexSessionAdapter({
       threadId: sessionId,
       cursor: anchor,
       limit: Math.min(limit, 5),
-      sortDirection: 'desc',
+      sortDirection: order,
       itemsView: 'full',
     }))
     const output = []
@@ -348,7 +353,7 @@ export function createCodexSessionAdapter({
         || item.type === 'userMessage' && item.content?.some((part) => part.type === 'text' && part.text?.trim()))?.id
       : null)
     const contextLimit = locatedItem ? 256 * 1024 - MESSAGE_LIMIT : 256 * 1024
-    for (const turn of [...page.data].reverse()) {
+    for (const turn of order === 'asc' ? page.data : [...page.data].reverse()) {
       for (const item of Array.isArray(turn.items) ? turn.items : []) {
         let text = ''
         let role
@@ -375,7 +380,7 @@ export function createCodexSessionAdapter({
       }
     }
     if (seek && !seek.item_id) seek.item_id = output.find((item) => item.turn_id === seek.turn_id)?.id ?? null
-    return { session: metadata, messages: output, match, seek, next_cursor: page.cursor, truncated }
+    return { session: metadata, order, messages: output, match, seek, next_cursor: page.cursor, truncated }
   }
 
   return {

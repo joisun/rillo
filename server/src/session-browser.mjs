@@ -24,7 +24,11 @@ function query(input = {}) {
   if (input.archived !== undefined && ![true, false, 'true', 'false'].includes(input.archived)) {
     throw sessionBrowserError('SESSION_BROWSER_INPUT_INVALID', 'archived must be boolean')
   }
+  if (input.order !== undefined && !['asc', 'desc'].includes(input.order)) {
+    throw sessionBrowserError('SESSION_BROWSER_INPUT_INVALID', 'order must be asc or desc')
+  }
   return {
+    order: input.order ?? 'desc',
     workspace,
     branch: text(input.branch, 'branch', 200),
     limit,
@@ -204,6 +208,7 @@ export function createSessionBrowser({ adapters, settings, terminalLauncher, lin
       const adapter = source(id)
       reference(adapter, sessionId, input)
       const filters = query(input)
+      if (filters.order === 'asc' && (filters.at || filters.query)) throw sessionBrowserError('SESSION_BROWSER_INPUT_INVALID', 'Forward reading cannot be combined with search or time seek')
       if (filters.item_id && (!filters.at || filters.query)) throw sessionBrowserError('SESSION_BROWSER_INPUT_INVALID', '消息ID必须与定位时间一起使用')
       if (filters.at && filters.query) throw sessionBrowserError('SESSION_BROWSER_INPUT_INVALID', '时间定位和正文搜索不能同时提交')
       return adapter.messages(sessionId, filters)
