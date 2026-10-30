@@ -14,6 +14,7 @@ import { createRevisionHub } from './revision-hub.mjs'
 import { createSessionResumeService } from './session-resume-service.mjs'
 import { createSessionBrowser } from './session-browser.mjs'
 import { createSessionLinkStore } from './session-link-store.mjs'
+import { createSessionPinStore } from './session-pin-store.mjs'
 import { createTerminalLauncher } from './terminal-launcher.mjs'
 import { createRunEventHub } from './runs/run-event-hub.mjs'
 import { createRunService } from './runs/run-service.mjs'
@@ -105,6 +106,7 @@ export async function startDaemon({
   createSettings = createDashboardSettings,
   createSessionInventory = createCodexSessionInventory,
   createLinks = createSessionLinkStore,
+  createPins = createSessionPinStore,
   createBrowser = createSessionBrowser,
   createSessionAdapter = createCodexSessionAdapter,
   createResumeService = createSessionResumeService,
@@ -152,6 +154,7 @@ export async function startDaemon({
   let runtimeRegistry = null
   let runtimeEnvironment = null
   let sessionBrowser = null
+  let pins = null
   let runService = null
   let runEventHub = null
   let scheduledRunLogs = null
@@ -353,6 +356,7 @@ export async function startDaemon({
 
   try {
     links = createLinks({ databasePath: join(dataDirectory, 'session-links.sqlite') })
+    pins = createPins({ databasePath: join(dataDirectory, 'session-pins.sqlite') })
     const terminalLauncher = createLauncher({
       runtimeDirectory: join(dataDirectory, 'runtime'),
     })
@@ -396,6 +400,7 @@ export async function startDaemon({
       settings: dashboardSettings,
       terminalLauncher,
       links,
+      pins,
     })
     const messageTerminal = createTerminalMessageTransport({ enabled: async () => process.platform === 'darwin' && (await dashboardSettings.get()).settings.resume_terminal === 'otty' })
     messaging = createSessionMessaging({
@@ -441,7 +446,7 @@ export async function startDaemon({
         try {
           await api?.close()
         } finally {
-          try { await closeScheduler() } finally { links?.close() }
+          try { await closeScheduler() } finally { links?.close(); pins?.close() }
         }
       },
     }
@@ -450,7 +455,7 @@ export async function startDaemon({
     sessionBrowser?.close?.()
     hub.close()
     try { await api?.close() } catch {}
-    try { await closeScheduler() } finally { links?.close() }
+    try { await closeScheduler() } finally { links?.close(); pins?.close() }
     throw error
   }
 }

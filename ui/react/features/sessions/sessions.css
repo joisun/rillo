@@ -367,3 +367,9 @@
 
 .session-family__link--fork .session-fork-prefix, .session-family__link--fork .session-fork-time { flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .session-family__link--fork .session-fork-origin { min-width: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; }
+
+.session-pin { position: relative; display: inline-flex; flex-shrink: 0; }
+.session-pin[data-pinned] { color: var(--accent-strong); }
+.session-pin[data-pinned] svg { fill: currentColor; }
+.session-status-sort > button > svg { width: 12px; height: 12px; }
+.session-status-sort > button:disabled { opacity: .5; cursor: default; }

@@ -18,6 +18,10 @@ export interface SessionRef {
   session_id: string
 }
 
+export interface SessionPin extends SessionRef {
+  pinned_at: string
+}
+
 export interface BrowserSession extends SessionRef {
   title: string
   preview: string

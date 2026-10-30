@@ -4,6 +4,7 @@ export function isSessionMetadataQuery(key: readonly unknown[]) {
   if (key[0] !== 'dashboard' || key[1] !== 'session-browser') return false
   if (key[3] === 'list') return key[5] === ''
   if (key[3] === 'workspaces' || key[3] === 'branches') return true
+  if (key[3] === 'pinned' || key.at(-1) === 'pins') return true
   return key.at(-1) === 'children' || key.at(-1) === 'relations' || key.at(-1) === 'activity'
 }
 
@@ -13,6 +14,8 @@ export const queryKeys = {
   settings: ['dashboard', 'settings'] as const,
   sessionBrowser: ['dashboard', 'session-browser'] as const,
   sessionProviders: ['dashboard', 'session-browser', 'providers'] as const,
+  sessionPins: ['dashboard', 'session-browser', 'pins'] as const,
+  sessionPinnedList: (provider: string, store: string, workspace: string, branch: string) => ['dashboard', 'session-browser', provider, 'pinned', store, workspace, branch] as const,
   sessionActivity: (provider: string, store: string) => ['dashboard', 'session-browser', provider, store, 'activity'] as const,
   sessionWorkspaces: (provider: string, archived: boolean) => ['dashboard', 'session-browser', provider, 'workspaces', archived] as const,
   sessionBranches: (provider: string, archived: boolean) => ['dashboard', 'session-browser', provider, 'branches', archived] as const,

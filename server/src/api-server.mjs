@@ -485,6 +485,20 @@ export function createApiServer({
           sendJson(response, 200, await sessionBrowser.providers())
           return
         }
+        if (pathname === '/api/v1/session-browser/pins') {
+          if (request.method === 'GET') {
+            sendJson(response, 200, await sessionBrowser.pins())
+            return
+          }
+          if (request.method === 'PUT') {
+            requireJson(request)
+            const input = exactBody(await readJson(request, { limit: 8192 }), new Set(['session', 'pinned']), 'Session pin', 'SESSION_BROWSER_INPUT_INVALID')
+            const result = await sessionBrowser.setPin(input)
+            if (result.changed) hub.publish()
+            sendJson(response, 200, result)
+            return
+          }
+        }
         if (request.method === 'GET' && pathname === '/api/v1/session-browser/relations') {
           sendJson(response, 200, await sessionBrowser.relations(Object.fromEntries(url.searchParams)))
           return
@@ -504,7 +518,7 @@ export function createApiServer({
           sendJson(response, 200, await sessionBrowser.activity(safeSegment(activity[1])))
           return
         }
-        const collection = pathname.match(/^\/api\/v1\/session-browser\/([^/]+)\/(workspaces|branches|sessions)$/)
+        const collection = pathname.match(/^\/api\/v1\/session-browser\/([^/]+)\/(workspaces|branches|sessions|pinned)$/)
         if (request.method === 'GET' && collection) {
           const provider = safeSegment(collection[1])
           const input = Object.fromEntries(url.searchParams)

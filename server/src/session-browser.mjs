@@ -62,7 +62,7 @@ function nativeRelations(session) {
     }))
 }
 
-export function createSessionBrowser({ adapters, settings, terminalLauncher, links = null }) {
+export function createSessionBrowser({ adapters, settings, terminalLauncher, links = null, pins = null }) {
   const sources = new Map(adapters.map((adapter) => [adapter.id, adapter]))
   if (sources.size !== adapters.length) throw new TypeError('Session adapter IDs must be unique')
 
@@ -95,6 +95,30 @@ export function createSessionBrowser({ adapters, settings, terminalLauncher, lin
   }
 
   return {
+    pins() { return { pins: pins?.list() ?? [] } },
+    async setPin(input) {
+      if (!pins) throw sessionBrowserError('SESSION_BROWSER_UNAVAILABLE', '会话标记服务暂不可用', 503)
+      if (typeof input.pinned !== 'boolean') throw sessionBrowserError('SESSION_BROWSER_INPUT_INVALID', 'pinned must be boolean')
+      const ref = normalizeSessionReference(input.session)
+      if (input.pinned) await readRef(ref)
+      return pins.set(ref, input.pinned)
+    },
+    async pinned(id, input) {
+      const adapter = source(id)
+      if (input.store_id !== undefined && input.store_id !== adapter.storeId) throw sessionBrowserError('SESSION_BROWSER_REFERENCE_INVALID', '会话来源已改变')
+      const filters = query(input)
+      const offset = filters.cursor === null ? 0 : Number(filters.cursor.match(/^pinned:(\d+)$/)?.[1] ?? NaN)
+      const entries = (pins?.list() ?? []).filter(pin => pin.provider === id && pin.store_id === adapter.storeId)
+      if (!Number.isSafeInteger(offset) || offset < 0 || offset > entries.length) throw sessionBrowserError('SESSION_BROWSER_INPUT_INVALID', '标记会话分页位置无效')
+      const page = entries.slice(offset, offset + filters.limit)
+      const sessions = await Promise.all(page.map(async pin => {
+        try { return await readRef(pin) }
+        catch { return { ...normalizeSessionReference(pin), title: pin.session_id, preview: '', workspace: null, branch: null, created_at: null, updated_at: null, last_active_at: null, state: 'unavailable', native_parent: null, forked_from: null } }
+      }))
+      const matched = sessions.filter(session => (!filters.workspace || session.workspace === filters.workspace) && (!filters.branch || session.branch === filters.branch))
+      const next = offset + page.length
+      return { sessions: matched, relations: relationsFor(matched), next_cursor: next < entries.length ? 'pinned:' + next : null, search_scope: null, scanned_count: page.length }
+    },
     providers() {
       return { providers: [...sources.values()].map((adapter) => ({
         id: adapter.id,
@@ -190,7 +214,11 @@ export function createSessionBrowser({ adapters, settings, terminalLauncher, lin
       requireLinks()
       return links.unlink({ parent: normalizeSessionReference(input.parent), child: normalizeSessionReference(input.child) })
     },
-    check() { return links?.check() ?? { schemaVersion: 1, integrityCheck: 'ok', foreignKeyViolations: [], invariantViolations: [] } },
+    check() {
+      const check = links?.check() ?? { schemaVersion: 1, integrityCheck: 'ok', foreignKeyViolations: [], invariantViolations: [] }
+      const pinCheck = pins?.check()
+      return pinCheck && pinCheck.integrityCheck !== 'ok' ? pinCheck : check
+    },
     activity(id) {
       const adapter = source(id)
       if (!adapter.activity) throw sessionBrowserError('SESSION_BROWSER_UNSUPPORTED', '此来源不支持会话活跃状态', 501)

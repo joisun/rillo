@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight, Folder, FolderOpen, GitBranch, MessagesSquare, PanelRightOpen, RefreshCw } from 'lucide-react'
+import { ChevronDown, ChevronRight, Folder, FolderOpen, GitBranch, MessagesSquare, PanelRightOpen, Pin, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -19,6 +19,7 @@ import { collectSessionFamily, indexSessionRelations, projectSessionTree } from 
 import { SessionSearch } from './session-search'
 import { SessionOrigin } from './session-origin'
 import { sessionKey } from './session-format'
+import { useSessionPins } from './session-pins'
 import { SessionActivityView } from './session-activity-view'
 import './sessions.css'
 import type { TimelineLoadRequest } from './session-timeline-queue'
@@ -34,6 +35,9 @@ export function SessionsView({ api }: { api: DashboardApi }) {
     return () => window.clearInterval(timer)
   }, [connectionError, client])
   const [statusSort, setStatusSort] = useState<SessionStatusGroup | null>(null)
+  const [pinnedOnly, setPinnedOnly] = useState(false)
+  const pins = useSessionPins(api)
+  const pinnedKeys = useMemo(() => new Set((pins.data?.pins ?? []).map(sessionKey)), [pins.data])
   const [childPages, setChildPages] = useState<Record<string, SessionPage[]>>({})
   const rememberChildren = useCallback((key: string, pages: SessionPage[]) => setChildPages(current => current[key] === pages ? current : { ...current, [key]: pages }), [])
   const [sourceId, setSourceId] = useState('')
@@ -99,9 +103,11 @@ export function SessionsView({ api }: { api: DashboardApi }) {
   })
   const catalog = isBranch ? branches : directories
   const results = useInfiniteQuery({
-    queryKey: queryKeys.sessionList(providerId, workspace, '', false, branch),
+    queryKey: pinnedOnly ? queryKeys.sessionPinnedList(providerId, provider?.store_id ?? '', workspace, branch) : queryKeys.sessionList(providerId, workspace, '', false, branch),
     initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) => api.sessions(providerId, { workspace, branch, cursor: pageParam, limit: 100 }),
+    queryFn: ({ pageParam }) => pinnedOnly
+      ? api.pinnedSessions(providerId, { store_id: provider?.store_id, workspace, branch, cursor: pageParam, limit: 30 })
+      : api.sessions(providerId, { workspace, branch, cursor: pageParam, limit: 100 }),
     getNextPageParam: (page: SessionPage) => page.next_cursor ?? undefined,
     enabled: Boolean(provider),
     retry: false,
@@ -250,6 +256,8 @@ export function SessionsView({ api }: { api: DashboardApi }) {
       </header>
       {connectionError ? <div className="sessions-connection" role="alert"><MessagesSquare /><strong>暂时无法连接本机会话</strong><span>正在自动重连</span><Button size="sm" variant="secondary" onPress={() => void reconnect()}>立即重试</Button></div> : null}
       {readError ? <p className="session-error" role="alert">{readError}</p> : null}
+      {pins.isError ? <p className="session-error" role="alert">无法读取 Pin 标记：{pins.error.message}</p> : null}
+      {pinnedOnly && results.isError ? <p className="session-error" role="alert">无法读取 Pinned 会话：{results.error.message}</p> : null}
       {!providers.isPending && !provider ? <div className="session-state">没有已接入的会话来源</div> : null}
       <div className="sessions-layout" inert={Boolean(connectionError)} aria-busy={reading || undefined}>
         <aside className="session-workspaces" aria-label={isBranch ? '分支分组' : '项目目录'}>
@@ -282,12 +290,13 @@ export function SessionsView({ api }: { api: DashboardApi }) {
         <div className="sessions-main">
           <header className="sessions-main__toolbar">
             <div className="session-status-sort" role="group" aria-label="会话状态排序">
+              <button type="button" aria-pressed={pinnedOnly} aria-label={`Pinned ${(pins.data?.pins ?? []).filter(pin => pin.provider === providerId && pin.store_id === provider?.store_id).length}`} title="仅查看已标记会话，再次点击查看全部" disabled={!pins.data} onClick={() => setPinnedOnly(current => !current)}><Pin aria-hidden="true" />Pinned<span className="session-status-sort__count">{(pins.data?.pins ?? []).filter(pin => pin.provider === providerId && pin.store_id === provider?.store_id).length}</span></button>
               {nativeActivity?.available ? sessionStatusOptions.map(option => <button type="button" key={option.id} data-status={option.id} aria-pressed={statusSort === option.id} aria-label={`${option.label} ${statusCounts.get(option.id) ?? 0}`} title={`${option.description}；点击优先排列，再次点击恢复最近消息排序。计数为当前范围已载入的会话。`} onClick={() => setStatusSort(current => current === option.id ? null : option.id)}><span className="session-status-sort__dot" aria-hidden="true" />{option.label}<span className="session-status-sort__count">{statusCounts.get(option.id) ?? 0}</span></button>) : <span className="session-status-sort__unavailable" role="status">{activity.isPending ? '读取状态…' : '状态不可用'}</span>}
             </div>
             <Button className="session-sheet-toggle" aria-label="展开会话面板" isIconOnly size="xs" variant="quiet" isDisabled={!selection || readerOpen} onPress={() => setReaderOpen(true)}><PanelRightOpen /></Button>
           </header>
           <section className="sessions-activity-panel">
-          <SessionActivityView canResume={Boolean(provider?.capabilities.resume)} key={`${providerId}:${workspace}:${branch}`} api={api} sessions={sessions} relations={relations} relationIndex={relationIndex} knownSessions={knownSessions} onChildren={rememberChildren} ancestorState={family.missingParents.length === 0 ? 'complete' : family.missingParents.some(ref => !unavailableAncestors.has(sessionKey(ref))) ? 'pending' : 'unavailable'} activity={nativeActivity} statuses={nativeStatuses} statusSort={statusSort} selection={selection?.session ?? null} at={selection?.at ?? null} itemId={selection?.itemId} readingPosition={readingPosition} timelineRequest={timelineRequest} hasMore={Boolean(results.hasNextPage) && !results.isError} loadingMore={results.isFetching} onMore={() => results.fetchNextPage()}
+          <SessionActivityView pinnedOnly={pinnedOnly} pinnedKeys={pinnedKeys} canResume={Boolean(provider?.capabilities.resume)} key={`${providerId}:${workspace}:${branch}:${pinnedOnly}`} api={api} sessions={sessions} relations={relations} relationIndex={relationIndex} knownSessions={knownSessions} onChildren={rememberChildren} ancestorState={family.missingParents.length === 0 ? 'complete' : family.missingParents.some(ref => !unavailableAncestors.has(sessionKey(ref))) ? 'pending' : 'unavailable'} activity={nativeActivity} statuses={nativeStatuses} statusSort={statusSort} selection={selection?.session ?? null} at={selection?.at ?? null} itemId={selection?.itemId} readingPosition={readingPosition} timelineRequest={timelineRequest} hasMore={Boolean(results.hasNextPage) && !results.isError} loadingMore={results.isFetching} onMore={() => results.fetchNextPage()}
             onSelect={selectSession} onReadSession={(ref) => void onReadSession(ref)} onSeek={(session, at, resumeFollowing, itemId) => {
               readRequest.current?.abort(); setReading(false); setReadError(''); setReaderOpen(true)
               const followRequest = resumeFollowing ? ++followRequestSequence.current : undefined

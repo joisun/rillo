@@ -7,6 +7,7 @@ import type {
   SessionPage,
   SessionProvider,
   SessionRef,
+  SessionPin,
   BrowserSession,
   SessionRelation,
   SessionTimeline,
@@ -60,6 +61,9 @@ interface ServerErrorPayload {
 }
 
 export interface DashboardApi {
+  sessionPins(): Promise<{ pins: SessionPin[] }>
+  setSessionPin(session: SessionRef, pinned: boolean): Promise<{ pin: SessionPin | null; changed: boolean }>
+  pinnedSessions(provider: string, filters: SessionFilters): Promise<SessionPage>
   sessionActivity(provider: string): Promise<SessionActivityPage>
   sessionProviders(): Promise<{ providers: SessionProvider[] }>
   sessionWorkspaces(provider: string, filters: SessionFilters): Promise<SessionWorkspacePage>
@@ -196,6 +200,9 @@ export function createDashboardApi({
   }
 
   return {
+    sessionPins: () => request('/api/v1/session-browser/pins'),
+    setSessionPin: (session, pinned) => request('/api/v1/session-browser/pins', { method: 'PUT', body: { session: { provider: session.provider, store_id: session.store_id, session_id: session.session_id }, pinned }, requestTimeoutMs: RUNTIME_TIMEOUT_MS }),
+    pinnedSessions: (provider, filters) => request(`/api/v1/session-browser/${encodeURIComponent(provider)}/pinned${queryString(filters)}`, { requestTimeoutMs: RUNTIME_TIMEOUT_MS }),
     sessionActivity: (provider) => request(`/api/v1/session-browser/${encodeURIComponent(provider)}/activity`),
     sessionProviders: () => request('/api/v1/session-browser/providers'),
     sessionBranches: (provider, filters) => request(

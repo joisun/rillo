@@ -11,6 +11,7 @@ import { Highlight } from './session-format'
 import { AutoPager } from './session-auto-pager'
 import { SessionRelations } from './session-relations'
 import { SessionResumeButton } from './session-resume-button'
+import { SessionPinButton } from './session-pins'
 import { SessionActivity } from './session-activity'
 import { sessionReadRequests } from './session-timeline-queue'
 
@@ -194,6 +195,7 @@ export function SessionDetail({ api, session, knownSessions, knownRelations, que
         <div className="session-detail__heading">
           <div className="session-detail__identity"><div className="session-detail__title"><SessionActivity session={session} /><h2 title={current.title}>{current.title}</h2></div><SessionTimeRange api={api} session={session} /></div>
           <div className="session-detail__tools">
+            <SessionPinButton api={api} session={current} />
             {canResume ? <SessionResumeButton api={api} session={{ ...current, state: session.state }} /> : null}
             <span title={copyStatus || session.session_id}><Button size="xs" variant="quiet" isIconOnly aria-label="复制 Session ID" onPress={() => void copyId()}>{copyStatus === '已复制' ? <Check /> : <Copy />}</Button></span>
             <SessionRelations api={api} session={current} knownSessions={knownSessions} knownRelations={knownRelations} onReadSession={onReadSession} />

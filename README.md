@@ -2,7 +2,7 @@
 
 <img src="ui/assets/rillo.png" alt="Rillo 吉祥物刺刺" width="96" height="96">
 
-Rillo 是运行在本机的 coding-agent 会话与自动化控制台。Sessions 直接浏览 CLI 保存的会话，按 workspace、分支和时间查找对话，以主子会话树和消息热力时间轴展示，支持侧边 sheet 阅读。侧栏支持 Workspace / Branch 分组，同名分支可以汇总多个项目的会话。
+Rillo 是运行在本机的 coding-agent 会话与自动化控制台。Sessions 直接浏览 CLI 保存的会话，按 workspace、分支和时间查找对话，以主子会话树和消息热力时间轴展示，支持侧边 sheet 阅读。侧栏支持 Workspace / Branch 分组，同名分支可以汇总多个项目的会话。每条会话及阅读面板提供 Pin 按钮；顶部 Pinned 入口集中查看待继续的会话，保留目录和分支筛选。Pin 独立于运行状态，关闭或恢复会话不会清除，完成后手动取消。
 
 它还支持由 Markdown 定义 Scheduled Task。到期后，常驻的 `daemon` 直接调用本机 code-agent CLI，并把 session ID、结果、文件变更和日志引用写入统一 Run ledger；对话正文仍由本机 agent CLI 持有。
 
