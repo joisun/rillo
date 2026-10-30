@@ -1,5 +1,7 @@
 # Runtime Agent Registry Implementation Plan
 
+> 历史设计记录：本文中的 Host、Origin 和客户端 IP 拦截约定已取消；当前访问行为以 [architecture.md](../../architecture.md) 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the independent Scheduled runner chain with an OpenDesign-style multi-CLI runtime registry, direct daemon process orchestration, a single durable Run lifecycle, and an internal wall-clock scheduler.

@@ -1,5 +1,7 @@
 # Scheduled Tasks Implementation Plan
 
+> 历史设计记录：本文中的 Host、Origin 和客户端 IP 拦截约定已取消；当前访问行为以 [architecture.md](../../architecture.md) 为准。
+
 > **Historical / superseded (2026-08-27)**：本文记录已退役的 per-Schedule `launchd` / runner 实施计划，不是现行操作指南。当前架构见 [`README.md`](../../../README.md) 与 [`Runtime Agent Registry 设计`](../specs/2026-08-27-runtime-agent-registry-design.md)。
 
 > **Superseded（2026-08-25）**：这是 SQLite-defined Scheduler 的历史实施计划。当前计划见 [`2026-08-25-file-native-scheduled-tasks.md`](./2026-08-25-file-native-scheduled-tasks.md)。

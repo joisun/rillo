@@ -1,5 +1,7 @@
 # Rillo Dashboard Context, Timeline, and Status Design
 
+> 历史设计记录：本文中的 Host、Origin 和客户端 IP 拦截约定已取消；当前访问行为以 [architecture.md](../../architecture.md) 为准。
+
 > Historical baseline: 本文描述 v0.4.0 的 DHTMLX renderer。当前 renderer architecture 已由 [SVAR Gantt Dashboard 替代实现设计](2026-08-16-svar-gantt-dashboard-design.md) 取代；Project-first hierarchy、rollup、显式归档与 History projection 以 [Project Journalist Lifecycle Design](2026-08-19-project-journalist-lifecycle-design.md) 为准。daemon、REST/SSE 与 mutation contracts 仍沿用本文。
 >
 > 当前 Grid 不再把九个存储字段全部平铺。SVAR 版本使用 `任务 | 最近活跃 | 状态/进度 | Workspace | Branch | Session ID` 六列决策视图；Workspace 表示 source session cwd，旧 `worktree` 只作为缺失时的兼容 fallback。

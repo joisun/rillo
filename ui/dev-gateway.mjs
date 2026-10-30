@@ -70,10 +70,6 @@ function sendJson(response, statusCode, body) {
   response.end(source)
 }
 
-function sendBoundaryError(response, code, message) {
-  sendJson(response, 403, { ok: false, error: { code, message } })
-}
-
 function connectionHeaderNames(headers) {
   return new Set(String(headers.connection ?? '')
     .split(',')
@@ -113,8 +109,7 @@ export function createDashboardDevGateway({ host, port, upstream, getHtml } = {}
   }
   if (typeof getHtml !== 'function') throw new TypeError('getHtml must be a function')
 
-  let expectedHost = `${host}:${port}`
-  let devOrigin = `http://${expectedHost}`
+  let devOrigin = `http://${host}:${port}`
   let listening = false
   let closing = false
   const reloadResponses = new Set()
@@ -175,15 +170,6 @@ export function createDashboardDevGateway({ host, port, upstream, getHtml } = {}
   }
 
   const server = createServer((request, response) => {
-    if (request.headers.host !== expectedHost) {
-      sendBoundaryError(response, 'HOST_REJECTED', 'request host is not allowed')
-      return
-    }
-    if (request.headers.origin && request.headers.origin !== devOrigin) {
-      sendBoundaryError(response, 'ORIGIN_REJECTED', 'request origin is not allowed')
-      return
-    }
-
     const url = new URL(request.url, devOrigin)
     if (request.method === 'GET' && ['/', '/index.html'].includes(url.pathname)) {
       try {
@@ -251,8 +237,7 @@ export function createDashboardDevGateway({ host, port, upstream, getHtml } = {}
       })
       listening = true
       const address = server.address()
-      expectedHost = `${host}:${address.port}`
-      devOrigin = `http://${expectedHost}`
+      devOrigin = `http://${host}:${address.port}`
       return { host, port: address.port, url: devOrigin }
     },
     broadcastReload() {

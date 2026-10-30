@@ -1,5 +1,7 @@
 # Rillo Task Tree and Execution Lifecycle Implementation Plan
 
+> 历史设计记录：本文中的 Host、Origin 和客户端 IP 拦截约定已取消；当前访问行为以 [architecture.md](../../architecture.md) 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended for explicitly delegated work) or `superpowers:executing-plans` to execute this plan task by task. This plan defaults to single-agent inline execution unless the user explicitly authorizes delegation.
 
 **Goal:** 将 Rillo 升级为以一层 Task tree 为业务主模型、以 session/turn/subagent execution 为独立执行记录的本机控制面，并提供实时 Codex hooks、可编辑 Dashboard 和幂等历史 importer。

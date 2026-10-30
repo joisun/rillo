@@ -1,5 +1,7 @@
 # Dashboard Context, Timeline, and Status Implementation Plan
 
+> 历史设计记录：本文中的 Host、Origin 和客户端 IP 拦截约定已取消；当前访问行为以 [architecture.md](../../architecture.md) 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **执行状态（2026-08-13）：** Tasks 1–9 已实现并通过 automated、isolated browser 与 live read-only verification；项目尚无可用 Git `HEAD`，未创建 commit。

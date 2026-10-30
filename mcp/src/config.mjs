@@ -1,5 +1,4 @@
 import { readFile } from 'node:fs/promises'
-import { isIP } from 'node:net'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 
@@ -233,10 +232,6 @@ export async function resolveAppConfig({
     throw new RilloError('CONFIG_INVALID', 'daemon URL must be an http://127.0.0.1 origin')
   }
   const serverPort = Number(serverUrl.port || 80)
-  const serverAllowedClients = fileConfig.server_allowed_clients ?? []
-  if (!Array.isArray(serverAllowedClients) || serverAllowedClients.some(value => typeof value !== 'string' || !isIP(value))) {
-    throw new RilloError('CONFIG_INVALID', 'server_allowed_clients must contain exact IP addresses')
-  }
   let serverPublicUrl = null
   if (fileConfig.server_public_url !== undefined) {
     let publicUrl
@@ -248,9 +243,6 @@ export async function resolveAppConfig({
       throw new RilloError('CONFIG_INVALID', 'server_public_url must be a concrete http origin without a path or credentials')
     }
     serverPublicUrl = publicUrl.origin
-  }
-  if (configuredHost === '0.0.0.0' && (!serverPublicUrl || !serverAllowedClients.length)) {
-    throw new RilloError('CONFIG_INVALID', 'network access requires server_public_url and server_allowed_clients')
   }
   return {
     projectRoot: normalizedProjectRoot,
@@ -277,6 +269,5 @@ export async function resolveAppConfig({
     serverPort,
     serverBaseUrl: serverUrl.origin,
     serverPublicUrl,
-    serverAllowedClients,
   }
 }

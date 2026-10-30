@@ -1,5 +1,7 @@
 # Dashboard Dev Gateway 设计
 
+> 历史设计记录：本文中的 Host、Origin 和客户端 IP 拦截约定已取消；当前访问行为以 [architecture.md](../../architecture.md) 为准。
+
 > 日期：2026-08-24（Asia/Shanghai）
 > 状态：已实现并验证
 > 范围：Rillo Dashboard 的本地开发预览链路

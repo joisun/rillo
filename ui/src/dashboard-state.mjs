@@ -269,9 +269,6 @@ export function statusMutationMessage(error) {
     }
     case 'TASK_NOT_FOUND':
       return '任务已不存在，已刷新列表'
-    case 'HOST_REJECTED':
-    case 'ORIGIN_REJECTED':
-      return '状态修改被本机安全策略拒绝'
     case 'TASK_STATUS_INVALID':
       return '状态请求无效'
     case 'TASK_ARCHIVE_STATUS_INVALID':

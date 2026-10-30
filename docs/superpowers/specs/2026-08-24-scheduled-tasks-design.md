@@ -1,5 +1,7 @@
 # Rillo Scheduled Tasks v1 设计
 
+> 历史设计记录：本文中的 Host、Origin 和客户端 IP 拦截约定已取消；当前访问行为以 [architecture.md](../../architecture.md) 为准。
+
 > **Historical / superseded (2026-08-27)**：本文记录已退役的 per-Schedule `launchd` / runner 方案，不是现行实现。当前架构见 [`README.md`](../../../README.md) 与 [`Runtime Agent Registry 设计`](./2026-08-27-runtime-agent-registry-design.md)。
 
 > **Superseded（2026-08-25）**：本文件保留首次交付的历史设计。当前 Schedule definition 已迁移为 Markdown source of truth，SQLite 仅保留 Run ledger；现行设计见 [`2026-08-25-file-native-scheduled-tasks-design.md`](./2026-08-25-file-native-scheduled-tasks-design.md)。

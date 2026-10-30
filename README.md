@@ -51,19 +51,17 @@ Linux 使用 `systemd --user` 管理一个 `rillo.service`，安装、启停、�
 
 Linux 安装需要 Release 包含 `rillo-linux.tar.gz`；macOS 使用 `rillo-macos.tar.gz`。两个包均为自包含的 JavaScript runtime 与预构建 Dashboard，不捆绑 Node.js。安装后无需 `npm install`。Linux 日志位于 `~/.local/state/rillo/`，用户 unit 位于 `~/.config/systemd/user/rillo.service`。
 
-默认服务仅监听服务器的 `127.0.0.1`。需要直接从网络访问时，在服务器的 `~/.config/rillo/config.json` 中配置以下字段，再执行 `rillo stop` 和 `rillo start`。以下地址是示例，分别替换为服务器地址与允许访问的客户端 IP：
+默认服务仅监听服务器的 `127.0.0.1`。需要直接从网络访问时，在服务器的 `~/.config/rillo/config.json` 中配置以下字段，再执行 `rillo stop` 和 `rillo start`。以下配置允许通过服务器 IP 或已指向该服务的域名访问：
 
 ```json
 {
   "output_dir": ".",
   "server_listen_host": "0.0.0.0",
-  "server_port": 43127,
-  "server_public_url": "http://10.10.20.62:43127",
-  "server_allowed_clients": ["10.0.15.18"]
+  "server_port": 43127
 }
 ```
 
-浏览器打开 `server_public_url` 即可，页面、API 和 SSE 均由 rillo 原生提供，无需反向代理。`server_allowed_clients` 只接受完整 IP，不支持通配符或 CIDR；未列出的网络客户端返回 `403 CLIENT_REJECTED`。本机 CLI/MCP 和健康检查继续使用 `127.0.0.1`，已有 `server_host` 保持原值，旧插件也可继续连接。网络模式必须同时配置公开访问地址与允许的客户端，默认安装不会开放网络访问。
+浏览器打开服务器地址，例如 `http://10.10.20.62:43127/`。页面、API 和 SSE 均由 Rillo 原生提供，无需反向代理。服务不按客户端 IP、Host 或 Origin 拦截请求；`server_public_url` 可选，仅设置 CLI 展示和打开的地址，旧 `server_allowed_clients` 字段不再生效。本机 CLI/MCP 和健康检查继续使用 `127.0.0.1`。默认安装仍只监听本机；通过本地代理访问 `http://rillo.local/` 时，无需配置该域名白名单。
 
 也可保留默认本机监听，并使用 SSH 转发（以下为默认端口示例，替换登录地址）：
 
@@ -579,12 +577,12 @@ Claude 优先依据带原始输入 UUID 的回复流帧或用户回显确认，�
 
 Claude 受控 worker 随服务关闭，空闲 60 秒释放，最多 8 个；这不改变 accepted 与执行完成的区分。构建固定使用 Anthropic Agent SDK 0.3.312，随包保留其 [LICENSE](server/vendor/CLAUDE_SDK_LICENSE.md)，不捆绑 Claude CLI 可执行文件。
 
-REST 入口为 `/api/v1/session-control/sources`、`capabilities`、`send`、`interrupt` 和 `deliveries/:request_id`，沿用现有 Host、Origin、客户端 IP 与 JSON 字段白名单校验。MCP 不接受自定义可执行文件、shell 命令或任意工作目录。
+REST 入口为 `/api/v1/session-control/sources`、`capabilities`、`send`、`interrupt` 和 `deliveries/:request_id`，保留 JSON 类型、字段白名单及消息大小校验，不按 Host、Origin 或客户端 IP 拦截。MCP 不接受自定义可执行文件、shell 命令或任意工作目录。
 
 ## Security and privacy
 
-- `daemon` 默认只监听 `127.0.0.1`；显式启用网络访问时，使用配置的客户端 IP 列表限制访问，并验证 `Host` 与对应的 browser `Origin`。页面、API 和 SSE 使用同一套检查，不提供跨域 CORS 放行。
-- 本机模式信任同一 OS user 下的 process；网络模式额外信任 `server_allowed_clients` 中客户端及其使用者，不使用 auth token。该模式用于可信网络，原生 HTTP 不提供 TLS。
+- `daemon` 默认只监听 `127.0.0.1`；监听 `0.0.0.0` 时，能连接该端口的客户端均可访问。页面、API、SSE 和开发入口不执行客户端 IP、Host 或 Origin 白名单校验；Dashboard API 不增加跨域 CORS 响应头，浏览器自身的跨域规则仍适用。
+- HTTP API 不使用 auth token，也不提供 TLS。网络监听范围由配置及操作系统网络策略决定。
 - Runtime invocation 使用明确 executable、argv array、可信 Workspace 和 `shell: false`。
 - 除 Scheduled Run 既有的 bounded final_message 外，SQLite 与 Rillo logs 不保存 prompt、reasoning、assistant message、tool output、token 或 transcript 正文；历史对话只从 CLI-owned session 按需读取并在页面内存中展示。
 - 不再安装记录 hooks；外部关系登记不可用时不阻塞终端工作，不建立补传队列。

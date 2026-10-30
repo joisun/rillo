@@ -415,7 +415,6 @@ export async function startDaemon({
       host: config.serverHost,
       port: config.serverPort,
       publicUrl: config.serverPublicUrl,
-      allowedClients: config.serverAllowedClients,
       dashboardHtml,
       dashboardSettings,
       sessionResume,

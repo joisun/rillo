@@ -1,5 +1,7 @@
 # Runtime Agent Registry and Single-Daemon Scheduler Design
 
+> 历史设计记录：本文中的 Host、Origin 和客户端 IP 拦截约定已取消；当前访问行为以 [architecture.md](../../architecture.md) 为准。
+
 **Date:** 2026-08-27
 
 **Status:** Implemented on `feature/scheduled-tasks`; validation in progress
