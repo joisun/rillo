@@ -47,10 +47,11 @@ function relativeTime(value, now = Date.now()) {
   return formatter.format(Math.round(delta / 86_400_000), 'day')
 }
 
-export function cadenceSummary(cadence) {
+function baseCadenceSummary(cadence) {
   const value = cadence && typeof cadence === 'object' && !Array.isArray(cadence) ? cadence : {}
   switch (value.kind) {
     case 'once': return `一次 · ${compactTime(value.at)}`
+    case 'interval': return `每 ${value.minutes} 分钟`
     case 'hourly': return `每小时 ${pad(value.minute ?? 0)} 分`
     case 'daily': return `每天 ${pad(value.hour ?? 0)}:${pad(value.minute ?? 0)}`
     case 'weekly': {
@@ -62,6 +63,13 @@ export function cadenceSummary(cadence) {
     case 'monthly': return `每月 ${value.day ?? '—'} 日 ${pad(value.hour ?? 0)}:${pad(value.minute ?? 0)}`
     default: return '计划待解析'
   }
+}
+
+export function cadenceSummary(cadence) {
+  const summary = baseCadenceSummary(cadence)
+  if (!cadence?.work_hours) return summary
+  const hours = cadence.work_hours
+  return `${summary} · ${hours.weekdays.map((day) => `周${WEEKDAYS[day - 1]}`).join('、')} ${hours.windows.map(({ start, end }) => `${start}–${end}`).join(' / ')}`
 }
 
 export function sortScheduledTasks(jobs = []) {

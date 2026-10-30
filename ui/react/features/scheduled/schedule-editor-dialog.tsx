@@ -40,10 +40,6 @@ function editorError(error: unknown) {
   return error instanceof Error ? error.message : 'Schedule 保存失败'
 }
 
-function systemTimezone() {
-  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'System' } catch { return 'System' }
-}
-
 function FieldLabel({ children, htmlFor }: { children: string; htmlFor?: string }) {
   return htmlFor
     ? <label className="schedule-editor__label" htmlFor={htmlFor}>{children}</label>
@@ -123,7 +119,11 @@ export function ScheduleEditorDialog({
         }]
       }
       setRuntimes(nextRuntimes)
-      setDraft(nextDraft)
+      setDraft((current) => {
+        if (schedule) return nextDraft
+        if (current.agent !== nextDraft.agent) return changeDraftAgent(current, nextDraft.agent)
+        return current
+      })
       setPhase('ready')
       try {
         const response = await api.runtimeModels(nextDraft.agent)
@@ -266,7 +266,7 @@ export function ScheduleEditorDialog({
 
                 <section className="schedule-editor__section">
                   <div className="schedule-editor__section-title">
-                    <h3>执行时间</h3><span>{systemTimezone()}</span>
+                    <h3>执行时间</h3><span>服务本机时区</span>
                   </div>
                   <div className="schedule-editor__field">
                     <FieldLabel>Repeat</FieldLabel>
@@ -274,6 +274,7 @@ export function ScheduleEditorDialog({
                       <SelectTrigger size="sm"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem id="once">Once</SelectItem><SelectItem id="hourly">Hourly</SelectItem>
+                        <SelectItem id="interval">每隔 N 分钟</SelectItem>
                         <SelectItem id="daily">Daily</SelectItem><SelectItem id="weekly">Weekly</SelectItem>
                         <SelectItem id="monthly">Monthly</SelectItem>
                       </SelectContent>
@@ -284,6 +285,12 @@ export function ScheduleEditorDialog({
                   ) : null}
                   {draft.cadenceKind === 'hourly' ? (
                     <div className="schedule-editor__field"><FieldLabel htmlFor="schedule-minute">Minute past each hour</FieldLabel><Input disabled={busy} id="schedule-minute" max={59} min={0} type="number" value={draft.minute} onChange={(event) => update('minute', event.currentTarget.value)} /></div>
+                  ) : null}
+                  {draft.cadenceKind === 'interval' ? (
+                    <div className="schedule-editor__field">
+                      <FieldLabel htmlFor="schedule-interval">间隔（分钟）</FieldLabel>
+                      <Input disabled={busy} id="schedule-interval" min={1} max={1440} step={1} type="number" value={draft.intervalMinutes} onChange={(event) => update('intervalMinutes', event.currentTarget.value)} />
+                    </div>
                   ) : null}
                   {['daily', 'weekly', 'monthly'].includes(draft.cadenceKind) ? (
                     <div className="schedule-editor__inline">
@@ -298,6 +305,26 @@ export function ScheduleEditorDialog({
                   ) : null}
                   {draft.cadenceKind === 'monthly' ? (
                     <div className="schedule-editor__field"><FieldLabel htmlFor="schedule-day">Day of month</FieldLabel><Input disabled={busy} id="schedule-day" max={31} min={1} type="number" value={draft.day} onChange={(event) => update('day', event.currentTarget.value)} /></div>
+                  ) : null}
+                  {draft.cadenceKind !== 'once' ? (
+                    <fieldset className="schedule-editor__work-hours">
+                      <legend>工作时段</legend>
+                      <Switch aria-label="限制工作时段" isDisabled={busy} isSelected={draft.workHoursEnabled} onChange={(selected) => update('workHoursEnabled', selected)}>仅在指定时段自动运行</Switch>
+                      {draft.workHoursEnabled ? <>
+                        <div className="schedule-editor__weekdays" role="group" aria-label="工作时段适用星期">
+                          {WEEKDAYS.map(([day, label]) => <label key={day}><input checked={draft.workWeekdays.includes(day)} disabled={busy} type="checkbox" onChange={(event) => update('workWeekdays', event.currentTarget.checked ? [...draft.workWeekdays, day] : draft.workWeekdays.filter((value) => value !== day))} /><span>{label}</span></label>)}
+                        </div>
+                        {draft.workWindows.map((window, index) => (
+                          <div className="schedule-editor__work-window" key={index}>
+                            <div className="schedule-editor__field"><FieldLabel htmlFor={`work-start-${index}`}>{`开始 ${index + 1}`}</FieldLabel><Input id={`work-start-${index}`} disabled={busy} inputMode="numeric" maxLength={5} placeholder="09:00" value={window.start} onChange={(event) => update('workWindows', draft.workWindows.map((item, itemIndex) => itemIndex === index ? { ...item, start: event.currentTarget.value } : item))} /></div>
+                            <div className="schedule-editor__field"><FieldLabel htmlFor={`work-end-${index}`}>{`结束 ${index + 1}`}</FieldLabel><Input id={`work-end-${index}`} disabled={busy} inputMode="numeric" maxLength={5} placeholder="18:00" value={window.end} onChange={(event) => update('workWindows', draft.workWindows.map((item, itemIndex) => itemIndex === index ? { ...item, end: event.currentTarget.value } : item))} /></div>
+                            <Button isIconOnly aria-label={`删除时段 ${index + 1}`} isDisabled={busy || draft.workWindows.length === 1} size="sm" type="button" variant="quiet" onPress={() => update('workWindows', draft.workWindows.filter((_, itemIndex) => itemIndex !== index))}><Trash2 /></Button>
+                          </div>
+                        ))}
+                        <Button isDisabled={busy || draft.workWindows.length >= 24} size="sm" type="button" variant="secondary" onPress={() => update('workWindows', [...draft.workWindows, { start: '', end: '' }])}>添加时段</Button>
+                        <p className="schedule-editor__hint">按服务所在时区运行，包含开始、不含结束；结束可填 24:00。每个时段从起点重新计时，午休和下班后不补跑；已开始的任务继续完成，立即运行不受限。</p>
+                      </> : null}
+                    </fieldset>
                   ) : null}
                 </section>
 

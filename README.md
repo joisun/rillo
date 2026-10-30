@@ -15,7 +15,7 @@ Rillo 是运行在本机的 coding-agent 会话与自动化控制台。Sessions 
 - runtime registry 已按 multi-CLI contract 设计，后续 runtime 只增加 adapter，不增加第二套调度链路；
 - 所有数据都保存在本机，不需要 cloud account 或 auth token。
 
-当前为 Rillo 0.15.0 开发版本，GitHub 仓库为 `joisun/rillo`。Rillo 0.15.0 尚未公开发布；下列下载与 Git marketplace 命令需等正式发布后再使用，当前 latest 仍是旧名称的历史版本。本地迁移与旧标识保留原因见[更名与安装迁移](docs/migrations/rillo-rename.md)。
+Rillo 0.15.0 使用 `rillo` 命令、插件标识和发布资产名称，GitHub 仓库为 `joisun/rillo`。旧版本的配置、定时任务和执行记录由安装脚本迁移，详见[更名与安装迁移](docs/migrations/rillo-rename.md)。
 
 ## Quick start
 
@@ -213,7 +213,7 @@ Live Session 只干预当前 active Turn，不在 Dashboard 内创建第二轮�
 | `session_control_sources`、`session_control_capabilities` | 查询消息数据源、通道优先级和目标当前轮次 |
 | `session_send`、`session_interrupt`、`session_delivery` | 排队、执行中追加、打断、打断后发送及查询投递回执 |
 
-修改、删除、启停需传入 `schedule_get` 返回的最新 `etag`，字段名为 `expected_etag`。发生 `SCHEDULE_VERSION_CONFLICT` 后重新读取并核对修改，工具不会自动覆盖。`schedule_create` 创建启用状态的任务，默认只读 sandbox、禁用 skills 和 integrations；`cadence` 支持 once、hourly、daily、weekly、monthly，周期时间使用服务所在机器的时区，weekly 的 weekdays 为周一 1 至周日 7。workspace 必须是服务器上存在的绝对路径。
+修改、删除、启停需传入 `schedule_get` 返回的最新 `etag`，字段名为 `expected_etag`。发生 `SCHEDULE_VERSION_CONFLICT` 后重新读取并核对修改，工具不会自动覆盖。`schedule_create` 创建启用状态的任务，默认只读 sandbox、禁用 skills 和 integrations；`cadence` 支持 once、interval、hourly、daily、weekly、monthly，interval 的 minutes 为 1–1440 的整数，周期 cadence 可设置 work_hours（weekdays 与多个 start/end windows），周期时间使用服务所在机器的时区，weekly 的 weekdays 为周一 1 至周日 7。workspace 必须是服务器上存在的绝对路径。
 
 例如，每天 09:00 执行：
 
@@ -311,7 +311,31 @@ Review the repository health and summarize actionable risks.
 
 Dashboard 新建的 Codex Schedule 默认使用 `disabled / disabled`，以获得最小、可预测的自动化上下文。已有 Markdown 未声明 `capabilities` 时保持兼容，按 `inherit / inherit` 读取。每个 Run 会把 policy 写入 immutable execution snapshot；执行期间不会改写全局 Codex 配置，也不需要重启 `daemon`。
 
-支持 `once`、`hourly`、`daily`、`weekly` 与 `monthly` cadence。Dashboard 的 Create/Edit/Pause/Resume 会 atomic rewrite Markdown，并用 SHA-256 `etag` 做 compare-and-set；Delete 把 definition 移到 `.trash/`。行级一次性 Run action 在执行期间会切换为 Stop；它与只控制周期调度的 Schedule pause/resume 是两套独立操作。
+支持 `once`、`interval`、`hourly`、`daily`、`weekly` 与 `monthly` cadence。Dashboard 的 Create/Edit/Pause/Resume 会 atomic rewrite Markdown，并用 SHA-256 `etag` 做 compare-and-set；Delete 把 definition 移到 `.trash/`。行级一次性 Run action 在执行期间会切换为 Stop；它与只控制周期调度的 Schedule pause/resume 是两套独立操作。
+
+### 分钟间隔与工作时段
+
+创建和编辑计划时，选择“每隔 N 分钟”可设置 1–1440 分钟的整数间隔，例如每 10 分钟采集一次。开启“工作时段”后，可自行选择星期并增删多个时段，不限制为固定的上下班时间。以下是 Markdown 中的 `schedule` 配置片段：
+
+```yaml
+schedule:
+  kind: interval
+  minutes: 10
+  work_hours:
+    weekdays: [1, 2, 3, 4, 5]
+    windows:
+      - start: "09:00"
+        end: "12:00"
+      - start: "13:30"
+        end: "18:00"
+```
+
+星期按周一 1 至周日 7；所有时间使用服务所在机器的时区。窗口包含开始、不包含结束，结束可填 `24:00`；窗口须在同一天内且不能重叠。示例会在 09:00、09:10…11:50、13:30、13:40…17:50 到期，下班、午休和周末不启动。
+
+配置工作时段的间隔任务，每个时段从其起点重新计时；没有时段限制的 interval 使用固定经过分钟的时间网格，跨小时保持间隔。服务重启或从休眠恢复时，只合并补跑当前开放时段内最近的一次，不重放午休前、昨天下班前等已关闭时段。正在执行的任务继续完成，手动“立即运行”不受工作时段限制。
+
+工作时段也可限制 hourly、daily、weekly、monthly；固定执行时间必须落入至少一个时段，每周日期也须与工作星期有交集。一次性计划不使用工作时段。未配置 work_hours 的现有任务保持原行为，无需重写旧 Markdown 或迁移数据库。
+
 
 Front matter 可选填 `session_id`，作为关联会话的元数据。值会去除首尾空白，须为 1–128 字符的字符串；省略或填 `null` 表示未设置。编辑、暂停或恢复计划时会保留该字段。每次 Run 仍创建新会话，实际运行产生的 Session ID 由 runtime 返回。
 

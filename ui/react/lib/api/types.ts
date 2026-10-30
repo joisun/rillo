@@ -122,12 +122,18 @@ export interface DashboardMeta {
   }
 }
 
+export interface ScheduleWorkHours {
+  weekdays: number[]
+  windows: { start: string; end: string }[]
+}
+
 export type ScheduleCadence =
   | { kind: 'once'; at: string; timezone_mode?: 'system' }
+  | (({ kind: 'interval'; minutes: number; timezone_mode?: 'system' }
   | { kind: 'hourly'; minute: number; timezone_mode?: 'system' }
   | { kind: 'daily'; hour: number; minute: number; timezone_mode?: 'system' }
   | { kind: 'weekly'; hour: number; minute: number; weekdays: number[]; timezone_mode?: 'system' }
-  | { kind: 'monthly'; hour: number; minute: number; day: number; timezone_mode?: 'system' }
+  | { kind: 'monthly'; hour: number; minute: number; day: number; timezone_mode?: 'system' }) & { work_hours?: ScheduleWorkHours })
 
 export type RunStatus =
   | 'queued'

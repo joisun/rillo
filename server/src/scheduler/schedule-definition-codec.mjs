@@ -118,10 +118,13 @@ function duration(seconds) {
 }
 
 function cadence(value, clock, { allowPastOnce = false } = {}) {
-  const schedule = object(value, 'schedule')
+  const original = object(value, 'schedule')
+  const { work_hours, ...schedule } = original
+  const hours = work_hours === undefined ? {} : { work_hours }
   if (typeof schedule.kind !== 'string') fail('SCHEDULE_DEFINITION_INVALID', 'schedule.kind is required', { field: 'schedule.kind' })
   const kind = schedule.kind
   if (kind === 'once') {
+    if (work_hours !== undefined) fail('SCHEDULE_DEFINITION_INVALID', 'once schedules cannot define work_hours', { field: 'schedule.work_hours' })
     exactFields(schedule, new Set(['kind', 'at']), 'schedule')
     const at = string(schedule.at, 'schedule.at', 40)
     if (!/(?:Z|[+-]\d{2}:\d{2})$/.test(at)) {
@@ -129,13 +132,17 @@ function cadence(value, clock, { allowPastOnce = false } = {}) {
     }
     return validateCadence({ kind, at }, { now: clock(), allowPastOnce })
   }
+  if (kind === 'interval') {
+    exactFields(schedule, new Set(['kind', 'minutes']), 'schedule')
+    return validateCadence({ kind, minutes: schedule.minutes, ...hours })
+  }
   if (kind === 'hourly') {
     exactFields(schedule, new Set(['kind', 'minute']), 'schedule')
-    return validateCadence({ kind, minute: schedule.minute })
+    return validateCadence({ kind, minute: schedule.minute, ...hours })
   }
   if (kind === 'daily') {
     exactFields(schedule, new Set(['kind', 'at']), 'schedule')
-    return validateCadence({ kind, ...time(schedule.at) })
+    return validateCadence({ kind, ...time(schedule.at), ...hours })
   }
   if (kind === 'weekly') {
     exactFields(schedule, new Set(['kind', 'on', 'at']), 'schedule')
@@ -148,24 +155,29 @@ function cadence(value, clock, { allowPastOnce = false } = {}) {
       }
       return WEEKDAYS.get(day.toLowerCase())
     })
-    return validateCadence({ kind, weekdays, ...time(schedule.at) })
+    return validateCadence({ kind, weekdays, ...time(schedule.at), ...hours })
   }
   if (kind === 'monthly') {
     exactFields(schedule, new Set(['kind', 'day', 'at']), 'schedule')
-    return validateCadence({ kind, day: schedule.day, ...time(schedule.at) })
+    return validateCadence({ kind, day: schedule.day, ...time(schedule.at), ...hours })
   }
   fail('SCHEDULE_DEFINITION_INVALID', `unsupported schedule kind: ${kind}`, { field: 'schedule.kind' })
 }
 
-function humanCadence(value) {
+function humanCadenceBase(value) {
   const at = (hour, minute) => `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
   if (value.kind === 'once') return { kind: 'once', at: value.at }
+  if (value.kind === 'interval') return { kind: 'interval', minutes: value.minutes }
   if (value.kind === 'hourly') return { kind: 'hourly', minute: value.minute }
   if (value.kind === 'daily') return { kind: 'daily', at: at(value.hour, value.minute) }
   if (value.kind === 'weekly') {
     return { kind: 'weekly', on: value.weekdays.map((day) => WEEKDAY_NAMES.get(day)), at: at(value.hour, value.minute) }
   }
   return { kind: 'monthly', day: value.day, at: at(value.hour, value.minute) }
+}
+
+function humanCadence(value) {
+  return { ...humanCadenceBase(value), ...(value.work_hours ? { work_hours: value.work_hours } : {}) }
 }
 
 export function definitionEtag(source) {

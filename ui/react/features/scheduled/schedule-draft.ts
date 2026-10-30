@@ -5,7 +5,7 @@ import type {
   ScheduleRecord,
 } from '@/lib/api/types'
 
-const CADENCE_KINDS = new Set(['once', 'hourly', 'daily', 'weekly', 'monthly'])
+const CADENCE_KINDS = new Set(['once', 'interval', 'hourly', 'daily', 'weekly', 'monthly'])
 const SANDBOX_MODES = new Set(['read-only', 'workspace-write', 'danger-full-access'])
 const MODEL_SLUG = /^[a-z0-9][a-z0-9._-]{0,127}$/
 const REASONING_LEVEL = /^[a-z][a-z0-9_-]{0,15}$/
@@ -21,6 +21,10 @@ export interface ScheduleDraft {
   workspace: string
   agent: string
   cadenceKind: CadenceKind
+  intervalMinutes: string
+  workHoursEnabled: boolean
+  workWeekdays: number[]
+  workWindows: { start: string; end: string }[]
   onceAt: string
   minute: string
   hour: string
@@ -99,6 +103,8 @@ function onceInstant(value: unknown) {
 export function defaultScheduleDraft(): ScheduleDraft {
   return {
     title: '', prompt: '', workspace: '', agent: 'codex', cadenceKind: 'daily',
+    intervalMinutes: '10', workHoursEnabled: false, workWeekdays: [1, 2, 3, 4, 5],
+    workWindows: [{ start: '09:00', end: '18:00' }],
     onceAt: '', minute: '0', hour: '9', weekdays: [1], day: '1',
     sandbox_mode: 'read-only', dangerConfirmed: false, model: '',
     reasoning_effort: '', fast_mode: '', network_access: '', timeout_seconds: '7200',
@@ -123,6 +129,7 @@ export function scheduleToDraft(source: Partial<ScheduleRecord> = {}): ScheduleD
   const hour = 'hour' in cadence ? cadence.hour : 9
   const day = 'day' in cadence ? cadence.day : 1
   const weekdays = 'weekdays' in cadence ? normalizedWeekdays(cadence.weekdays) : []
+  const workHours = 'work_hours' in cadence ? cadence.work_hours : undefined
   return {
     ...defaultScheduleDraft(),
     title: text(source.title),
@@ -130,6 +137,10 @@ export function scheduleToDraft(source: Partial<ScheduleRecord> = {}): ScheduleD
     workspace: text(source.workspace),
     agent: AGENT_ID.test(text(source.agent)) ? text(source.agent) : 'codex',
     cadenceKind,
+    intervalMinutes: cadence.kind === 'interval' ? String(cadence.minutes) : '10',
+    workHoursEnabled: Boolean(workHours),
+    workWeekdays: workHours ? [...workHours.weekdays] : [1, 2, 3, 4, 5],
+    workWindows: workHours ? workHours.windows.map((window) => ({ ...window })) : [{ start: '09:00', end: '18:00' }],
     onceAt: 'at' in cadence ? dateTimeLocal(cadence.at) : '',
     minute: String(Number.isInteger(minute) && minute >= 0 && minute <= 59 ? minute : 0),
     hour: String(Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : 9),
@@ -197,6 +208,8 @@ export function draftToScheduleInput(
   let cadence: ScheduleCadence
   if (draft.cadenceKind === 'once') {
     cadence = { kind: 'once', at: onceInstant(draft.onceAt), timezone_mode: 'system' }
+  } else if (draft.cadenceKind === 'interval') {
+    cadence = { kind: 'interval', minutes: integer(draft.intervalMinutes, '间隔分钟', 1, 1440), timezone_mode: 'system' }
   } else if (draft.cadenceKind === 'hourly') {
     cadence = {
       kind: 'hourly', minute: integer(draft.minute, 'Minute', 0, 59), timezone_mode: 'system',
@@ -216,6 +229,35 @@ export function draftToScheduleInput(
     } else {
       cadence = { kind: 'daily', ...clock }
     }
+  }
+
+  if (cadence.kind !== 'once' && draft.workHoursEnabled) {
+    const weekdays = normalizedWeekdays(draft.workWeekdays)
+    if (!weekdays.length) throw new TypeError('工作时段至少选择一天')
+    const minute = (value: string, end = false) => {
+      if (end && value === '24:00') return 1440
+      if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) throw new TypeError('工作时段请使用 HH:mm，结束时间可填 24:00')
+      const [hour, part] = value.split(':').map(Number)
+      return hour * 60 + part
+    }
+    if (!draft.workWindows.length || draft.workWindows.length > 24) throw new TypeError('请设置 1–24 个工作时段')
+    const windows = draft.workWindows.map(({ start, end }) => {
+      if (minute(start) >= minute(end, true)) throw new TypeError('工作时段结束时间须晚于开始时间，跨天请拆成两段')
+      return { start, end }
+    }).sort((a, b) => a.start.localeCompare(b.start))
+    for (let index = 1; index < windows.length; index += 1) {
+      if (minute(windows[index].start) < minute(windows[index - 1].end, true)) throw new TypeError('工作时段不能重叠')
+    }
+    if (cadence.kind === 'weekly' && !cadence.weekdays.some((day) => weekdays.includes(day))) {
+      throw new TypeError('每周执行日期与工作时段至少需要有一天重合')
+    }
+    let slots: number[] = []
+    if (cadence.kind === 'hourly') slots = Array.from({ length: 24 }, (_, hour) => hour * 60 + cadence.minute)
+    else if (cadence.kind !== 'interval') slots = [cadence.hour * 60 + cadence.minute]
+    if (cadence.kind !== 'interval' && !slots.some((slot) => windows.some((window) => slot >= minute(window.start) && slot < minute(window.end, true)))) {
+      throw new TypeError('执行时间不在任何工作时段内')
+    }
+    cadence.work_hours = { weekdays, windows }
   }
 
   const model = text(draft.model)

@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { RilloError } from './errors.mjs'
 
-export const SERVER_INSTRUCTIONS = `Query native sessions and manage scheduled automation through these tools. Use runtime_list before choosing a schedule agent. Read schedule_get before changing a schedule and pass its latest etag as expected_etag; on SCHEDULE_VERSION_CONFLICT read again and reconsider the change, never silently overwrite. schedule_create creates an enabled task; cadence uses the service machine timezone. Reuse the same idempotency_key when retrying schedule_run. Session search covers user and assistant text, not just previews. Follow next_cursor even when a search page has no matches; do not claim that a partial page is the complete result. Use session_sources to obtain the exact provider and store_id before registering relations. SessionRef is {provider, store_id, session_id}; for Codex session_id is thread.id. After a delegated child session exists, register its actual identity with session_link. Never guess a session ID from an execution, agent key, PID, worktree, or title. Use session_unlink only to remove an explicitly registered relation; native subagent/fork relations are read-only. For messaging, discover session_control_sources and session_control_capabilities first; reuse the same request_id for the same target, text and mode. queue schedules input, steer supplements a turn, and interrupt stops the expected turn before sending; steer and interrupt require the observed expected_turn_id. accepted does not mean completed. On unknown, query session_delivery; never switch IDs or transports to resend blindly. No Task, heartbeat, attribution, checkpoint or automatic summary recording is needed. Never edit local databases directly.`
+export const SERVER_INSTRUCTIONS = `Query native sessions and manage scheduled automation through these tools. Use runtime_list before choosing a schedule agent. Read schedule_get before changing a schedule and pass its latest etag as expected_etag; on SCHEDULE_VERSION_CONFLICT read again and reconsider the change, never silently overwrite. schedule_create creates an enabled task; cadence uses the service machine timezone. interval cadence accepts minutes from 1 to 1440. Optional work_hours on recurring cadence restricts automatic starts to selected ISO weekdays and non-overlapping HH:mm windows (start inclusive, end exclusive; end may be 24:00). Each interval window starts its own interval sequence; closed or previous windows are not replayed. Existing executions continue and schedule_run ignores work hours. Reuse the same idempotency_key when retrying schedule_run. Session search covers user and assistant text, not just previews. Follow next_cursor even when a search page has no matches; do not claim that a partial page is the complete result. Use session_sources to obtain the exact provider and store_id before registering relations. SessionRef is {provider, store_id, session_id}; for Codex session_id is thread.id. After a delegated child session exists, register its actual identity with session_link. Never guess a session ID from an execution, agent key, PID, worktree, or title. Use session_unlink only to remove an explicitly registered relation; native subagent/fork relations are read-only. For messaging, discover session_control_sources and session_control_capabilities first; reuse the same request_id for the same target, text and mode. queue schedules input, steer supplements a turn, and interrupt stops the expected turn before sending; steer and interrupt require the observed expected_turn_id. accepted does not mean completed. On unknown, query session_delivery; never switch IDs or transports to resend blindly. No Task, heartbeat, attribution, checkpoint or automatic summary recording is needed. Never edit local databases directly.`
 
 const sessionRef = z.object({
   provider: z.string().min(1),
@@ -28,12 +28,22 @@ const scheduleVersion = {
 }
 const timezone = { timezone_mode: z.literal('system').optional() }
 const time = { hour: z.number().int().min(0).max(23), minute: z.number().int().min(0).max(59) }
+const workHours = {
+  work_hours: z.object({
+    weekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7),
+    windows: z.array(z.object({
+      start: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
+      end: z.string().regex(/^(?:(?:[01]\d|2[0-3]):[0-5]\d|24:00)$/),
+    }).strict()).min(1).max(24),
+  }).strict().describe('Optional automatic-start windows in the service timezone. ISO weekdays 1–7; start inclusive, end exclusive. Windows must not overlap. Manual runs are unaffected.').optional(),
+}
 const cadence = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('once'), ...timezone, at: z.string().min(1).describe('Future ISO timestamp within 366 days; include an explicit UTC offset.') }).strict(),
-  z.object({ kind: z.literal('hourly'), ...timezone, minute: time.minute }).strict(),
-  z.object({ kind: z.literal('daily'), ...timezone, ...time }).strict(),
-  z.object({ kind: z.literal('weekly'), ...timezone, weekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7).describe('Monday=1 through Sunday=7.'), ...time }).strict(),
-  z.object({ kind: z.literal('monthly'), ...timezone, day: z.number().int().min(1).max(31), ...time }).strict(),
+  z.object({ kind: z.literal('interval'), ...timezone, minutes: z.number().int().min(1).max(1440), ...workHours }).strict(),
+  z.object({ kind: z.literal('hourly'), ...timezone, minute: time.minute, ...workHours }).strict(),
+  z.object({ kind: z.literal('daily'), ...timezone, ...time, ...workHours }).strict(),
+  z.object({ kind: z.literal('weekly'), ...timezone, weekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7).describe('Monday=1 through Sunday=7.'), ...time, ...workHours }).strict(),
+  z.object({ kind: z.literal('monthly'), ...timezone, day: z.number().int().min(1).max(31), ...time, ...workHours }).strict(),
 ]).describe('Recurring schedules use the service machine timezone.')
 const scheduleFields = {
   title: z.string().trim().min(1).max(200),

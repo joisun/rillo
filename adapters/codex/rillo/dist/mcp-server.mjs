@@ -31185,7 +31185,7 @@ var EMPTY_COMPLETION_RESULT = {
 };
 
 // mcp/src/tools.mjs
-var SERVER_INSTRUCTIONS = `Query native sessions and manage scheduled automation through these tools. Use runtime_list before choosing a schedule agent. Read schedule_get before changing a schedule and pass its latest etag as expected_etag; on SCHEDULE_VERSION_CONFLICT read again and reconsider the change, never silently overwrite. schedule_create creates an enabled task; cadence uses the service machine timezone. Reuse the same idempotency_key when retrying schedule_run. Session search covers user and assistant text, not just previews. Follow next_cursor even when a search page has no matches; do not claim that a partial page is the complete result. Use session_sources to obtain the exact provider and store_id before registering relations. SessionRef is {provider, store_id, session_id}; for Codex session_id is thread.id. After a delegated child session exists, register its actual identity with session_link. Never guess a session ID from an execution, agent key, PID, worktree, or title. Use session_unlink only to remove an explicitly registered relation; native subagent/fork relations are read-only. For messaging, discover session_control_sources and session_control_capabilities first; reuse the same request_id for the same target, text and mode. queue schedules input, steer supplements a turn, and interrupt stops the expected turn before sending; steer and interrupt require the observed expected_turn_id. accepted does not mean completed. On unknown, query session_delivery; never switch IDs or transports to resend blindly. No Task, heartbeat, attribution, checkpoint or automatic summary recording is needed. Never edit local databases directly.`;
+var SERVER_INSTRUCTIONS = `Query native sessions and manage scheduled automation through these tools. Use runtime_list before choosing a schedule agent. Read schedule_get before changing a schedule and pass its latest etag as expected_etag; on SCHEDULE_VERSION_CONFLICT read again and reconsider the change, never silently overwrite. schedule_create creates an enabled task; cadence uses the service machine timezone. interval cadence accepts minutes from 1 to 1440. Optional work_hours on recurring cadence restricts automatic starts to selected ISO weekdays and non-overlapping HH:mm windows (start inclusive, end exclusive; end may be 24:00). Each interval window starts its own interval sequence; closed or previous windows are not replayed. Existing executions continue and schedule_run ignores work hours. Reuse the same idempotency_key when retrying schedule_run. Session search covers user and assistant text, not just previews. Follow next_cursor even when a search page has no matches; do not claim that a partial page is the complete result. Use session_sources to obtain the exact provider and store_id before registering relations. SessionRef is {provider, store_id, session_id}; for Codex session_id is thread.id. After a delegated child session exists, register its actual identity with session_link. Never guess a session ID from an execution, agent key, PID, worktree, or title. Use session_unlink only to remove an explicitly registered relation; native subagent/fork relations are read-only. For messaging, discover session_control_sources and session_control_capabilities first; reuse the same request_id for the same target, text and mode. queue schedules input, steer supplements a turn, and interrupt stops the expected turn before sending; steer and interrupt require the observed expected_turn_id. accepted does not mean completed. On unknown, query session_delivery; never switch IDs or transports to resend blindly. No Task, heartbeat, attribution, checkpoint or automatic summary recording is needed. Never edit local databases directly.`;
 var sessionRef = external_exports.object({
   provider: external_exports.string().min(1),
   store_id: external_exports.string().min(1),
@@ -31209,12 +31209,22 @@ var scheduleVersion = {
 };
 var timezone = { timezone_mode: external_exports.literal("system").optional() };
 var time3 = { hour: external_exports.number().int().min(0).max(23), minute: external_exports.number().int().min(0).max(59) };
+var workHours = {
+  work_hours: external_exports.object({
+    weekdays: external_exports.array(external_exports.number().int().min(1).max(7)).min(1).max(7),
+    windows: external_exports.array(external_exports.object({
+      start: external_exports.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
+      end: external_exports.string().regex(/^(?:(?:[01]\d|2[0-3]):[0-5]\d|24:00)$/)
+    }).strict()).min(1).max(24)
+  }).strict().describe("Optional automatic-start windows in the service timezone. ISO weekdays 1\u20137; start inclusive, end exclusive. Windows must not overlap. Manual runs are unaffected.").optional()
+};
 var cadence = external_exports.discriminatedUnion("kind", [
   external_exports.object({ kind: external_exports.literal("once"), ...timezone, at: external_exports.string().min(1).describe("Future ISO timestamp within 366 days; include an explicit UTC offset.") }).strict(),
-  external_exports.object({ kind: external_exports.literal("hourly"), ...timezone, minute: time3.minute }).strict(),
-  external_exports.object({ kind: external_exports.literal("daily"), ...timezone, ...time3 }).strict(),
-  external_exports.object({ kind: external_exports.literal("weekly"), ...timezone, weekdays: external_exports.array(external_exports.number().int().min(1).max(7)).min(1).max(7).describe("Monday=1 through Sunday=7."), ...time3 }).strict(),
-  external_exports.object({ kind: external_exports.literal("monthly"), ...timezone, day: external_exports.number().int().min(1).max(31), ...time3 }).strict()
+  external_exports.object({ kind: external_exports.literal("interval"), ...timezone, minutes: external_exports.number().int().min(1).max(1440), ...workHours }).strict(),
+  external_exports.object({ kind: external_exports.literal("hourly"), ...timezone, minute: time3.minute, ...workHours }).strict(),
+  external_exports.object({ kind: external_exports.literal("daily"), ...timezone, ...time3, ...workHours }).strict(),
+  external_exports.object({ kind: external_exports.literal("weekly"), ...timezone, weekdays: external_exports.array(external_exports.number().int().min(1).max(7)).min(1).max(7).describe("Monday=1 through Sunday=7."), ...time3, ...workHours }).strict(),
+  external_exports.object({ kind: external_exports.literal("monthly"), ...timezone, day: external_exports.number().int().min(1).max(31), ...time3, ...workHours }).strict()
 ]).describe("Recurring schedules use the service machine timezone.");
 var scheduleFields = {
   title: external_exports.string().trim().min(1).max(200),

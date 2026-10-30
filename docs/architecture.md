@@ -302,3 +302,12 @@ Codex 使用明确授权方法列表的共享 app-server 客户端；状态读�
 Claude 从用户回显或回复流的 user_message_uuid/user_message_uuids 确认对应输入，忽略迟到的重复回显，同一轮消费的合并输入一起结束；打断必须收到指定受控轮次的 aborted_streaming/aborted_tools 结果，普通结束不视为打断成功。没有对应消息 ID 证明时保留 unknown，不凭队列文本推断。
 
 Claude SDK 随 server vendor 构建并保留 Anthropic LICENSE；原生 CLI 仍由可执行文件 resolver 定位。关闭时先释放控制连接、等待在途投递记录收敛，再关闭回执数据库；空闲 worker 定时释放。
+
+
+## Working windows and minute intervals
+
+Cadence 增加 `interval`（整数 `minutes: 1..1440`）。非 once cadence 可带 `work_hours: { weekdays, windows: [{start,end}] }`；Markdown 与 HTTP/MCP 使用同一结构，weekdays 为 ISO 1..7。集中在 `scheduler/cadence.mjs` 校验时间、范围、重叠及固定时刻可达性，codec 只转换原有 human cadence 字段。Run snapshot 保留整个 cadence，不增加数据库列或第二个调度状态表。
+
+窗口为同一天内的半开区间，end 允许24:00。无窗口的 interval 对固定经过时间网格取整；有窗口则从各段本地起点按经过分钟计算，起点和日期由服务本机 Date 语义决定。nextOccurrence 与 latestDueOccurrence 共用窗口规则；latestDueOccurrence 在关闭时段返回null，在开放时段将补跑下界截到当前窗口开始，避免重放上个窗口或周末积压。原有 occurrence key 和 Run 唯一约束继续防重，30秒调度节拍及正在执行任务的互斥行为不变。
+
+工作时段只限制自动调度；已启动 Run 的执行及其已有内部重试继续完成，手动 Run 不受限。前端创建/编辑、列表摘要与 MCP schema 同步支持；用户未设置 work_hours 则维持旧行为。Legacy 回滚界面可以显示新摘要，但拒绝编辑含 interval/work_hours 的计划，防止静默退化为 daily 丢失约束。

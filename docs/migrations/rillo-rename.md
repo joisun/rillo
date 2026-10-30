@@ -1,13 +1,13 @@
 # Rillo 更名与本地安装迁移
 
-产品展示名称为 Rillo，CLI、包、插件、MCP server、路径与发布资产前缀为 `rillo`。本次本地构建版本是 0.15.0。
+产品展示名称为 Rillo，CLI、包、插件、MCP server、路径与发布资产前缀为 `rillo`。0.15.0 是首个使用 Rillo 名称的发布版本。
 
 ## 当前状态
 
 - 源码与本机程序已更名。命令为 `rillo`，数据目录为 `~/.config/rillo`，安装目录为 `~/.local/share/rillo`，macOS 活动日志为 `~/Library/Logs/rillo`。Linux unit 为 `rillo.service`，macOS label 为 `com.joi.rillo.daemon`。
 - 本机 Codex 和 Claude 插件均为 `rillo@rillo`，MCP server 为 `rillo`。本地 marketplace 镜像位于 `~/.local/share/rillo/marketplace`，与公开下载状态无关。
 - 用户补充授权后，远端仓库已实际更名为 [joisun/rillo](https://github.com/joisun/rillo)，本地 origin 同步到新地址。仓库 ID `1332808132` 不变；更名前后的 4 个分支 SHA、28 个 Release 及其资产 ID、名称、大小和 digest 完全一致。源码提交与 Release 发布分别进行，仓库更名不改变历史版本内容。
-- 没有发布 Rillo 0.15.0，也没有操作 sun。公开下载与 marketplace Git 安装命令需等 Rillo 0.15.0 正式发布后再使用。当前本机使用已校验的本地构建包。
+- Rillo 0.15.0 的公开包使用新资产名称。当前本机已迁移到 Rillo；sun 不在本次发布和本机更新的操作范围。
 
 ## 安装迁移行为
 
@@ -17,7 +17,7 @@
 
 备份和事务日志保留在 `~/.local/state/rillo-migrations`。两套数据目录同时存在时不覆盖、不自动合并。`--no-start` 不允许切换正在运行的旧服务。卸载只删除程序及服务登记，保留用户数据、日志与迁移备份。
 
-当前本地包的安装方式如下。将目录替换为实际已经构建并校验的发布目录：
+也可使用本地已构建并校验的发布包安装。将目录替换为实际发布目录：
 
 ```bash
 RILLO_RELEASE_BASE_URL=file:///absolute/path/to/local-release bash install.sh --version v0.15.0

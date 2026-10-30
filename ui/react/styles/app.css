@@ -1913,6 +1913,28 @@
   grid-column: 1 / -1;
 }
 
+.schedule-editor__work-hours {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.schedule-editor__work-hours legend {
+  padding: 0 0 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.schedule-editor__work-window {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
 .schedule-editor__weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);

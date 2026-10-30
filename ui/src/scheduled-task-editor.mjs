@@ -169,6 +169,9 @@ export function normalizeDraft(input = {}) {
   const cadence = source.cadence && typeof source.cadence === 'object' && !Array.isArray(source.cadence)
     ? source.cadence
     : {}
+  if (cadence.kind === 'interval' || cadence.work_hours) {
+    throw new TypeError('此计划包含分钟间隔或工作时段，请使用新版 Dashboard 编辑')
+  }
   const cadenceKind = CADENCE_KINDS.has(cadence.kind ?? source.cadenceKind)
     ? (cadence.kind ?? source.cadenceKind)
     : 'daily'

@@ -2,6 +2,7 @@ import { realpath, stat } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 
 import { isCodexModelSlug, isCodexReasoningLevel } from './codex-model-selection.mjs'
+import { validateCadence } from './cadence.mjs'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const ETAG = /^[0-9a-f]{64}$/
@@ -12,14 +13,8 @@ function fail() { return Object.assign(new Error('CODEX_INVOCATION_INVALID'), { 
 function string(value, max) { return typeof value === 'string' && value.length > 0 && value.length <= max }
 function object(value) { return value && typeof value === 'object' && !Array.isArray(value) }
 function validCadence(value) {
-  if (!object(value) || value.timezone_mode !== 'system' || !['once', 'hourly', 'daily', 'weekly', 'monthly'].includes(value.kind)) return false
-  const integer = (item, min, max) => Number.isInteger(item) && item >= min && item <= max
-  if (value.kind === 'once') return typeof value.at === 'string' && Number.isFinite(Date.parse(value.at))
-  if (value.kind === 'hourly') return integer(value.minute, 0, 59)
-  if (!integer(value.hour, 0, 23) || !integer(value.minute, 0, 59)) return false
-  if (value.kind === 'daily') return true
-  if (value.kind === 'weekly') return Array.isArray(value.weekdays) && value.weekdays.length > 0 && value.weekdays.every((day) => integer(day, 1, 7))
-  return integer(value.day, 1, 31)
+  if (!object(value) || value.timezone_mode !== 'system') return false
+  try { validateCadence(value, { allowPastOnce: true }); return true } catch { return false }
 }
 async function canonicalFile(value) {
   if (!string(value, 4096) || !isAbsolute(value)) throw fail()
