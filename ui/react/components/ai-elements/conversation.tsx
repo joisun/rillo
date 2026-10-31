@@ -31,7 +31,7 @@ export function ConversationContent({ className, ...props }: ConversationContent
   )
 }
 
-export type ConversationScrollButtonProps = Omit<ComponentProps<typeof Button>, 'onPress'>
+export type ConversationScrollButtonProps = Omit<ComponentProps<typeof Button>, 'onClick'>
 
 export function ConversationScrollButton({ className, ...props }: ConversationScrollButtonProps) {
   const { isAtBottom, scrollToBottom } = useStickToBottomContext()
@@ -46,7 +46,7 @@ export function ConversationScrollButton({ className, ...props }: ConversationSc
       isIconOnly
       size="sm"
       variant="secondary"
-      onPress={handlePress}
+      onClick={handlePress}
       {...props}
     >
       <ArrowDown aria-hidden="true" />

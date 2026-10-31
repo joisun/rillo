@@ -1,3 +1,5 @@
+import { m } from 'motion/react'
+import { transition } from '@/lib/motion'
 import type { RunDispatchRecord, RunRecord } from '@/lib/api/types'
 import {
   compactDateTime,
@@ -69,7 +71,8 @@ export function RunHistory({
 
             const { run } = row
             return (
-              <tr
+              <m.tr
+                initial={false} animate={{ opacity: 1 }} transition={transition.fast}
                 key={run.id}
                 aria-label={`${runStatusLabel(run.status)}，${compactDateTime(run.started_at ?? run.created_at)}，${runDuration(run.started_at, run.finished_at)}`}
                 aria-selected={run.id === selectedRunId}
@@ -91,7 +94,7 @@ export function RunHistory({
                 </td>
                 <td>{compactDateTime(run.started_at ?? run.created_at)}</td>
                 <td>{runDuration(run.started_at, run.finished_at)}</td>
-              </tr>
+              </m.tr>
             )
           })}
         </tbody>

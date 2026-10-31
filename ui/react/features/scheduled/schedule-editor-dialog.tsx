@@ -1,9 +1,9 @@
 import { AlertTriangle, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Modal, ModalOverlay } from 'react-aria-components/Modal'
 
 import { Button } from '@/components/ui/button'
 import {
+  Dialog,
   DialogBody,
   DialogContent,
   DialogFooter,
@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input, TextArea } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { FieldLabel } from '@/components/ui/field'
 import { Switch } from '@/components/ui/switch'
 import { DashboardApiError, type DashboardApi } from '@/lib/api/dashboard-api'
 import type { RuntimeStatus, ScheduleRecord } from '@/lib/api/types'
@@ -38,12 +39,6 @@ function editorError(error: unknown) {
     return 'Schedule 已在其他位置更新。当前输入已保留，请关闭后重新打开以载入最新版本。'
   }
   return error instanceof Error ? error.message : 'Schedule 保存失败'
-}
-
-function FieldLabel({ children, htmlFor }: { children: string; htmlFor?: string }) {
-  return htmlFor
-    ? <label className="schedule-editor__label" htmlFor={htmlFor}>{children}</label>
-    : <span className="schedule-editor__label">{children}</span>
 }
 
 export function ScheduleEditorDialog({
@@ -227,14 +222,8 @@ export function ScheduleEditorDialog({
           || 'Model 与 Reasoning 来自本机 Agent CLI。')
 
   return (
-    <ModalOverlay
-      className="schedule-editor-overlay"
-      isDismissable={!busy}
-      isOpen={open}
-      onOpenChange={onOpenChange}
-    >
-      <Modal className="schedule-editor-modal">
-        <DialogContent className="schedule-editor-dialog" showCloseButton={!busy}>
+    <Dialog open={open} disablePointerDismissal={busy} onOpenChange={(nextOpen, details) => { if (busy) details.cancel(); else onOpenChange(nextOpen) }}>
+        <DialogContent className="schedule-editor-dialog schedule-editor-modal" showCloseButton={!busy}>
           <DialogHeader className="schedule-editor__header">
             <DialogTitle>{editing ? '编辑计划' : '新建计划'}</DialogTitle>
             <p>保存后写入 Markdown definition，daemon watcher 会自动同步。</p>
@@ -270,13 +259,13 @@ export function ScheduleEditorDialog({
                   </div>
                   <div className="schedule-editor__field">
                     <FieldLabel>Repeat</FieldLabel>
-                    <Select aria-label="Repeat" isDisabled={busy} selectedKey={draft.cadenceKind} onSelectionChange={(key) => update('cadenceKind', String(key) as CadenceKind)}>
+                    <Select aria-label="Repeat" disabled={busy} value={draft.cadenceKind} onValueChange={(key) => update('cadenceKind', String(key) as CadenceKind)}>
                       <SelectTrigger size="sm"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem id="once">Once</SelectItem><SelectItem id="hourly">Hourly</SelectItem>
-                        <SelectItem id="interval">每隔 N 分钟</SelectItem>
-                        <SelectItem id="daily">Daily</SelectItem><SelectItem id="weekly">Weekly</SelectItem>
-                        <SelectItem id="monthly">Monthly</SelectItem>
+                        <SelectItem value="once">Once</SelectItem><SelectItem value="hourly">Hourly</SelectItem>
+                        <SelectItem value="interval">每隔 N 分钟</SelectItem>
+                        <SelectItem value="daily">Daily</SelectItem><SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -309,7 +298,7 @@ export function ScheduleEditorDialog({
                   {draft.cadenceKind !== 'once' ? (
                     <fieldset className="schedule-editor__work-hours">
                       <legend>工作时段</legend>
-                      <Switch aria-label="限制工作时段" isDisabled={busy} isSelected={draft.workHoursEnabled} onChange={(selected) => update('workHoursEnabled', selected)}>仅在指定时段自动运行</Switch>
+                      <Switch aria-label="限制工作时段" disabled={busy} checked={draft.workHoursEnabled} onCheckedChange={(selected) => update('workHoursEnabled', selected)}>仅在指定时段自动运行</Switch>
                       {draft.workHoursEnabled ? <>
                         <div className="schedule-editor__weekdays" role="group" aria-label="工作时段适用星期">
                           {WEEKDAYS.map(([day, label]) => <label key={day}><input checked={draft.workWeekdays.includes(day)} disabled={busy} type="checkbox" onChange={(event) => update('workWeekdays', event.currentTarget.checked ? [...draft.workWeekdays, day] : draft.workWeekdays.filter((value) => value !== day))} /><span>{label}</span></label>)}
@@ -318,10 +307,10 @@ export function ScheduleEditorDialog({
                           <div className="schedule-editor__work-window" key={index}>
                             <div className="schedule-editor__field"><FieldLabel htmlFor={`work-start-${index}`}>{`开始 ${index + 1}`}</FieldLabel><Input id={`work-start-${index}`} disabled={busy} inputMode="numeric" maxLength={5} placeholder="09:00" value={window.start} onChange={(event) => update('workWindows', draft.workWindows.map((item, itemIndex) => itemIndex === index ? { ...item, start: event.currentTarget.value } : item))} /></div>
                             <div className="schedule-editor__field"><FieldLabel htmlFor={`work-end-${index}`}>{`结束 ${index + 1}`}</FieldLabel><Input id={`work-end-${index}`} disabled={busy} inputMode="numeric" maxLength={5} placeholder="18:00" value={window.end} onChange={(event) => update('workWindows', draft.workWindows.map((item, itemIndex) => itemIndex === index ? { ...item, end: event.currentTarget.value } : item))} /></div>
-                            <Button isIconOnly aria-label={`删除时段 ${index + 1}`} isDisabled={busy || draft.workWindows.length === 1} size="sm" type="button" variant="quiet" onPress={() => update('workWindows', draft.workWindows.filter((_, itemIndex) => itemIndex !== index))}><Trash2 /></Button>
+                            <Button isIconOnly aria-label={`删除时段 ${index + 1}`} disabled={busy || draft.workWindows.length === 1} size="sm" type="button" variant="quiet" onClick={() => update('workWindows', draft.workWindows.filter((_, itemIndex) => itemIndex !== index))}><Trash2 /></Button>
                           </div>
                         ))}
-                        <Button isDisabled={busy || draft.workWindows.length >= 24} size="sm" type="button" variant="secondary" onPress={() => update('workWindows', [...draft.workWindows, { start: '', end: '' }])}>添加时段</Button>
+                        <Button disabled={busy || draft.workWindows.length >= 24} size="sm" type="button" variant="secondary" onClick={() => update('workWindows', [...draft.workWindows, { start: '', end: '' }])}>添加时段</Button>
                         <p className="schedule-editor__hint">按服务所在时区运行，包含开始、不含结束；结束可填 24:00。每个时段从起点重新计时，午休和下班后不补跑；已开始的任务继续完成，立即运行不受限。</p>
                       </> : null}
                     </fieldset>
@@ -331,12 +320,12 @@ export function ScheduleEditorDialog({
                 <section className="schedule-editor__section">
                   <h3>Runtime</h3>
                   <div className="schedule-editor__grid">
-                    <div className="schedule-editor__field"><FieldLabel>Agent</FieldLabel><Select aria-label="Agent" isDisabled={busy} selectedKey={draft.agent} onSelectionChange={(key) => void changeAgent(String(key))}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent>{runtimes.map((runtime) => <SelectItem id={runtime.id} key={runtime.id}>{runtime.display_name}</SelectItem>)}</SelectContent></Select></div>
-                    <div className="schedule-editor__field"><FieldLabel>Sandbox</FieldLabel><Select aria-label="Sandbox" isDisabled={busy} selectedKey={draft.sandbox_mode} onSelectionChange={(key) => update('sandbox_mode', String(key) as ScheduleRecord['sandbox_mode'])}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent>{draft.agent !== 'opencode' && <SelectItem id="read-only">read-only</SelectItem>}{draft.agent !== 'opencode' && <SelectItem id="workspace-write">workspace-write</SelectItem>}<SelectItem id="danger-full-access">danger-full-access</SelectItem></SelectContent></Select></div>
-                    <div className="schedule-editor__field"><FieldLabel>Model</FieldLabel><Select aria-label="Model" isDisabled={busy || catalogState !== 'ready'} selectedKey={draft.model || 'default'} onSelectionChange={(key) => { const model = String(key) === 'default' ? '' : String(key); const selected = catalog.find(({ slug }) => slug === model); setDraft((current) => ({ ...current, model, reasoning_effort: selected && current.reasoning_effort && !selected.reasoningLevels.includes(current.reasoning_effort) ? '' : current.reasoning_effort })); setError('') }}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem id="default">Runtime default</SelectItem>{catalog.map((model) => <SelectItem id={model.slug} key={model.slug}>{model.displayName} · {model.slug}</SelectItem>)}</SelectContent></Select></div>
-                    <div className="schedule-editor__field"><FieldLabel>{draft.agent === 'opencode' ? 'Variant' : 'Reasoning'}</FieldLabel><Select aria-label={draft.agent === 'opencode' ? 'Variant' : 'Reasoning'} isDisabled={busy || catalogState !== 'ready'} selectedKey={draft.reasoning_effort || 'default'} onSelectionChange={(key) => update('reasoning_effort', String(key) === 'default' ? '' : String(key))}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem id="default">Runtime default</SelectItem>{reasoningLevels.map((level) => <SelectItem id={level} key={level}>{level}</SelectItem>)}</SelectContent></Select></div>
-                    {draft.agent === 'codex' && <div className="schedule-editor__field"><FieldLabel>Fast mode</FieldLabel><Select aria-label="Fast mode" isDisabled={busy} selectedKey={draft.fast_mode || 'inherit'} onSelectionChange={(key) => update('fast_mode', String(key) === 'inherit' ? '' : String(key) as 'on' | 'off')}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem id="inherit">跟随 Codex 默认</SelectItem><SelectItem id="on">开启</SelectItem><SelectItem id="off">关闭（普通速度）</SelectItem></SelectContent></Select></div>}
-                    {draft.agent === 'codex' && <div className="schedule-editor__field"><FieldLabel>沙箱网络访问</FieldLabel><Select aria-label="沙箱网络访问" isDisabled={busy} selectedKey={draft.network_access || 'inherit'} onSelectionChange={(key) => update('network_access', String(key) === 'inherit' ? '' : String(key) as 'on' | 'off')}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem id="inherit">跟随 Codex 默认</SelectItem><SelectItem id="on">允许</SelectItem><SelectItem id="off">禁止</SelectItem></SelectContent></Select></div>}
+                    <div className="schedule-editor__field"><FieldLabel>Agent</FieldLabel><Select aria-label="Agent" disabled={busy} value={draft.agent} onValueChange={(key) => void changeAgent(String(key))}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent>{runtimes.map((runtime) => <SelectItem value={runtime.id} key={runtime.id}>{runtime.display_name}</SelectItem>)}</SelectContent></Select></div>
+                    <div className="schedule-editor__field"><FieldLabel>Sandbox</FieldLabel><Select aria-label="Sandbox" disabled={busy} value={draft.sandbox_mode} onValueChange={(key) => update('sandbox_mode', String(key) as ScheduleRecord['sandbox_mode'])}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent>{draft.agent !== 'opencode' && <SelectItem value="read-only">read-only</SelectItem>}{draft.agent !== 'opencode' && <SelectItem value="workspace-write">workspace-write</SelectItem>}<SelectItem value="danger-full-access">danger-full-access</SelectItem></SelectContent></Select></div>
+                    <div className="schedule-editor__field"><FieldLabel>Model</FieldLabel><Select aria-label="Model" disabled={busy || catalogState !== 'ready'} value={draft.model || 'default'} onValueChange={(key) => { const model = String(key) === 'default' ? '' : String(key); const selected = catalog.find(({ slug }) => slug === model); setDraft((current) => ({ ...current, model, reasoning_effort: selected && current.reasoning_effort && !selected.reasoningLevels.includes(current.reasoning_effort) ? '' : current.reasoning_effort })); setError('') }}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="default">Runtime default</SelectItem>{catalog.map((model) => <SelectItem value={model.slug} key={model.slug}>{model.displayName} · {model.slug}</SelectItem>)}</SelectContent></Select></div>
+                    <div className="schedule-editor__field"><FieldLabel>{draft.agent === 'opencode' ? 'Variant' : 'Reasoning'}</FieldLabel><Select aria-label={draft.agent === 'opencode' ? 'Variant' : 'Reasoning'} disabled={busy || catalogState !== 'ready'} value={draft.reasoning_effort || 'default'} onValueChange={(key) => update('reasoning_effort', String(key) === 'default' ? '' : String(key))}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="default">Runtime default</SelectItem>{reasoningLevels.map((level) => <SelectItem value={level} key={level}>{level}</SelectItem>)}</SelectContent></Select></div>
+                    {draft.agent === 'codex' && <div className="schedule-editor__field"><FieldLabel>Fast mode</FieldLabel><Select aria-label="Fast mode" disabled={busy} value={draft.fast_mode || 'inherit'} onValueChange={(key) => update('fast_mode', String(key) === 'inherit' ? '' : String(key) as 'on' | 'off')}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="inherit">跟随 Codex 默认</SelectItem><SelectItem value="on">开启</SelectItem><SelectItem value="off">关闭（普通速度）</SelectItem></SelectContent></Select></div>}
+                    {draft.agent === 'codex' && <div className="schedule-editor__field"><FieldLabel>沙箱网络访问</FieldLabel><Select aria-label="沙箱网络访问" disabled={busy} value={draft.network_access || 'inherit'} onValueChange={(key) => update('network_access', String(key) === 'inherit' ? '' : String(key) as 'on' | 'off')}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="inherit">跟随 Codex 默认</SelectItem><SelectItem value="on">允许</SelectItem><SelectItem value="off">禁止</SelectItem></SelectContent></Select></div>}
                     {draft.agent === 'codex' && <p className="schedule-editor__hint">workspace-write 只代表允许写入工作区。联网采集需要允许网络访问；后台运行不会弹出授权。网络开关适用于 workspace-write。</p>}
                     <div className="schedule-editor__field"><FieldLabel htmlFor="schedule-timeout">Timeout (seconds)</FieldLabel><Input disabled={busy} id="schedule-timeout" max={86_400} min={60} type="number" value={draft.timeout_seconds} onChange={(event) => update('timeout_seconds', event.currentTarget.value)} /></div>
                   </div>
@@ -348,17 +337,17 @@ export function ScheduleEditorDialog({
                     </div>
                     <Switch
                       aria-label="Load Skills"
-                      isDisabled={busy || draft.agent === 'opencode' || isolation?.skills !== true}
-                      isSelected={draft.loadSkills}
-                      onChange={(selected) => update('loadSkills', selected)}
+                      disabled={busy || draft.agent === 'opencode' || isolation?.skills !== true}
+                      checked={draft.loadSkills}
+                      onCheckedChange={(selected) => update('loadSkills', selected)}
                     >
                       <span><strong>Load Skills</strong><small>允许 Agent 发现并按需读取 Skills</small></span>
                     </Switch>
                     <Switch
                       aria-label="Load integrations"
-                      isDisabled={busy || draft.agent === 'opencode' || isolation?.integrations !== true}
-                      isSelected={draft.loadIntegrations}
-                      onChange={(selected) => update('loadIntegrations', selected)}
+                      disabled={busy || draft.agent === 'opencode' || isolation?.integrations !== true}
+                      checked={draft.loadIntegrations}
+                      onCheckedChange={(selected) => update('loadIntegrations', selected)}
                     >
                       <span><strong>Load integrations</strong><small>MCP、Apps 和 plugin tools</small></span>
                     </Switch>
@@ -372,13 +361,12 @@ export function ScheduleEditorDialog({
           </DialogBody>
 
           <DialogFooter className="schedule-editor__footer">
-            {schedule ? <Button isDisabled={busy} isPending={phase === 'deleting'} size="sm" variant={deleteArmed ? 'danger' : 'quiet'} onPress={() => void remove()}><Trash2 aria-hidden="true" />{deleteArmed ? '确认删除' : '删除'}</Button> : <span />}
+            {schedule ? <Button disabled={busy} isPending={phase === 'deleting'} size="sm" variant={deleteArmed ? 'danger' : 'quiet'} onClick={() => void remove()}><Trash2 aria-hidden="true" />{deleteArmed ? '确认删除' : '删除'}</Button> : <span />}
             <div />
-            <Button isDisabled={busy} size="sm" variant="quiet" onPress={() => onOpenChange(false)}>取消</Button>
-            <Button form="schedule-editor-form" isDisabled={busy} isPending={phase === 'saving'} size="sm" type="submit" variant="primary">保存计划</Button>
+            <Button disabled={busy} size="sm" variant="quiet" onClick={() => onOpenChange(false)}>取消</Button>
+            <Button form="schedule-editor-form" disabled={busy} isPending={phase === 'saving'} size="sm" type="submit" variant="primary">保存计划</Button>
           </DialogFooter>
         </DialogContent>
-      </Modal>
-    </ModalOverlay>
+    </Dialog>
   )
 }

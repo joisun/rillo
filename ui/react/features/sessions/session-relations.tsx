@@ -43,14 +43,14 @@ export function SessionRelations({ api, session, knownSessions, knownRelations =
       const target = isChild ? relation.parent : relation.child
       const label = relation.kind === 'fork' ? (isChild ? 'Fork 来源' : '派生 Fork') : relation.kind === 'subagent' ? (isChild ? 'Subagent 父会话' : 'Subagent 子会话') : (isChild ? '协作父会话' : '协作子会话')
       return <div className="session-relations__row" key={relation.id}><span>{label}</span><button type="button" onClick={() => onReadSession(target)} title={sessionKey(target)}>{knownSessions?.get(sessionKey(target))?.title ?? target.session_id}</button>
-        {relation.origin === 'registered' ? <Button size="xs" variant="quiet" isPending={unlink.isPending && unlink.variables?.id === relation.id} onPress={() => unlink.mutate(relation)}>解除登记</Button> : null}</div>
+        {relation.origin === 'registered' ? <Button size="xs" variant="quiet" isPending={unlink.isPending && unlink.variables?.id === relation.id} onClick={() => unlink.mutate(relation)}>解除登记</Button> : null}</div>
     })}
     <form className="session-relations__form" onSubmit={(event) => { event.preventDefault(); link.mutate() }}>
       <span>登记子会话（每个子会话只允许一个父会话）</span>
-      {sources.length > 1 ? <Select aria-label="子会话来源" selectedKey={source ? JSON.stringify([source.id, source.store_id]) : null} onSelectionChange={(key) => setSourceKey(String(key))}><SelectTrigger size="sm" aria-label="子会话来源"><SelectValue /></SelectTrigger><SelectContent>{sources.map((item, index) => <SelectItem key={JSON.stringify([item.id, item.store_id])} id={JSON.stringify([item.id, item.store_id])} textValue={`${item.name} · 来源 ${index + 1}`}><span title={item.store_id}>{item.name}{sources.filter((candidate) => candidate.name === item.name).length > 1 ? ` · 来源 ${index + 1}` : ''}</span></SelectItem>)}</SelectContent></Select>
+      {sources.length > 1 ? <Select aria-label="子会话来源" value={source ? JSON.stringify([source.id, source.store_id]) : null} onValueChange={(key) => setSourceKey(String(key))}><SelectTrigger size="sm" aria-label="子会话来源"><SelectValue /></SelectTrigger><SelectContent>{sources.map((item, index) => <SelectItem key={JSON.stringify([item.id, item.store_id])} value={JSON.stringify([item.id, item.store_id])}><span title={item.store_id}>{item.name}{sources.filter((candidate) => candidate.name === item.name).length > 1 ? ` · 来源 ${index + 1}` : ''}</span></SelectItem>)}</SelectContent></Select>
         : <span className="session-source" title={source?.store_id}>来源：{source?.name ?? '正在读取…'}</span>}
       <label className="session-relations__input-label">子会话 Session ID<Input size="sm" placeholder="输入完整会话 ID" value={childId} onChange={(event) => setChildId(event.currentTarget.value)} /></label>
-      <Button size="xs" variant="secondary" type="submit" isDisabled={!source || !childId.trim()} isPending={link.isPending}>登记子会话</Button>
+      <Button size="xs" variant="secondary" type="submit" disabled={!source || !childId.trim()} isPending={link.isPending}>登记子会话</Button>
     </form>
     {link.isError || unlink.isError ? <p role="alert" className="session-error">{(link.error ?? unlink.error)?.message}</p> : null}
     {providers.isError ? <p role="alert" className="session-error">无法读取来源：{providers.error.message}</p> : null}

@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 
-import { DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Drawer } from '@/components/ui/drawer'
+import { DialogClose, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { Button } from '@/components/ui/button'
+import { X } from 'lucide-react'
 import type { DashboardApi } from '@/lib/api/dashboard-api'
 import type { ScheduleRecord } from '@/lib/api/types'
 import { queryKeys } from '@/lib/query/keys'
@@ -45,10 +47,6 @@ export function RunReviewDrawer({
     setSelectedRunId((current) => orderedRuns.some(({ id }) => id === current) ? current : orderedRuns[0]?.id ?? null)
   }, [open, orderedRuns])
 
-  useEffect(() => {
-    setSelectedRunId(null)
-  }, [schedule?.id])
-
   const runDetail = useQuery({
     queryKey: queryKeys.run(selectedRunId ?? ''),
     queryFn: () => api.scheduledRun(selectedRunId ?? ''),
@@ -60,8 +58,9 @@ export function RunReviewDrawer({
   const currentSchedule = scheduleDetail.data?.job ?? schedule
 
   return (
-    <Drawer isOpen={open} onOpenChange={onOpenChange} placement="right" swipeToDismiss={false} className="run-review-drawer">
-      <DialogContent showCloseButton>
+    <Sheet open={open} onOpenChange={onOpenChange}><SheetContent className="run-review-drawer" aria-label="执行记录">
+      <div className="ui-sheet__content">
+        <DialogClose render={<Button className="ui-dialog__close" isIconOnly variant="quiet" aria-label="关闭" />}><X /></DialogClose>
         <DialogHeader>
           <DialogTitle>{currentSchedule?.title ?? '执行记录'}</DialogTitle>
           <DialogDescription>运行记录、产出与可恢复 Session</DialogDescription>
@@ -85,7 +84,7 @@ export function RunReviewDrawer({
             </div>
           </div>
         ) : null}
-      </DialogContent>
-    </Drawer>
+      </div>
+    </SheetContent></Sheet>
   )
 }

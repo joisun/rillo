@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Copy, PanelRightClose } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Check, Copy, X } from 'lucide-react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,8 @@ import { DashboardApiError, type DashboardApi } from '@/lib/api/dashboard-api'
 import type { BrowserSession, SessionMessagesPage, SessionRef, SessionRelation, SessionTimeline } from '@/lib/api/types'
 import { queryKeys } from '@/lib/query/keys'
 import { Highlight } from './session-format'
+import { SessionDensity } from './session-density'
+import { sessionMessageRange } from './session-projection'
 import { AutoPager } from './session-auto-pager'
 import { SessionRelations } from './session-relations'
 import { SessionResumeButton } from './session-resume-button'
@@ -17,9 +19,11 @@ import { sessionReadRequests } from './session-timeline-queue'
 
 const SEEK_SCROLL_MS = 100
 
-export function SessionDetail({ api, session, knownSessions, knownRelations, query, onBack, canResume = true, at = null, itemId, followRequest = 0, onReadingPosition, onReadSession, onLoadTimeline }: {
+export function SessionDetail({ api, session, knownSessions, knownRelations, query, onBack, canResume = true, at = null, itemId, followRequest = 0, onReadingPosition, onReadSession, onLoadTimeline, onSeek, active = true }: {
   api: DashboardApi
   canResume?: boolean
+  active?: boolean
+  onSeek?: (at: string, itemId?: string) => void
   session: BrowserSession
   knownSessions?: Map<string, BrowserSession>
   knownRelations?: SessionRelation[]
@@ -33,6 +37,24 @@ export function SessionDetail({ api, session, knownSessions, knownRelations, que
   onReadingPosition?: (at: string, itemId: string) => void
 }) {
   const client = useQueryClient()
+  const [readingAt, setReadingAt] = useState<string | null>(null)
+  const [viewport, setViewport] = useState<{ from: string; to: string } | null>(null)
+  const timeline = useInfiniteQuery({
+    queryKey: queryKeys.sessionTimeline(session, 'session', session.updated_at ?? ''),
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam, signal }) => sessionReadRequests.run(() => api.sessionTimeline(session, { cursor: pageParam }, signal), signal),
+    getNextPageParam: (page: SessionTimeline) => page.next_cursor ?? undefined,
+    enabled: active, retry: false, staleTime: 60_000, gcTime: 300_000, refetchOnWindowFocus: false,
+  })
+  const timelinePages = timeline.data?.pages ?? []
+  const range = useMemo(() => sessionMessageRange(session, timeline.data?.pages ?? []), [timeline.data, session.provider, session.store_id, session.session_id, session.created_at])
+  useEffect(() => {
+    if (active && timeline.hasNextPage && !timeline.isFetching && !timeline.isError) void timeline.fetchNextPage()
+  }, [active, timeline.hasNextPage, timeline.isFetching, timeline.isError, timeline.fetchNextPage, timeline.data?.pages.length])
+  useEffect(() => {
+    if (!timeline.dataUpdatedAt || timeline.isFetching) return
+    void client.invalidateQueries({ queryKey: ['dashboard', 'session-browser', session.provider, session.store_id, session.session_id, 'messages'], predicate: query => query.state.error !== null })
+  }, [timeline.dataUpdatedAt, timeline.isFetching, client, session.provider, session.store_id, session.session_id])
   const syncedTime = useRef('')
   const repairedPosition = useRef('')
   const [locateMatch, setLocateMatch] = useState(Boolean(query))
@@ -109,7 +131,15 @@ export function SessionDetail({ api, session, knownSessions, knownRelations, que
     let visible = elements.reduce((best, element) => distance(element) < distance(best) ? element : best)
     if (body.scrollTop <= 1) visible = elements[0]
     if (body.scrollTop + body.clientHeight >= body.scrollHeight - 1) visible = elements.at(-1)!
-    if (visible.dataset.at && visible.dataset.itemId) readingCallback.current?.(visible.dataset.at, visible.dataset.itemId)
+    if (visible.dataset.at && visible.dataset.itemId) {
+      const at = visible.dataset.at
+      setReadingAt(current => current === at ? current : at)
+      readingCallback.current?.(at, visible.dataset.itemId)
+    }
+    const rect = body.getBoundingClientRect()
+    const inView = elements.filter(element => { const box = element.getBoundingClientRect(); return box.bottom >= rect.top && box.top <= rect.bottom })
+    const from = inView[0]?.dataset.at, to = inView.at(-1)?.dataset.at
+    if (from && to) setViewport(current => current?.from === from && current.to === to ? current : { from, to })
   }, [])
 
   function onScroll() {
@@ -193,22 +223,23 @@ export function SessionDetail({ api, session, knownSessions, knownRelations, que
     <section className="session-detail" aria-label="会话预览">
       <header className="session-detail__header">
         <div className="session-detail__heading">
-          <div className="session-detail__identity"><div className="session-detail__title"><SessionActivity session={session} /><h2 title={current.title}>{current.title}</h2></div><SessionTimeRange api={api} session={session} /></div>
+          <div className="session-detail__identity"><div className="session-detail__title"><SessionActivity session={session} /><h2 title={current.title}>{current.title}</h2></div><SessionTimeRange pages={timelinePages} /></div>
           <div className="session-detail__tools">
             <SessionPinButton api={api} session={current} />
             {canResume ? <SessionResumeButton api={api} session={{ ...current, state: session.state }} /> : null}
-            <span title={copyStatus || session.session_id}><Button size="xs" variant="quiet" isIconOnly aria-label="复制 Session ID" onPress={() => void copyId()}>{copyStatus === '已复制' ? <Check /> : <Copy />}</Button></span>
+            <span title={copyStatus || session.session_id}><Button size="xs" variant="quiet" isIconOnly aria-label="复制 Session ID" onClick={() => void copyId()}>{copyStatus === '已复制' ? <Check /> : <Copy />}</Button></span>
             <SessionRelations api={api} session={current} knownSessions={knownSessions} knownRelations={knownRelations} onReadSession={onReadSession} />
-          <Button className="session-detail__close" size="xs" variant="quiet" isIconOnly aria-label="收起会话面板" onPress={onBack}><PanelRightClose /></Button>
+          <Button className="session-detail__close" size="xs" variant="quiet" isIconOnly aria-label="关闭对话" onClick={onBack}><X /></Button>
           </div>
         </div>
         {copyStatus ? <span className="sr-only" role="status">{copyStatus}</span> : null}
       </header>
+      <div className="session-detail__body">
       <div ref={conversation} className="session-detail__conversation" tabIndex={0} aria-label="会话消息" onScroll={onScroll} onWheel={pauseFollowing} onTouchMove={pauseFollowing} onPointerDown={pauseFollowing} onKeyDown={(event) => { if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) pauseFollowing() }}>
         {search ? (
           <div className="session-match-notice">
             <span>{match ? '已定位首处正文命中' : history.isPending ? '正在定位正文…' : '未找到可定位的正文，显示最近对话'}</span>
-            <Button size="xs" variant="quiet" onPress={() => setLocateMatch(false)}>查看最近对话</Button>
+            <Button size="xs" variant="quiet" onClick={() => setLocateMatch(false)}>查看最近对话</Button>
           </div>
         ) : null}
         <AutoPager enabled={Boolean(history.hasNextPage) && !history.isError && !history.isPlaceholderData} loading={history.isFetching} onMore={loadOlder} />
@@ -229,20 +260,22 @@ export function SessionDetail({ api, session, knownSessions, knownRelations, que
           </div>
         ))}
       </div>
+      <aside className="session-minimap" aria-label="会话时间地图">
+        <div className="session-minimap__track" aria-busy={timeline.isFetching || undefined}>
+          {range ? <SessionDensity title={current.title} intervals={[]} points={range.points} from={range.start} to={range.end + 1} count={64} complete={range.complete} indexedFrom={range.indexedFrom} selectedAt={at} selectedItemId={itemId} readingAt={readingAt} viewport={viewport} onSeek={active ? onSeek : undefined} />
+            : <span className="session-minimap__state" role="status" title={timeline.isError ? '时间轴不可用' : timeline.isPending || timeline.isFetching ? '读取时间轴…' : '暂无时间点'}><span aria-hidden="true">{timeline.isError ? '!' : timeline.isPending || timeline.isFetching ? '…' : '—'}</span><span className="sr-only">{timeline.isError ? '时间轴不可用' : timeline.isPending || timeline.isFetching ? '读取时间轴…' : '暂无时间点'}</span></span>}
+        </div>
+      </aside>
+      </div>
     </section>
   )
 }
 
-function SessionTimeRange({ api, session }: { api: DashboardApi; session: BrowserSession }) {
-  const timeline = useInfiniteQuery({
-    queryKey: queryKeys.sessionTimeline(session, 'session', session.updated_at ?? ''),
-    initialPageParam: null as string | null,
-    queryFn: ({ pageParam, signal }) => sessionReadRequests.run(() => api.sessionTimeline(session, { cursor: pageParam }, signal), signal),
-    getNextPageParam: (page: SessionTimeline) => page.next_cursor ?? undefined,
-    retry: false, staleTime: 60_000, gcTime: 300_000, refetchOnWindowFocus: false,
-  })
-  const bounds = timeline.data?.pages.find(page => page.bounds?.end_state === 'known')?.bounds
-  if (!bounds?.start_at || !bounds.end_at) return null
+function SessionTimeRange({ pages }: { pages: SessionTimeline[] }) {
+  const bounds = pages.find(page => page.bounds?.end_state === 'known')?.bounds
   const format = (at: string) => new Date(at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-  return <div className="session-detail__subtitle"><time dateTime={bounds.start_at} title="会话开始">{format(bounds.start_at)}</time><span>–</span><time dateTime={bounds.end_at} title="最后一条消息">{format(bounds.end_at)}</time></div>
+  return <div className="session-detail__subtitle">
+    {bounds?.start_at && bounds.end_at ? <><time dateTime={bounds.start_at} title="会话开始">{format(bounds.start_at)}</time><span>–</span><time dateTime={bounds.end_at} title="最后一条消息">{format(bounds.end_at)}</time></> : null}
+    <span className="session-timeline-legend" aria-label="时间轴消息颜色"><span data-role="user">用户</span><span data-role="assistant">Agent</span></span>
+  </div>
 }

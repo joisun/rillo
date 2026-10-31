@@ -101,7 +101,7 @@ export function LiveSession({
         <span data-connection={live.connection}>
           <i aria-hidden="true" />{CONNECTION_LABELS[live.connection]}
         </span>
-        <Button size="xs" variant="quiet" onPress={live.reconnect} isDisabled={live.connection === 'closed'} aria-label="重新连接 Live Session">
+        <Button size="xs" variant="quiet" onClick={live.reconnect} disabled={live.connection === 'closed'} aria-label="重新连接 Live Session">
           <RefreshCw aria-hidden="true" />重新连接
         </Button>
       </header>
@@ -125,20 +125,20 @@ export function LiveSession({
         <div className="live-session__composer-actions">
           <span>⌘/Ctrl + Enter</span>
           <Button
-            isDisabled={!live.canStop}
+            disabled={!live.canStop}
             isPending={live.stopping}
             size="sm"
             variant="quiet"
-            onPress={() => void live.stop()}
+            onClick={() => void live.stop()}
           >
             <Square aria-hidden="true" />停止
           </Button>
           <Button
-            isDisabled={!live.canSteer}
+            disabled={!live.canSteer}
             isPending={live.submitting}
             size="sm"
             variant="primary"
-            onPress={() => void live.steer()}
+            onClick={() => void live.steer()}
           >
             <Send aria-hidden="true" />发送
           </Button>

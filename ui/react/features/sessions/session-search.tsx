@@ -1,11 +1,9 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { ComboBox } from 'react-aria-components/ComboBox'
+import { Combobox } from '@base-ui/react/combobox'
 
 import { Input, InputGroup, InputGroupAddon } from '@/components/ui/input'
-import { ListBox, ListBoxItem } from '@/components/ui/list-box'
-import { Popover } from '@/components/ui/popover'
 import type { DashboardApi } from '@/lib/api/dashboard-api'
 import type { BrowserSession, SessionActivityPage, SessionPage } from '@/lib/api/types'
 import { queryKeys } from '@/lib/query/keys'
@@ -21,7 +19,6 @@ export function SessionSearch({ api, provider, workspace, branch = '', enabled, 
 }) {
   const [draft, setDraft] = useState('')
   const [query, setQuery] = useState('')
-  const [selectedKey, setSelectedKey] = useState<string | null>(null)
   useEffect(() => {
     const timer = window.setTimeout(() => setQuery(draft.trim()), 300)
     return () => window.clearTimeout(timer)
@@ -43,33 +40,33 @@ export function SessionSearch({ api, provider, workspace, branch = '', enabled, 
   }, [enabled, waiting, hasNextPage, isFetching, isError, fetchNextPage])
   const loading = waiting || (!results.isError && results.hasNextPage)
   const emptyMessage = results.isError ? results.error.message : '没有找到匹配的会话'
-  // React Aria caches each option by item identity, including its activity badge.
   const items = useMemo(() => waiting ? [] : sessions.map(session => sessionWithStatus(session, activity, statuses)), [waiting, sessions, activity, statuses])
   return (
-    <ComboBox className="session-search" aria-label="搜索会话正文" inputValue={draft} onInputChange={(value) => { setDraft(value); setSelectedKey(null) }}
-      value={selectedKey} allowsCustomValue allowsEmptyCollection={Boolean(draft.trim())} items={items}
-      isDisabled={!enabled} onChange={(key) => {
-        setSelectedKey(key == null ? null : String(key))
-        const selected = sessions.find((session) => sessionKey(session) === key)
-        if (selected) onSelect(selected, query)
-      }}>
-      <InputGroup size="sm"><InputGroupAddon><Search /></InputGroupAddon><Input placeholder="搜索讨论过的内容…" maxLength={256} /></InputGroup>
-      <Popover className="session-search__popover" placement="bottom start" offset={8}>
+    <div className="session-search">
+    <Combobox.Root<BrowserSession> items={items} itemToStringLabel={session => session.title} itemToStringValue={sessionKey} filter={null} value={null} inputValue={draft}
+      onInputValueChange={(value, details) => { if (details.reason !== 'item-press') setDraft(value) }}
+      disabled={!enabled} onValueChange={(selected) => { if (selected) onSelect(selected, query) }}>
+      <InputGroup size="sm"><InputGroupAddon><Search /></InputGroupAddon>
+        <Combobox.Input render={<Input placeholder="搜索讨论过的内容…" maxLength={256} aria-label="搜索会话正文" />} />
+      </InputGroup>
+      <Combobox.Portal><Combobox.Positioner className="ui-positioner" sideOffset={8} align="start">
+      <Combobox.Popup className="session-search__popover ui-popover">
         <div className="session-search__collection">
-        <ListBox className="session-search__results" items={items} renderEmptyState={() => (
-          <div className="session-search__state" role={!waiting && results.isError ? 'alert' : 'status'}>
-            {loading ? <span className="session-spinner" aria-label="搜索中" /> : emptyMessage}
-          </div>
-        )}>
-          {(session) => <ListBoxItem id={sessionKey(session)} textValue={session.title} className="session-search__item">
-            <div className="session-search__result">
-              <div className="session-search__title"><SessionActivity session={session} /><strong title={session.title}><Highlight text={session.title} query={query} /></strong><SessionOrigin workspace={session.workspace} branch={session.branch} /></div>
-              <span className="session-row__preview"><Highlight text={session.snippet || session.preview} query={query} /></span>
-            </div>
-          </ListBoxItem>}
-        </ListBox>
+          <Combobox.List className="session-search__results">
+            {items.map(session => <Combobox.Item value={session} key={sessionKey(session)} className="session-search__item ui-option">
+              <div className="session-search__result">
+                <div className="session-search__title"><SessionActivity session={session} /><strong title={session.title}><Highlight text={session.title} query={query} /></strong><SessionOrigin workspace={session.workspace} branch={session.branch} /></div>
+                <span className="session-row__preview"><Highlight text={session.snippet || session.preview} query={query} /></span>
+              </div>
+            </Combobox.Item>)}
+            {!items.length ? <div className="session-search__state" role={!waiting && results.isError ? 'alert' : 'status'}>
+              {loading ? <span className="session-spinner" aria-label="搜索中" /> : emptyMessage}
+            </div> : null}
+          </Combobox.List>
         </div>
-      </Popover>
-    </ComboBox>
+      </Combobox.Popup>
+      </Combobox.Positioner></Combobox.Portal>
+    </Combobox.Root>
+    </div>
   )
 }

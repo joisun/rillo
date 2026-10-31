@@ -1,8 +1,7 @@
 import { CornerUpLeft, GitFork, Network } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
-import { Popover } from '@/components/ui/popover'
+import { Popover, PopoverTrigger, PopoverContent, PopoverClose } from '@/components/ui/popover'
 import type { BrowserSession, SessionRef, SessionRelation } from '@/lib/api/types'
 import { sessionKey } from './session-format'
 import type { SessionRelationIndex } from './session-projection'
@@ -18,21 +17,17 @@ function RelatedSessions({ session, relations, kind, knownSessions, onReadSessio
   if (!relations.length) return null
   const label = kind === 'children' ? '子会话' : '派生 Fork'
   const Icon = kind === 'children' ? Network : GitFork
-  return <Dialog>
-    <Button className="session-family__count" size="xs" variant="quiet" aria-label={`查看${label}：${session.title}`}><Icon /><span title={`当前已发现的${label}，继续浏览会自动补充`}>{relations.length}</span></Button>
-    <Popover className="session-family-popover" placement="bottom start" offset={5}>
-      <DialogContent aria-label={`${session.title}的${label}`}>
-        {({ close }) => <>
+  return <Popover>
+    <PopoverTrigger render={<Button className="session-family__count" size="xs" variant="quiet" aria-label={`查看${label}：${session.title}`} />}><Icon /><span title={`当前已发现的${label}，继续浏览会自动补充`}>{relations.length}</span></PopoverTrigger>
+    <PopoverContent className="session-family-popover" aria-label={`${session.title}的${label}`}>
           <strong className="session-family-popover__heading">{label} <span>{relations.length}</span></strong>
           <ul>{relations.map(relation => {
             const target = relation.child
             const known = knownSessions.get(sessionKey(target))
-            return <li key={sessionKey(target)}><button type="button" title={sessionKey(target)} onClick={() => { close(); onReadSession(target) }}><span>{relatedTitle(target, knownSessions)}</span><small>{known?.workspace ?? '点击读取会话'} · {relation.kind === 'fork' ? 'Fork' : relation.kind === 'subagent' ? 'Subagent' : '协作子会话'}</small></button></li>
+            return <li key={sessionKey(target)}><PopoverClose render={<button type="button" title={sessionKey(target)} onClick={() => onReadSession(target)} />}><span>{relatedTitle(target, knownSessions)}</span><small>{known?.workspace ?? '点击读取会话'} · {relation.kind === 'fork' ? 'Fork' : relation.kind === 'subagent' ? 'Subagent' : '协作子会话'}</small></PopoverClose></li>
           })}</ul>
-        </>}
-      </DialogContent>
-    </Popover>
-  </Dialog>
+    </PopoverContent>
+  </Popover>
 }
 
 export function SessionFamilyBadges({ session, index, knownSessions, onReadSession }: {

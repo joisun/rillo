@@ -84,7 +84,8 @@ export async function compileReactDashboard({
   const javascript = bundled.outputFiles.find(({ path }) => extname(path) === '.js')?.text
   if (!javascript) throw new Error('React Dashboard bundle is incomplete')
   const generatedCss = bundled.outputFiles.find(({ path }) => extname(path) === '.css')?.text ?? ''
-  const localGeneratedCss = generatedCss.replace(/@font-face\s*\{[^{}]*\}/g, '')
+  // Font URLs are bundled as data URLs; preserve locally packaged Geist faces.
+  const localGeneratedCss = generatedCss
   const dashboardCss = [
     await processCss(appCss, join(sourceRoot, 'styles', 'app.css')),
     localGeneratedCss,

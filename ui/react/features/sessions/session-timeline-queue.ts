@@ -1,6 +1,3 @@
-import type { BrowserSession } from '@/lib/api/types'
-
-export type TimelineLoadRequest = { session: BrowserSession; sequence: number }
 const MAX_TIMELINE_REQUESTS = 4
 
 export function createTimelineRequestQueue(limit = MAX_TIMELINE_REQUESTS) {

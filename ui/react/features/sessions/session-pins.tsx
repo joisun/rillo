@@ -32,7 +32,7 @@ export function SessionPinButton({ api, session }: { api: DashboardApi; session:
   const label = pinned ? '取消 Pin' : 'Pin 会话'
   return <span className="session-pin" data-pinned={pinned || undefined} title={label}>
     <Button size="xs" variant={pinned ? 'secondary' : 'quiet'} isIconOnly aria-label={`${label}：${session.title}`} aria-pressed={pinned}
-      isDisabled={pending || !pins.data || (!pinned && session.state === 'unavailable')} isPending={pending} onPress={() => mutation.mutate()}>
+      disabled={pending || !pins.data || (!pinned && session.state === 'unavailable')} isPending={pending} onClick={() => mutation.mutate()}>
       <Pin />
     </Button>
     {mutation.isError ? <span className="session-row-resume__feedback session-error" role="alert">{mutation.error.message}</span> : null}

@@ -1,3 +1,4 @@
+import { Pill } from '@/components/kibo-ui/pill'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Clipboard, FileText, RefreshCw, Square } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -104,9 +105,9 @@ export function RunDetail({ api, run }: { api: DashboardApi; run: RunRecord }) {
     <article className="run-detail">
       <div className="run-detail__summary">
         <div>
-          <span className="run-detail__status" data-status={run.status}>
+          <Pill className="run-detail__status" data-status={run.status}>
             <i aria-hidden="true" />{runStatusLabel(run.status)}
-          </span>
+          </Pill>
           <strong>{triggerLabel(run.trigger)}</strong>
           {active && !run.interactive ? (
             <Button
@@ -114,7 +115,7 @@ export function RunDetail({ api, run }: { api: DashboardApi; run: RunRecord }) {
               isPending={cancel.isPending}
               size="xs"
               variant="quiet"
-              onPress={() => cancel.mutate()}
+              onClick={() => cancel.mutate()}
             >
               <Square aria-hidden="true" />停止
             </Button>
@@ -146,9 +147,9 @@ export function RunDetail({ api, run }: { api: DashboardApi; run: RunRecord }) {
             <h3>Session 对话</h3>
             <div className="live-session__header-actions">
               <span>{conversation.data?.truncated ? '仅展示最近消息' : `${run.runtime_id === 'opencode' ? 'OpenCode' : 'Codex'} 本地 Session`}</span>
-              {conversation.isError && <Button size="xs" variant="quiet" isPending={conversation.isFetching} onPress={() => void conversation.refetch()}><RefreshCw aria-hidden="true" />重新读取</Button>}
+              {conversation.isError && <Button size="xs" variant="quiet" isPending={conversation.isFetching} onClick={() => void conversation.refetch()}><RefreshCw aria-hidden="true" />重新读取</Button>}
               {!run.reviewed_at ? (
-                <Button size="xs" variant="quiet" isPending={reviewed.isPending} onPress={() => reviewed.mutate()}>
+                <Button size="xs" variant="quiet" isPending={reviewed.isPending} onClick={() => reviewed.mutate()}>
                   <Check aria-hidden="true" />标记已读
                 </Button>
               ) : <span>已读</span>}
@@ -193,7 +194,7 @@ export function RunDetail({ api, run }: { api: DashboardApi; run: RunRecord }) {
                 <div className="run-detail__file-actions" title={localActions ? '系统打开会使用服务所在机器的默认应用' : undefined}>
                   {localActions && !['delete', 'deleted', 'removed'].includes(file.kind) ? (
                     <Button aria-label={`系统打开文件 ${file.path}`}
-                      isDisabled={fileOpen.isPending} size="xs" variant="quiet" onPress={() => fileOpen.mutate(file.path)}>系统打开</Button>
+                      disabled={fileOpen.isPending} size="xs" variant="quiet" onClick={() => fileOpen.mutate(file.path)}>系统打开</Button>
                   ) : null}
                   <span>{file.kind}</span>
                 </div>
@@ -217,10 +218,10 @@ export function RunDetail({ api, run }: { api: DashboardApi; run: RunRecord }) {
         <div className="run-detail__section-heading"><h3>Session</h3></div>
         {run.thread_id ? (
           <div className="run-detail__session">
-            {localActions ? <Button className="run-detail__session-resume" aria-label="恢复此 Session" isPending={resume.isPending} isDisabled={active} size="xs" variant="quiet" onPress={() => resume.mutate()}>
+            {localActions ? <Button className="run-detail__session-resume" aria-label="恢复此 Session" isPending={resume.isPending} disabled={active} size="xs" variant="quiet" onClick={() => resume.mutate()}>
               <code>{shortSessionId(run.thread_id)}</code>
             </Button> : <code title={run.thread_id}>{shortSessionId(run.thread_id)}</code>}
-            <Button aria-label="复制 Session ID" isIconOnly size="xs" variant="quiet" onPress={() => void copySession()}>
+            <Button aria-label="复制 Session ID" isIconOnly size="xs" variant="quiet" onClick={() => void copySession()}>
               {copied ? <Check aria-hidden="true" /> : <Clipboard aria-hidden="true" />}
             </Button>
           </div>
@@ -236,10 +237,10 @@ export function RunDetail({ api, run }: { api: DashboardApi; run: RunRecord }) {
             <h3>日志</h3>
             <div className="run-detail__log-actions">
               {run.has_stdout_log ? (
-                <Button size="xs" variant={logStream === 'stdout' ? 'secondary' : 'quiet'} onPress={() => setLogStream('stdout')}>stdout</Button>
+                <Button size="xs" variant={logStream === 'stdout' ? 'secondary' : 'quiet'} onClick={() => setLogStream('stdout')}>stdout</Button>
               ) : null}
               {run.has_stderr_log ? (
-                <Button size="xs" variant={logStream === 'stderr' ? 'secondary' : 'quiet'} onPress={() => setLogStream('stderr')}>stderr</Button>
+                <Button size="xs" variant={logStream === 'stderr' ? 'secondary' : 'quiet'} onClick={() => setLogStream('stderr')}>stderr</Button>
               ) : null}
             </div>
           </div>

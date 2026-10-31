@@ -21,7 +21,7 @@ export function SessionResumeButton({ api, session }: { api: DashboardApi; sessi
   }, [resume.isSuccess, resume.reset])
   return <span className="session-row-resume" title={session.state === 'active' ? '定位正在执行的会话' : '在终端继续会话'}>
     <Button size="xs" variant="secondary" isIconOnly aria-label={`在终端继续：${session.title}`}
-      isDisabled={session.state === 'unavailable'} isPending={resume.isPending} onPress={() => resume.mutate()}>
+      disabled={session.state === 'unavailable'} isPending={resume.isPending} onClick={() => resume.mutate()}>
       {resume.isSuccess ? <Check /> : <Terminal />}
     </Button>
     {resume.isSuccess ? <span className="session-row-resume__feedback" role="status">{resume.data.action ? resumeFeedback[resume.data.action](resume.data.terminal_label) : `已在 ${resume.data.terminal_label} 打开`}</span> : null}

@@ -1,12 +1,14 @@
+import { m } from 'motion/react'
+import { transition } from '@/lib/motion'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, Folder, FolderOpen, GitBranch, MessagesSquare, PanelRightOpen, Pin, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { SegmentedControl } from '@/components/ui/segmented-control'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { DialogContent } from '@/components/ui/dialog'
-import { Drawer } from '@/components/ui/drawer'
+import { Sheet, SheetContent } from '@/components/ui/sheet'
 import type { DashboardApi } from '@/lib/api/dashboard-api'
 import type { BrowserSession, SessionBranchPage, SessionPage, SessionRef, SessionWorkspacePage } from '@/lib/api/types'
 import { queryKeys } from '@/lib/query/keys'
@@ -20,9 +22,9 @@ import { SessionSearch } from './session-search'
 import { SessionOrigin } from './session-origin'
 import { sessionKey } from './session-format'
 import { useSessionPins } from './session-pins'
+import { sessionReadRequests } from './session-timeline-queue'
 import { SessionActivityView } from './session-activity-view'
 import './sessions.css'
-import type { TimelineLoadRequest } from './session-timeline-queue'
 import { compareSessions, sessionStatusGroup, sessionStatusOptions, sessionWithStatus, SessionStatusGroup } from './session-status'
 
 export function SessionsView({ api }: { api: DashboardApi }) {
@@ -48,16 +50,14 @@ export function SessionsView({ api }: { api: DashboardApi }) {
   const [catalogPickerOpen, setCatalogPickerOpen] = useState(false)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set())
   const [selection, setSelection] = useState<{ session: BrowserSession; query: string; at: string | null; itemId?: string; followRequest?: number } | null>(null)
-  const [readingPosition, setReadingPosition] = useState<{ key: string; at: string; itemId: string } | null>(null)
   const followRequestSequence = useRef(0)
   const [readerOpen, setReaderOpen] = useState(false)
   const [readerHost, setReaderHost] = useState<HTMLDivElement | null>(null)
+  const readerPopup = useRef<HTMLDivElement>(null)
   const [ancestors, setAncestors] = useState<Record<string, BrowserSession>>({})
   const [unavailableAncestors, setUnavailableAncestors] = useState<Set<string>>(() => new Set())
   const ancestorUnavailable = useCallback((key: string) => setUnavailableAncestors(current => current.has(key) ? current : new Set([...current, key])), [])
   const rememberAncestor = useCallback((session: BrowserSession) => setAncestors(current => current[sessionKey(session)] === session ? current : { ...current, [sessionKey(session)]: session }), [])
-  const [timelineRequest, setTimelineRequest] = useState<TimelineLoadRequest | null>(null)
-  const timelineRequestSequence = useRef(0)
   const [readError, setReadError] = useState('')
   const [reading, setReading] = useState(false)
   const readRequest = useRef<AbortController | null>(null)
@@ -183,7 +183,6 @@ export function SessionsView({ api }: { api: DashboardApi }) {
     setBranch('')
     setSelection(null)
     setReaderOpen(false)
-    setTimelineRequest(null)
   }
 
   function chooseScope(value: string, child = '') {
@@ -210,13 +209,35 @@ export function SessionsView({ api }: { api: DashboardApi }) {
     setGroupPreference(value)
   }
 
+  function changeReaderOpen(open: boolean) {
+    if (!open) { readRequest.current?.abort(); setReading(false) }
+    setReaderOpen(open)
+  }
+
   function selectSession(session: BrowserSession, query = '') {
     readRequest.current?.abort()
     setReading(false)
     setReadError('')
-    setTimelineRequest(null)
     setReaderOpen(true)
     setSelection({ session, query, at: null, followRequest: ++followRequestSequence.current })
+  }
+
+  async function selectLatest(session: BrowserSession) {
+    readRequest.current?.abort()
+    const controller = new AbortController()
+    readRequest.current = controller
+    setReading(true)
+    setReadError('')
+    try {
+      const page = await sessionReadRequests.run(() => api.sessionTimeline(session, {}, controller.signal), controller.signal)
+      if (controller.signal.aborted) return
+      client.setQueryData(queryKeys.sessionTimeline(session, 'session', session.updated_at ?? ''), { pages: [page], pageParams: [null] })
+      const latest = page.bounds?.end_at ?? page.points?.at(-1)?.at ?? null
+      setReaderOpen(true)
+      setSelection({ session, query: '', at: latest, itemId: page.points?.find(point => point.at === latest)?.item_id, followRequest: ++followRequestSequence.current })
+    } catch (error) {
+      if (!controller.signal.aborted) setReadError(error instanceof Error ? error.message : String(error))
+    } finally { if (!controller.signal.aborted) setReading(false) }
   }
 
   async function onReadSession(ref: SessionRef) {
@@ -224,7 +245,6 @@ export function SessionsView({ api }: { api: DashboardApi }) {
     const controller = new AbortController()
     readRequest.current = controller
     setReading(true)
-    setTimelineRequest(null)
     setReadError('')
     try {
       const result = await api.readSession(ref, controller.signal)
@@ -246,22 +266,22 @@ export function SessionsView({ api }: { api: DashboardApi }) {
             onSelect={selectSession} />
         </div>
         <div className="sessions-toolbar__controls">
-        <Select className="session-group-picker" aria-label="侧栏分组" selectedKey={groupMode} onSelectionChange={key => chooseGrouping(key === 'branch' ? 'branch' : 'workspace')} disabledKeys={provider?.capabilities.branch_groups ? [] : ['branch']}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem id="workspace">Workspace</SelectItem><SelectItem id="branch">Branch</SelectItem></SelectContent></Select>
-        <Select className="session-workspace-picker" aria-label={isBranch ? '筛选 Branch' : '筛选 Workspace'} selectedKey={pickerScope || '__all__'} onOpenChange={setCatalogPickerOpen} onSelectionChange={(key) => { const item = pickerItems.find(item => item.key === key); chooseScope(isBranch ? item?.branch ?? '' : item?.path ?? '', isBranch ? item?.path : item?.branch) }}><SelectTrigger size="sm" aria-label={isBranch ? '筛选 Branch' : '筛选 Workspace'}><SelectValue>{workspace ? <span className="session-path" title={`${branch}\n${workspace}`}><bdi dir="ltr">{workspace}</bdi></span> : undefined}</SelectValue></SelectTrigger><SelectContent className="session-scope-options"><SelectItem id="__all__">{isBranch ? '全部分支' : '全部项目'}</SelectItem>{pickerItems.map(item => <SelectItem id={item.key} key={item.key} aria-label={item.child ? `${item.parent} · ${item.label}` : item.label} textValue={item.child ? `${item.parent} · ${item.label}` : item.label} className={item.child ? 'session-scope-child' : undefined}><span className={item.isPath ? 'session-path' : undefined} title={item.label}><bdi dir="ltr">{item.label}</bdi></span></SelectItem>)}</SelectContent></Select>
+        <Select className="session-group-picker" aria-label="侧栏分组" value={groupMode} onValueChange={key => chooseGrouping(key === 'branch' ? 'branch' : 'workspace')}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="workspace">Workspace</SelectItem><SelectItem value="branch" disabled={!provider?.capabilities.branch_groups}>Branch</SelectItem></SelectContent></Select>
+        <Select className="session-workspace-picker" aria-label={isBranch ? '筛选 Branch' : '筛选 Workspace'} value={pickerScope || '__all__'} onOpenChange={setCatalogPickerOpen} onValueChange={(key) => { const item = pickerItems.find(item => item.key === key); chooseScope(isBranch ? item?.branch ?? '' : item?.path ?? '', isBranch ? item?.path : item?.branch) }}><SelectTrigger size="sm" aria-label={isBranch ? '筛选 Branch' : '筛选 Workspace'}><SelectValue>{workspace ? <span className="session-path" title={`${branch}\n${workspace}`}><bdi dir="ltr">{workspace}</bdi></span> : undefined}</SelectValue></SelectTrigger><SelectContent className="session-scope-options"><SelectItem value="__all__">{isBranch ? '全部分支' : '全部项目'}</SelectItem>{pickerItems.map(item => <SelectItem value={item.key} key={item.key} aria-label={item.child ? `${item.parent} · ${item.label}` : item.label} className={item.child ? 'session-scope-child' : undefined}><span className={item.isPath ? 'session-path' : undefined} title={item.label}><bdi dir="ltr">{item.label}</bdi></span></SelectItem>)}</SelectContent></Select>
           {(providers.data?.providers.length ?? 0) > 1 ? (
-            <Select aria-label="会话来源" selectedKey={providerId} onSelectionChange={(key) => { setSourceId(String(key)); chooseWorkspace('') }}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent>{providers.data?.providers.map((item) => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
+            <Select aria-label="会话来源" value={providerId} onValueChange={(key) => { setSourceId(String(key)); chooseWorkspace('') }}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent>{providers.data?.providers.map((item) => <SelectItem value={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
           ) : provider?.name ? <span className="session-source">{provider.name}</span> : null}
-          <Button aria-label="刷新会话" isIconOnly size="xs" variant="quiet" isDisabled={!provider || results.isFetching || catalog.isFetching} onPress={() => { void Promise.all([results.refetch(), catalog.refetch(), activity.refetch(), client.invalidateQueries({ queryKey: queryKeys.sessionBrowser, predicate: (query) => ['timeline', 'children', 'relations', 'read'].some((key) => query.queryKey.includes(key)) })]) }}><RefreshCw /></Button>
+          <Button aria-label="刷新会话" isIconOnly size="xs" variant="quiet" disabled={!provider || results.isFetching || catalog.isFetching} onClick={() => { void Promise.all([results.refetch(), catalog.refetch(), activity.refetch(), client.invalidateQueries({ queryKey: queryKeys.sessionBrowser, predicate: (query) => ['timeline', 'children', 'relations', 'read'].some((key) => query.queryKey.includes(key)) })]) }}><RefreshCw /></Button>
         </div>
       </header>
-      {connectionError ? <div className="sessions-connection" role="alert"><MessagesSquare /><strong>暂时无法连接本机会话</strong><span>正在自动重连</span><Button size="sm" variant="secondary" onPress={() => void reconnect()}>立即重试</Button></div> : null}
+      {connectionError ? <div className="sessions-connection" role="alert"><MessagesSquare /><strong>暂时无法连接本机会话</strong><span>正在自动重连</span><Button size="sm" variant="secondary" onClick={() => void reconnect()}>立即重试</Button></div> : null}
       {readError ? <p className="session-error" role="alert">{readError}</p> : null}
       {pins.isError ? <p className="session-error" role="alert">无法读取 Pin 标记：{pins.error.message}</p> : null}
       {pinnedOnly && results.isError ? <p className="session-error" role="alert">无法读取 Pinned 会话：{results.error.message}</p> : null}
       {!providers.isPending && !provider ? <div className="session-state">没有已接入的会话来源</div> : null}
       <div className="sessions-layout" inert={Boolean(connectionError)} aria-busy={reading || undefined}>
         <aside className="session-workspaces" aria-label={isBranch ? '分支分组' : '项目目录'}>
-          <div className="session-workspaces__heading"><div className="session-group-switch segmented-control" role="group" aria-label="侧栏分组"><Button size="xs" variant="quiet" aria-pressed={!isBranch} onPress={() => chooseGrouping('workspace')}><Folder />Workspace</Button><Button size="xs" variant="quiet" aria-pressed={isBranch} isDisabled={!provider?.capabilities.branch_groups} onPress={() => chooseGrouping('branch')}><GitBranch />Branch</Button></div><Input aria-label={isBranch ? '筛选分支名称' : '筛选项目目录'} placeholder={isBranch ? '筛选分支…' : '筛选目录…'} size="sm" value={directoryQuery} onChange={(event) => setDirectoryQuery(event.currentTarget.value)} /></div>
+          <div className="session-workspaces__heading"><SegmentedControl className="session-group-switch" label="侧栏分组" value={groupMode} onValueChange={chooseGrouping} options={[{ value: 'workspace', label: <><Folder />Workspace</> }, { value: 'branch', label: <><GitBranch />Branch</>, disabled: !provider?.capabilities.branch_groups }]} /><Input aria-label={isBranch ? '筛选分支名称' : '筛选项目目录'} placeholder={isBranch ? '筛选分支…' : '筛选目录…'} size="sm" value={directoryQuery} onChange={(event) => setDirectoryQuery(event.currentTarget.value)} /></div>
           <button type="button" className="session-directory" aria-pressed={!scope} onClick={() => chooseScope('')}>{isBranch ? <GitBranch /> : <FolderOpen />}<span><strong>{isBranch ? '全部分支' : '全部项目'}</strong></span></button>
           <div className="session-workspaces__list" key={groupMode}>
             <ul className="session-directory-tree" aria-label={isBranch ? '分支目录' : 'Workspace'}>
@@ -277,11 +297,11 @@ export function SessionsView({ api }: { api: DashboardApi }) {
                     {isBranch ? <GitBranch /> : <Folder />}<span title={group.label}><strong className={isBranch ? undefined : 'session-path'}><bdi dir="ltr">{group.label}</bdi></strong></span>{group.active ? <span className="session-directory__active" role="img" aria-label={isBranch ? '分支活跃' : '项目活跃'} /> : null}<span className="session-directory__count" title={`${group.count} 个已载入会话`}>{group.count}</span>
                   </button>
                 </div>
-                {group.children.length ? <ul className="session-directory-tree__children" aria-label={`${group.label} ${childrenLabel}`} hidden={collapsed}>
+                {group.children.length ? <m.ul className="session-directory-tree__children" aria-label={`${group.label} ${childrenLabel}`} inert={collapsed} aria-hidden={collapsed} initial={false} animate={{ height: collapsed ? 0 : 'auto', opacity: collapsed ? 0 : 1 }} transition={transition.standard} style={{ overflow: 'hidden' }}>
                   {group.children.map(child => <li key={child}><button type="button" className="session-directory" aria-pressed={scope === group.key && childScope === child} onClick={() => chooseScope(group.key, child)}>
                     {isBranch ? <Folder /> : <GitBranch />}<span title={child}><strong className={isBranch ? 'session-path' : undefined}><bdi dir="ltr">{child}</bdi></strong></span>{activeSessions.some(session => session.workspace === (isBranch ? child : group.key) && session.branch === (isBranch ? group.key : child)) ? <span className="session-directory__active" role="img" aria-label="项目活跃" /> : null}
                   </button></li>)}
-                </ul> : null}
+                </m.ul> : null}
               </li>})}
             </ul>
             <AutoPager enabled={Boolean(catalog.hasNextPage) && !catalog.isError} loading={catalog.isFetching} onMore={() => catalog.fetchNextPage()} />
@@ -293,23 +313,18 @@ export function SessionsView({ api }: { api: DashboardApi }) {
               <button type="button" aria-pressed={pinnedOnly} aria-label={`Pinned ${(pins.data?.pins ?? []).filter(pin => pin.provider === providerId && pin.store_id === provider?.store_id).length}`} title="仅查看已标记会话，再次点击查看全部" disabled={!pins.data} onClick={() => setPinnedOnly(current => !current)}><Pin aria-hidden="true" />Pinned<span className="session-status-sort__count">{(pins.data?.pins ?? []).filter(pin => pin.provider === providerId && pin.store_id === provider?.store_id).length}</span></button>
               {nativeActivity?.available ? sessionStatusOptions.map(option => <button type="button" key={option.id} data-status={option.id} aria-pressed={statusSort === option.id} aria-label={`${option.label} ${statusCounts.get(option.id) ?? 0}`} title={`${option.description}；点击优先排列，再次点击恢复最近消息排序。计数为当前范围已载入的会话。`} onClick={() => setStatusSort(current => current === option.id ? null : option.id)}><span className="session-status-sort__dot" aria-hidden="true" />{option.label}<span className="session-status-sort__count">{statusCounts.get(option.id) ?? 0}</span></button>) : <span className="session-status-sort__unavailable" role="status">{activity.isPending ? '读取状态…' : '状态不可用'}</span>}
             </div>
-            <span className="session-timeline-legend" aria-label="时间轴消息颜色"><span data-role="user">用户</span><span data-role="assistant">Agent</span></span>
-            <Button className="session-sheet-toggle" aria-label="展开会话面板" isIconOnly size="xs" variant="quiet" isDisabled={!selection || readerOpen} onPress={() => setReaderOpen(true)}><PanelRightOpen /></Button>
+            <Button className="session-sheet-toggle" aria-label="展开会话面板" isIconOnly size="xs" variant="quiet" disabled={!selection || readerOpen} onClick={() => setReaderOpen(true)}><PanelRightOpen /></Button>
           </header>
           <section className="sessions-activity-panel">
-          <SessionActivityView pinnedOnly={pinnedOnly} pinnedKeys={pinnedKeys} canResume={Boolean(provider?.capabilities.resume)} key={`${providerId}:${workspace}:${branch}:${pinnedOnly}`} api={api} sessions={sessions} relations={relations} relationIndex={relationIndex} knownSessions={knownSessions} onChildren={rememberChildren} ancestorState={family.missingParents.length === 0 ? 'complete' : family.missingParents.some(ref => !unavailableAncestors.has(sessionKey(ref))) ? 'pending' : 'unavailable'} activity={nativeActivity} statuses={nativeStatuses} statusSort={statusSort} selection={selection?.session ?? null} at={selection?.at ?? null} itemId={selection?.itemId} readingPosition={readingPosition} timelineRequest={timelineRequest} hasMore={Boolean(results.hasNextPage) && !results.isError} loadingMore={results.isFetching} onMore={() => results.fetchNextPage()}
-            onSelect={selectSession} onReadSession={(ref) => void onReadSession(ref)} onSeek={(session, at, resumeFollowing, itemId) => {
-              readRequest.current?.abort(); setReading(false); setReadError(''); setReaderOpen(true)
-              const followRequest = resumeFollowing ? ++followRequestSequence.current : undefined
-              setSelection((current) => current && sessionKey(current.session) === sessionKey(session) && current.at === at && current.itemId === itemId && !current.query && !resumeFollowing ? current : { session, query: '', at, itemId, followRequest: followRequest ?? current?.followRequest })
-            }} />
+          <SessionActivityView pinnedOnly={pinnedOnly} pinnedKeys={pinnedKeys} canResume={Boolean(provider?.capabilities.resume)} key={`${providerId}:${workspace}:${branch}:${pinnedOnly}`} api={api} sessions={sessions} relations={relations} relationIndex={relationIndex} knownSessions={knownSessions} onChildren={rememberChildren} ancestorState={family.missingParents.length === 0 ? 'complete' : family.missingParents.some(ref => !unavailableAncestors.has(sessionKey(ref))) ? 'pending' : 'unavailable'} activity={nativeActivity} statuses={nativeStatuses} statusSort={statusSort} selection={selection?.session ?? null} hasMore={Boolean(results.hasNextPage) && !results.isError} loadingMore={results.isFetching} onMore={() => results.fetchNextPage()}
+            onSelect={selectSession} onLatest={session => void selectLatest(session)} onReadSession={(ref) => void onReadSession(ref)} />
           </section>
         </div>
-        <div className="session-reader-sheet-host" ref={setReaderHost}>
-          {selection && readerHost ? <Drawer container={readerHost} keepMounted initialFocus={false} isOpen={readerOpen} onOpenChange={setReaderOpen} modal={false} isDismissable={false} placement="right" swipeToDismiss={false} className="session-reader-sheet">
-            <DialogContent className="session-reader-sheet__content" aria-label="会话面板"><SessionDetail canResume={Boolean(provider?.capabilities.resume)} key={sessionKey(selection.session)} api={api} session={withStatus(selection.session)} knownSessions={knownSessions} knownRelations={relations} query={selection.query} at={selection.at} itemId={selection.itemId} followRequest={selection.followRequest} onReadingPosition={(at, itemId) => { const key = sessionKey(selection.session); setReadingPosition(current => current?.key === key && current.at === at && current.itemId === itemId ? current : { key, at, itemId }) }} onReadSession={(ref) => void onReadSession(ref)} onLoadTimeline={() => { setTimelineRequest({ session: selection.session, sequence: ++timelineRequestSequence.current }) }} onBack={() => setReaderOpen(false)} /></DialogContent>
-          </Drawer> : null}
-        </div>
+      </div>
+      <div className="session-reader-sheet-host" ref={setReaderHost}>
+          {selection && readerHost ? <Sheet open={readerOpen} onOpenChange={changeReaderOpen} modal={false}><SheetContent ref={readerPopup} container={readerHost} keepMounted initialFocus={readerPopup} finalFocus={false} floating className="session-reader-sheet" aria-label="会话面板">
+            <div className="session-reader-sheet__content"><SessionDetail canResume={Boolean(provider?.capabilities.resume)} key={sessionKey(selection.session)} api={api} session={withStatus(selection.session)} knownSessions={knownSessions} knownRelations={relations} query={selection.query} at={selection.at} itemId={selection.itemId} followRequest={selection.followRequest} onReadSession={(ref) => void onReadSession(ref)} onLoadTimeline={() => void client.invalidateQueries({ queryKey: queryKeys.sessionTimeline(selection.session, 'session', selection.session.updated_at ?? '') })} active={readerOpen} onSeek={(at, itemId) => setSelection(current => current ? { ...current, query: '', at, itemId, followRequest: ++followRequestSequence.current } : current)} onBack={() => changeReaderOpen(false)} /></div>
+          </SheetContent></Sheet> : null}
       </div>
     </div>
   )

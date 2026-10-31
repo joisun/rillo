@@ -1,3 +1,5 @@
+import { Pill } from '@/components/kibo-ui/pill'
+import { Status, StatusIndicator } from '@/components/kibo-ui/status'
 import {
   CalendarCheck2,
   CalendarClock,
@@ -40,6 +42,7 @@ export function ScheduleCard({
   const execution = schedule.current_execution
   const runActive = isActiveRun(schedule)
   const runStoppable = runActive && execution?.kind === 'run'
+  const executionFailed = ['failed', 'timed_out', 'lost', 'dispatch_failed', 'dispatch_stalled'].includes(execution?.status ?? '')
   const unread = Math.max(0, schedule.unread_run_count ?? 0)
   const executionTime = execution?.finished_at
     ?? execution?.started_at
@@ -63,7 +66,7 @@ export function ScheduleCard({
           <span className="schedule-row__heading" role="heading" aria-level={2}>
             {schedule.title || 'Untitled schedule'}
           </span>
-          <span className="schedule-row__cadence">{cadenceSummary(schedule.cadence)}</span>
+          <Pill className="schedule-row__cadence">{cadenceSummary(schedule.cadence)}</Pill>
           {!schedule.enabled ? <span>已暂停</span> : null}
         </div>
         <code>{schedule.workspace || 'Workspace 未知'}</code>
@@ -72,17 +75,12 @@ export function ScheduleCard({
       <Button
         className="schedule-row__execution"
         aria-label={`查看 ${schedule.title} 的执行记录`}
-        isDisabled={!onReview}
+        disabled={!onReview}
         size="sm"
         variant="quiet"
-        onPress={() => onReview?.(schedule)}
+        onClick={() => onReview?.(schedule)}
       >
-        <span
-          className="schedule-row__status-dot"
-          data-status={execution?.status ?? 'idle'}
-          data-running={runActive || undefined}
-          aria-hidden="true"
-        />
+        <Status status={runActive ? 'degraded' : execution?.status === 'succeeded' ? 'online' : executionFailed ? 'offline' : 'maintenance'} data-neutral={!runActive && execution?.status !== 'succeeded' && !executionFailed || undefined} aria-hidden="true"><StatusIndicator /></Status>
         <span>
           <strong>{execution ? runStatusLabel(execution.status) : '尚未运行'}</strong>
           <small>{executionMeta}</small>
@@ -100,11 +98,11 @@ export function ScheduleCard({
       <div className="schedule-row__actions" aria-label={`${schedule.title} 操作`}>
         <Button
           aria-label="编辑 Schedule"
-          isDisabled={!onEdit || busyAction !== null}
+          disabled={!onEdit || busyAction !== null}
           isIconOnly
           size="sm"
           variant="quiet"
-          onPress={() => onEdit?.(schedule)}
+          onClick={() => onEdit?.(schedule)}
         >
           <Pencil aria-hidden="true" />
         </Button>
@@ -112,34 +110,34 @@ export function ScheduleCard({
           className="schedule-row__run-action"
           data-running={runActive || undefined}
           aria-label={runActive ? (runStoppable ? '停止当前 Run' : 'Run 正在调度') : '立即运行'}
-          isDisabled={(runActive && !runStoppable) || busyAction !== null}
+          disabled={(runActive && !runStoppable) || busyAction !== null}
           isIconOnly
           isPending={busyAction === 'run' || busyAction === 'stop'}
           size="sm"
           variant="quiet"
-          onPress={() => (runActive ? onStopRun(schedule) : onRunNow(schedule))}
+          onClick={() => (runActive ? onStopRun(schedule) : onRunNow(schedule))}
         >
           {runActive ? <Square aria-hidden="true" /> : <Play aria-hidden="true" />}
         </Button>
         <Button
           aria-label={schedule.enabled ? '暂停 Schedule' : '启用 Schedule'}
-          isDisabled={busyAction !== null}
+          disabled={busyAction !== null}
           isIconOnly
           isPending={busyAction === 'pause' || busyAction === 'resume'}
           size="sm"
           variant="quiet"
-          onPress={() => onToggle(schedule)}
+          onClick={() => onToggle(schedule)}
         >
           {schedule.enabled ? <CalendarOff aria-hidden="true" /> : <CalendarCheck2 aria-hidden="true" />}
         </Button>
         <Button
           className="schedule-row__history-action"
           aria-label="查看执行记录"
-          isDisabled={!onReview}
+          disabled={!onReview}
           isIconOnly
           size="sm"
           variant="quiet"
-          onPress={() => onReview?.(schedule)}
+          onClick={() => onReview?.(schedule)}
         >
           <History aria-hidden="true" />
         </Button>

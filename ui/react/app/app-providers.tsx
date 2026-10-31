@@ -1,3 +1,5 @@
+import { LazyMotion, MotionConfig, domMax } from 'motion/react'
+import { transition } from '@/lib/motion'
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import {
   createContext,
@@ -52,7 +54,7 @@ export function AppProviders({
   return (
     <DashboardApiContext.Provider value={api}>
       <DashboardConnectionContext.Provider value={connectionState}>
-        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        <LazyMotion features={domMax}><MotionConfig reducedMotion="user" transition={transition.standard}><QueryClientProvider client={queryClient}>{children}</QueryClientProvider></MotionConfig></LazyMotion>
       </DashboardConnectionContext.Provider>
     </DashboardApiContext.Provider>
   )

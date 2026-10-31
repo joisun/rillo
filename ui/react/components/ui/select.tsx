@@ -1,152 +1,34 @@
-"use client";
+import { Select as SelectPrimitive } from '@base-ui/react/select'
+import { Check, ChevronDown } from 'lucide-react'
+import { Children, Fragment, createContext, useContext, isValidElement, type ComponentProps, type ReactNode } from 'react'
+import { cn } from '@/lib/cn'
 
-import { composeRenderProps } from "react-aria-components/composeRenderProps";
-import * as SelectPrimitives from "react-aria-components/Select";
-
-import { ChevronDownIcon } from "lucide-react";
-import { cn } from "@/lib/cn";
-import { Button } from "@/components/ui/button";
-import type { ButtonProps } from "@/components/ui/button";
-import { fieldStyles as useStyles } from "@/components/ui/field";
-import {
-  ListBox,
-  ListBoxItem,
-  ListBoxSection,
-  ListBoxSectionHeader,
-  ListBoxVirtualizer,
-} from "@/components/ui/list-box";
-import type { ListBoxProps } from "@/components/ui/list-box";
-import { Popover } from "@/components/ui/popover";
-import type { PopoverProps } from "@/components/ui/popover";
-
-type SelectSelectionMode = "single" | "multiple";
-
-interface SelectProps<
-  T extends object,
-  M extends SelectSelectionMode = "single",
-> extends SelectPrimitives.SelectProps<T, M> {}
-
-const Select = <T extends object, M extends SelectSelectionMode = "single">({
-  className,
-  ...props
-}: SelectProps<T, M>) => {
-  const fieldStyles = useStyles;
-  return (
-    <SelectPrimitives.Select
-      data-field=""
-      data-select=""
-      data-slot="select"
-      className={composeRenderProps(className, (cn) =>
-        fieldStyles().field({ className: cn }),
-      )}
-      {...props}
-    />
-  );
-};
-
-const SelectTrigger = (props: ButtonProps) => {
-  return (
-    <Button {...props}>
-      {composeRenderProps(props.children, (children) => {
-        return (
-          <>
-            {children ?? <SelectValue />}
-            <ChevronDownIcon className="ml-auto" />
-          </>
-        );
-      })}
-    </Button>
-  );
-};
-
-interface SelectValueProps<
-  T extends object,
-> extends SelectPrimitives.SelectValueProps<T> {}
-
-const SelectValue = <T extends object>({
-  className,
-  ...props
-}: SelectValueProps<T>) => {
-  return (
-    <SelectPrimitives.SelectValue
-      data-slot="select-value"
-      className={composeRenderProps(className, (className) =>
-        cn(
-          "flex-1 truncate text-left placeholder-shown:text-fg-muted",
-          className,
-        ),
-      )}
-      {...props}
-    >
-      {composeRenderProps(
-        props.children,
-        (children, { selectedText, defaultChildren }) => {
-          return <>{children || selectedText || defaultChildren}</>;
-        },
-      )}
-    </SelectPrimitives.SelectValue>
-  );
-};
-
-interface SelectContentProps<T extends object>
-  extends
-    ListBoxProps<T>,
-    Pick<
-      PopoverProps,
-      "placement" | "defaultOpen" | "isOpen" | "onOpenChange"
-    > {
-  placement?: PopoverProps["placement"];
-  virtulized?: boolean;
+// The checked-in compound API supplies initial labels even before a popup is mounted.
+function labels(children: ReactNode): { value: string; label: ReactNode }[] {
+  return Children.toArray(children).flatMap(child => {
+    if (!isValidElement<{ value?: string; children?: ReactNode }>(child)) return []
+    if (child.type === SelectItem) return [{ value: child.props.value!, label: child.props.children }]
+    return child.type === SelectContent || child.type === Fragment ? labels(child.props.children) : []
+  })
 }
-
-const SelectContent = <T extends object>({
-  virtulized,
-  placement = "bottom",
-  defaultOpen,
-  isOpen,
-  onOpenChange,
-  ...props
-}: SelectContentProps<T>) => {
-  const listBoxClassName = composeRenderProps(props.className, (className) =>
-    cn("max-h-[inherit] overflow-auto overscroll-contain", className),
-  );
-
-  if (virtulized) {
-    return (
-      <Popover
-        className="overflow-hidden"
-        placement={placement}
-        defaultOpen={defaultOpen}
-        isOpen={isOpen}
-        onOpenChange={onOpenChange}
-      >
-        <ListBoxVirtualizer>
-          <ListBox {...props} className={listBoxClassName} />
-        </ListBoxVirtualizer>
-      </Popover>
-    );
-  }
-
-  return (
-    <Popover
-      className="overflow-hidden"
-      placement={placement}
-      defaultOpen={defaultOpen}
-      isOpen={isOpen}
-      onOpenChange={onOpenChange}
-    >
-      <ListBox {...props} className={listBoxClassName} />
-    </Popover>
-  );
-};
-
-export type { SelectContentProps, SelectProps, SelectValueProps };
-export {
-  ListBoxItem as SelectItem,
-  ListBoxSection as SelectSection,
-  ListBoxSectionHeader as SelectSectionHeader,
-  Select,
-  SelectContent,
-  SelectTrigger,
-  SelectValue,
-};
+export function Select({ children, className, 'aria-label': label, ...props }: ComponentProps<typeof SelectPrimitive.Root<string>> & { className?: string; 'aria-label'?: string }) {
+  return <div className={cn('ui-select', className)}><SelectPrimitive.Root items={labels(children)} {...props}>
+    <SelectLabelContext.Provider value={label}>{children}</SelectLabelContext.Provider>
+  </SelectPrimitive.Root></div>
+}
+const SelectLabelContext = createContext<string | undefined>(undefined)
+export function SelectTrigger({ className, children, size = 'sm', ...props }: ComponentProps<typeof SelectPrimitive.Trigger> & { size?: 'sm' | 'md' }) {
+  const label = useContext(SelectLabelContext)
+  return <SelectPrimitive.Trigger aria-label={label} className={cn('ui-select__trigger', className)} data-size={size} {...props}>
+    {children}<SelectPrimitive.Icon><ChevronDown /></SelectPrimitive.Icon>
+  </SelectPrimitive.Trigger>
+}
+export const SelectValue = SelectPrimitive.Value
+export function SelectContent({ children, className }: { children: ReactNode; className?: string }) {
+  return <SelectPrimitive.Portal><SelectPrimitive.Positioner className="ui-positioner" sideOffset={6} alignItemWithTrigger={false}>
+    <SelectPrimitive.Popup className={cn('ui-select__popup', className)}><SelectPrimitive.List>{children}</SelectPrimitive.List></SelectPrimitive.Popup>
+  </SelectPrimitive.Positioner></SelectPrimitive.Portal>
+}
+export function SelectItem({ children, className, ...props }: ComponentProps<typeof SelectPrimitive.Item>) {
+  return <SelectPrimitive.Item className={cn('ui-select__item', className)} {...props}><SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText><SelectPrimitive.ItemIndicator><Check /></SelectPrimitive.ItemIndicator></SelectPrimitive.Item>
+}

@@ -136,7 +136,7 @@ export function ScheduledView({
           <h1 id="scheduled-title">Scheduled</h1>
           <p>{jobs.length} 个计划 · {activeCount} 个启用{unreadCount ? ` · ${unreadCount} 条未读` : ''}</p>
         </div>
-        <Button isDisabled={controlsDisabled} size="sm" onPress={() => {
+        <Button disabled={controlsDisabled} size="sm" onClick={() => {
           setEditorSchedule(null)
           setEditorOpen(true)
           onCreate?.()
@@ -150,7 +150,7 @@ export function ScheduledView({
         <SearchField
           aria-label="搜索 Scheduled Tasks"
           className="scheduled-toolbar__search"
-          isDisabled={controlsDisabled}
+          disabled={controlsDisabled}
           placeholder="搜索标题、Workspace 或 cadence"
           size="sm"
           value={query}
@@ -159,15 +159,15 @@ export function ScheduledView({
         <Select
           aria-label="Scheduled 状态"
           className="scheduled-toolbar__filter"
-          isDisabled={controlsDisabled}
-          selectedKey={status}
-          onSelectionChange={(key) => setStatus(String(key) as ScheduleFilter)}
+          disabled={controlsDisabled}
+          value={status}
+          onValueChange={(key) => setStatus(String(key) as ScheduleFilter)}
         >
           <SelectTrigger size="sm"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem id="all">全部状态</SelectItem>
-            <SelectItem id="active">已启用</SelectItem>
-            <SelectItem id="paused">已暂停</SelectItem>
+            <SelectItem value="all">全部状态</SelectItem>
+            <SelectItem value="active">已启用</SelectItem>
+            <SelectItem value="paused">已暂停</SelectItem>
           </SelectContent>
         </Select>
       </div>

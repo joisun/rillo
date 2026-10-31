@@ -1,16 +1,23 @@
-# dotUI source component provenance
+# UI source provenance and maintenance
 
-Rillo uses checked-in source components from the official dotUI registry. dotUI is a development-time source registry, not a runtime or release dependency. The selected registry preset is the official `Vercel · Geist · 8px · default` preset pinned in `ui/components.json`.
+Rillo uses Kibo UI as the default source for shared composite components and shadcn conventions for local primitives. The registry is configured in `ui/components.json`. Checked-in code is reviewed and built offline; no component registry is contacted at runtime, in CI or during packaging.
 
-| Component family | Source | Retrieved | License | Local owner | Local changes |
-| --- | --- | --- | --- | --- | --- |
-| Button, Loader, Text | [dotUI registry](https://dotui.org/docs/components) | 2026-08-28 | MIT, copyright dotLabs | Rillo UI | Import aliases adapted to `@/lib/cn`; Button API otherwise follows React Aria semantics. |
-| Field, Input, SearchField | [dotUI registry](https://dotui.org/docs/components) | 2026-08-28 | MIT, copyright dotLabs | Rillo UI | Import aliases adapted; SearchField forwards the official compact `size` variant. |
-| ListBox, Popover, Select | [dotUI registry](https://dotui.org/docs/components) | 2026-08-28 | MIT, copyright dotLabs | Rillo UI | Import aliases adapted; feature adapters map React Aria keys to domain values. |
-| Tabs, Tooltip, Separator | [dotUI registry](https://dotui.org/docs/components) | 2026-08-28 | MIT, copyright dotLabs | Rillo UI | Import aliases adapted; product copy remains local. |
-| Drawer, Dialog | [dotUI registry](https://dotui.org/docs/components) | 2026-08-28 | MIT, copyright dotLabs | Rillo UI | Drawer supports a non-modal contextual inspector; close-label copy is localized. |
-| Conversation, Message, MessageResponse | [Vercel AI Elements](https://github.com/vercel/ai-elements/tree/main/packages/elements/src) | 2026-08-29 | Apache-2.0, copyright Vercel, Inc. | Rillo UI | Reduced to presentation-only Conversation/Message exports; dotUI owns the scroll control; AI SDK types, downloads, branches, actions, attachments, math, Mermaid and runtime transport are intentionally excluded. Streamdown with the CJK plugin renders streaming Markdown for coding-agent output. The optional Shiki plugin is excluded because it imports the full bundled-language registry and increased the offline single-file Dashboard from 1.3 MiB to 11.5 MiB. |
+| Components | Source | Retrieved | License | Local adaptation |
+| --- | --- | --- | --- | --- |
+| Status, StatusIndicator, StatusLabel | [Kibo Status registry](https://www.kibo-ui.com/r/status.json) | 2026-10-31 | MIT, shadcnblocks | Semantic CSS tokens, explicit labels; omit looping ping animation. |
+| Pill | [Kibo Pill registry](https://www.kibo-ui.com/r/pill.json) | 2026-10-31 | MIT, shadcnblocks | Keep the Badge-based root; omit unused Avatar, Button, Delta and price decorations. Compact product typography. |
+| Spinner | [Kibo Spinner registry](https://www.kibo-ui.com/r/spinner.json) | 2026-10-31 | MIT, shadcnblocks | Keep only Lucide throbber; accessible localized status, shared reduced-motion CSS. No upstream monorepo-only imports. |
+| Button, Input, SearchField, Select, Dialog, Sheet, Popover, Switch, Tooltip, Badge, SegmentedControl | [shadcn architecture](https://ui.shadcn.com/docs), [Base UI](https://base-ui.com/react/overview/quick-start) | 2026-10-31 | Local adapters; Base UI MIT | One Base UI implementation, standard DOM/controlled-value APIs. Compact variants, labels, pending state, floating retained reader. No Radix or React Aria runtime. |
+| Conversation, Message, MessageResponse | [Vercel AI Elements](https://github.com/vercel/ai-elements/tree/main/packages/elements/src) | 2026-08-29 | Apache-2.0, Vercel | Presentation-only; Streamdown and CJK plugin retained; existing runtime, paging and scroll behavior unchanged. No AI SDK, gateway, hosted service or Shiki plugin. |
 
-The upstream license is recorded at [mehdibha/dotUI LICENSE](https://github.com/mehdibha/dotUI/blob/main/LICENSE). CI and release builds use these checked-in files and must remain network-independent. Before adding another registry component, record its source, retrieval date, license, owner, and local behavior changes here.
+The shadcn CLI was attempted for docs and registry inspection; its Node HTTPS requests failed in this environment. Exact official registry JSON was retrieved through HTTPS and reviewed instead. SHA256 of retrieved source JSON is recorded in the job audit. No existing components were blindly overwritten by a preset. The unused top-level `kibo-ui` npm package is not installed.
 
-The AI Elements upstream license is recorded at [vercel/ai-elements LICENSE](https://github.com/vercel/ai-elements/blob/main/LICENSE). Its checked-in adapters never contact Vercel, AI Gateway, or another external service at runtime.
+## Maintenance rules
+
+- `components/ui` owns shared primitives; `components/kibo-ui` owns approved Kibo composites. Business components remain under features. Do not add a second primitive library.
+- Reuse `lib/cn.ts`, `lib/motion.ts` and `styles/tokens.css`. Colors and durations belong to tokens, not a second palette.
+- Before adding a registry item, inspect transitive dependencies, aliases and all exported code. Only install the dependencies its actual retained exports use; record source, date, license and adaptations.
+- Keep accessible names, keyboard control, focus restoration, disabled/pending behavior and reduced-motion support. Keep offline single-file builds network independent.
+- Historical dotUI-derived application CSS remains under its original MIT notice; the React Aria source components and bridge are replaced. Historical specs describe the earlier implementation, not current guidance.
+
+License text is included in [UI notices](../../../THIRD_PARTY_NOTICES.md).
