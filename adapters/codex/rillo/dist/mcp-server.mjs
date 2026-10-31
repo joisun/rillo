@@ -23218,6 +23218,7 @@ function createSessionClient({ baseUrl, fetchImpl = globalThis.fetch, timeoutMs 
     controlCapabilities: (input) => compatibleRequest(queryPath("/api/v1/session-control/capabilities", input)),
     sendSessionMessage: (input) => compatibleRequest("/api/v1/session-control/send", { method: "POST", body: input }),
     interruptSession: (input) => compatibleRequest("/api/v1/session-control/interrupt", { method: "POST", body: input }),
+    compactSession: (input) => compatibleRequest("/api/v1/session-control/compact", { method: "POST", body: input }),
     sessionDelivery: ({ request_id }) => compatibleRequest(`/api/v1/session-control/deliveries/${encodeURIComponent(request_id)}`),
     runtimes: () => compatibleRequest("/api/v1/runtimes"),
     listSchedules: () => compatibleRequest("/api/v1/schedules"),
@@ -31238,6 +31239,9 @@ var scheduleFields = {
   fast_mode: external_exports.boolean().nullable().optional(),
   network_access: external_exports.boolean().nullable().optional(),
   timeout_seconds: external_exports.number().int().min(60).max(86400).optional(),
+  thread_mode: external_exports.enum(["new", "reuse", "auto"]).describe("new: independent session each run (default). reuse: resume this schedule\u2019s previous compatible session, creating one on the first run. auto: resume by default; successful agent output ends with <!-- rillo:next-session=new --> or <!-- rillo:next-session=reuse --> to choose the next run.").optional(),
+  max_inherit_runs: external_exports.number().int().min(1).max(1e4).describe("Maximum scheduled executions that resume the same native session. Defaults to 20; the initial new-session run is not counted. Applies to reuse and auto; the next execution starts a new session after the cap.").optional(),
+  auto_compact_token_limit: external_exports.number().int().min(1e3).max(1e7).nullable().describe("Codex automatic context-compaction token threshold. null/unset inherits the current local configuration on each run; it is not a turn limit.").optional(),
   capabilities: external_exports.object({
     skills: external_exports.enum(["inherit", "disabled"]).optional(),
     integrations: external_exports.enum(["inherit", "disabled"]).optional()
@@ -31265,7 +31269,7 @@ function handler(operation) {
 }
 function createRilloServer({ service }) {
   const server = new McpServer(
-    { name: "rillo", version: "0.15.0" },
+    { name: "rillo", version: "0.16.0" },
     { instructions: SERVER_INSTRUCTIONS }
   );
   server.registerTool("session_sources", {
@@ -31295,6 +31299,7 @@ function createRilloServer({ service }) {
     ["session_control_capabilities", "Inspect target identity, available operation priorities and active_turn_id before steering or interrupting. Claude control requires an owned worker or an explicitly enabled terminal queue.", sessionRef.shape, "controlCapabilities", readOnly],
     ["session_send", "Send text to an existing native session. queue submits for subsequent processing; steer supplements the active turn; interrupt stops the expected turn then queues text. steer/interrupt require expected_turn_id. accepted is not completed; unknown must not trigger blind retries. Only definite non-acceptance permits transport fallback.", { ...messageRequest, text: external_exports.string().min(1).max(16e3), mode: external_exports.enum(["queue", "steer", "interrupt"]).optional(), expected_turn_id: expectedTurn.optional() }, "sendSessionMessage", { ...write, openWorldHint: true }],
     ["session_interrupt", "Interrupt exactly the expected active turn without sending text. Does not approve pending permission requests.", { ...messageRequest, expected_turn_id: expectedTurn }, "interruptSession", { ...write, destructiveHint: true, openWorldHint: true }],
+    ["session_compact", "Compact the context of an idle native session without deleting history or changing its ID. Discover session_control_capabilities first. Reuse request_id on retries; never resend with a new ID after unknown. Codex uses native app-server compaction and rejects custom instructions; accepted may precede completion: query session_delivery for completed. Claude supports optional instructions through native /compact on a safe owned or resumed worker; it cannot take over an externally running session.", { ...messageRequest, instructions: external_exports.string().trim().max(16e3).optional() }, "compactSession", { ...write, openWorldHint: true }],
     ["session_delivery", "Read the persisted delivery receipt for request_id. accepted means accepted by the named native or terminal transport, not that generation completed. unknown is not safe to resend.", { request_id: messageRequest.request_id }, "sessionDelivery", readOnly],
     ["runtime_list", "List installed agent runtimes and their availability before creating a schedule.", {}, "runtimes", readOnly],
     ["schedule_list", "List scheduled tasks, current etags, execution summaries and invalid Markdown definitions.", {}, "listSchedules", readOnly],

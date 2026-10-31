@@ -1,4 +1,5 @@
 import { runtimeEvent } from '../runtime/runtime-event.mjs'
+import { scheduleExecutionPrompt } from '../session-policy.mjs'
 import { createRunFilePreviews, openRunFile } from './run-file-opener.mjs'
 import {
   captureWorkspaceSnapshot,
@@ -82,7 +83,7 @@ export function createRunService({
       if (typeof definition.createInteractiveSession === 'function') {
         const session = definition.createInteractiveSession({
           launch: launchTarget,
-          run: queued.snapshot,
+          run: { ...queued.snapshot, prompt: scheduleExecutionPrompt(queued.snapshot) },
           signal,
           onSpawn,
           logs,

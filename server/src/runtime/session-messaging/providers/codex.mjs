@@ -4,11 +4,13 @@ import { resolve, join } from 'node:path'
 import { createCodexSharedClient } from '../../codex-shared-client.mjs'
 import { messageError, unavailable, unknown, runCommand, timeout, deferred } from '../common.mjs'
 
-const METHODS = ['initialize', 'thread/read', 'thread/turns/list', 'thread/items/list', 'thread/queue/add', 'thread/queue/list', 'turn/steer', 'turn/interrupt']
+const METHODS = ['initialize', 'thread/read', 'thread/resume', 'thread/compact/start', 'thread/turns/list', 'thread/items/list', 'thread/queue/add', 'thread/queue/list', 'turn/steer', 'turn/interrupt']
 export function createCodexMessageProvider({ dataRoot = process.env.CODEX_HOME ?? join(homedir(), '.codex'), resolveLaunch, readSession, createClient = createCodexSharedClient, command = runCommand, terminal = null }) {
   const root = resolve(dataRoot)
   const storeId = createHash('sha256').update(root).digest('hex').slice(0, 20)
   let client = null, connecting = null, closed = false
+  const compactions = new Map()
+  const compactionWatches = new Map()
   async function connected() {
     if (connecting) return connecting
     if (client && !client.closed) return client
@@ -16,7 +18,7 @@ export function createCodexMessageProvider({ dataRoot = process.env.CODEX_HOME ?
       const next = createClient({ dataRoot: root, allowedMethods: METHODS })
       try {
         await next.started
-        await next.request('initialize', { clientInfo: { name: 'rillo-session-control', version: '0.15.0' }, capabilities: { experimentalApi: true } })
+        await next.request('initialize', { clientInfo: { name: 'rillo-session-control', version: '0.16.0' }, capabilities: { experimentalApi: true } })
         next.notify('initialized')
         if (closed) throw unavailable()
         client = next
@@ -39,17 +41,43 @@ export function createCodexMessageProvider({ dataRoot = process.env.CODEX_HOME ?
     }
   }
   const native = {
-    id: 'codex-app-server', operations: ['queue', 'steer', 'stop'],
-    async prepare(context) {
+    id: 'codex-app-server', operations: ['queue', 'steer', 'stop', 'compact'],
+    async prepare(context, operation) {
+      if (operation === 'compact' && context.text.trim()) throw messageError('SESSION_COMPACT_INSTRUCTIONS_UNSUPPORTED', '当前 Codex 原生 compact 接口不接受自定义说明；没有发送普通消息代替压缩', { statusCode: 400 })
       context.codexConnection = await connected()
       try {
         const result = await context.codexConnection.request('thread/read', { threadId: context.session.session_id, includeTurns: false })
         if (result?.thread?.id !== context.session.session_id) throw messageError('SESSION_MESSAGE_REFERENCE_INVALID', 'Codex 返回了其他会话')
+        context.codexThread = result.thread
       } catch (error) { if (error.delivery) throw error; throw unavailable('无法通过 app-server 核对目标会话') }
     },
     async execute(operation, context) {
       const connection = context.codexConnection
       const threadId = context.session.session_id
+      if (operation === 'compact') {
+        if (await currentTurn(connection, threadId)) throw messageError('SESSION_COMPACT_BUSY', '会话正在运行，请等待本轮结束后再压缩')
+        let resumed
+        try { resumed = await connection.request('thread/resume', { threadId, cwd: context.target.workspace, excludeTurns: true }) }
+        catch { throw unavailable('无法加载并订阅目标 Codex 会话；没有启动压缩') }
+        if (resumed?.thread?.id !== threadId) throw messageError('SESSION_MESSAGE_REFERENCE_INVALID', 'Codex 恢复了其他会话')
+        if (compactions.size >= 1000) throw messageError('SESSION_MESSAGE_LIMIT', '压缩回执达到上限，请重启服务后重试')
+        const state = { kind: 'native_compact_started', completed: false, transport: 'codex-app-server' }
+        let timer
+        let unsubscribe = () => {}
+        const cleanup = () => { unsubscribe(); clearTimeout(timer); compactionWatches.delete(context.request_id) }
+        unsubscribe = connection.onNotification(event => {
+          if (event.params?.threadId === threadId && event.method === 'item/completed' && event.params.item?.type === 'contextCompaction') {
+            state.kind = 'native_compacted'; state.completed = true; cleanup()
+          }
+        })
+        timer = setTimeout(() => { state.completion_unknown = true; cleanup() }, 300_000)
+        timer.unref?.()
+        compactionWatches.set(context.request_id, cleanup)
+        try { await mutation(connection, 'thread/compact/start', { threadId }) }
+        catch (error) { cleanup(); throw error }
+        compactions.set(context.request_id, state)
+        return { ...state }
+      }
       if (operation === 'queue') {
         const result = await mutation(connection, 'thread/queue/add', { threadId, clientUserMessageId: context.message_id, input: [{ type: 'text', text: context.text }] })
         if (!result?.queuedSubmission || typeof result.queuedSubmission.id !== 'string') throw unknown('原生入队返回格式无效，未自动重发')
@@ -103,7 +131,7 @@ export function createCodexMessageProvider({ dataRoot = process.env.CODEX_HOME ?
       try { return await readSession(session) }
       catch { throw messageError('SESSION_MESSAGE_REFERENCE_INVALID', '无法核对本机 Codex 会话；消息未发送') }
     },
-    async capabilities() { return [{ operation: 'queue', priority: ['codex-app-server', 'codex-cli', ...(terminal ? ['terminal'] : [])] }, { operation: 'steer', priority: ['codex-app-server'] }, { operation: 'stop', priority: ['codex-app-server'] }] },
+    async capabilities() { return [{ operation: 'queue', priority: ['codex-app-server', 'codex-cli', ...(terminal ? ['terminal'] : [])] }, { operation: 'steer', priority: ['codex-app-server'] }, { operation: 'stop', priority: ['codex-app-server'] }, { operation: 'compact', priority: ['codex-app-server'], instructions: false, requires: 'idle_session' }] },
     async describe(session) {
       const target = await this.resolve(session)
       let active_turn_id = null, native_available = false
@@ -111,6 +139,7 @@ export function createCodexMessageProvider({ dataRoot = process.env.CODEX_HOME ?
       return { workspace: target.workspace, active_turn_id, native_available, operations: await this.capabilities() }
     },
     async reconcile(receipt) {
+      if (receipt.operation === 'compact') return compactions.get(receipt.request_id) ?? null
       const connection = await connected()
       const threadId = receipt.session.session_id
       if (receipt.operation === 'stop') {
@@ -130,6 +159,6 @@ export function createCodexMessageProvider({ dataRoot = process.env.CODEX_HOME ?
       const item = items?.data?.find(entry => entry.item?.clientId === receipt.message_id)
       return item ? { kind: 'native_input_accepted', native_message_id: item.item.id } : null
     },
-    close() { closed = true; client?.close() },
+    close() { closed = true; for (const cleanup of compactionWatches.values()) cleanup(); client?.close(); compactions.clear() },
   }
 }

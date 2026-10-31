@@ -133,7 +133,7 @@ export function createClaudeMessageProvider({ dataRoot = process.env.CLAUDE_CONF
   }
   function transport(id, driverFactory) {
     return {
-      id, operations: ['queue', 'steer', 'stop'],
+      id, operations: ['queue', 'steer', 'stop', 'compact'],
       async prepare(context, operation) {
         if (closed) throw unavailable('Claude 消息 provider 已关闭')
         const existing = workers.get(context.session.session_id)
@@ -142,7 +142,7 @@ export function createClaudeMessageProvider({ dataRoot = process.env.CLAUDE_CONF
           context.claudeWorker = existing
           return
         }
-        if (operation !== 'queue') throw unavailable('此通道未持有目标会话的活动连接')
+        if (!['queue', 'compact'].includes(operation)) throw unavailable('此通道未持有目标会话的活动连接')
         if (workers.size >= 8) throw unavailable('受控 Claude 连接达到上限；没有另起 worker')
         const launch = await resolveLaunch().catch(() => { throw unavailable('Claude CLI 不可用') })
         await guardExternal(context.session, launch)
@@ -158,6 +158,15 @@ export function createClaudeMessageProvider({ dataRoot = process.env.CLAUDE_CONF
         worker.driver = await driverFactory({ executable: launch.executable, workspace: context.target.workspace, sessionId: context.session.session_id, env,
           onClose, onMessage: message => {
             if (message.session_id && message.session_id !== context.session.session_id) { onClose(); worker.driver?.close(); return }
+            if (message.type === 'system' && message.subtype === 'compact_boundary') {
+              for (const [messageId, sent] of worker.sent) {
+                if (sent.operation !== 'compact' || sent.acknowledged) continue
+                sent.acknowledged = true
+                sent.pre_tokens = message.compact_metadata?.pre_tokens ?? null
+                worker.pending.get(messageId)?.resolve()
+                worker.pending.delete(messageId)
+              }
+            }
             const acknowledgedIds = message.type === 'user' ? [message.uuid]
               : !message.parent_tool_use_id && ['assistant', 'stream_event'].includes(message.type)
                 ? (message.user_message_uuids ?? [message.user_message_uuid]) : []
@@ -167,6 +176,7 @@ export function createClaudeMessageProvider({ dataRoot = process.env.CLAUDE_CONF
             for (const messageId of acknowledgedIds) {
               const sent = worker.sent.get(messageId)
               if (!sent || sent.acknowledged) continue
+              if (sent.operation === 'compact') continue
               if (!sent.acknowledged && sent.operation === 'queue') worker.queue.push(messageId)
               sent.acknowledged = true
               worker.pending.get(messageId)?.resolve()
@@ -192,7 +202,8 @@ export function createClaudeMessageProvider({ dataRoot = process.env.CLAUDE_CONF
       async execute(operation, context) {
         const worker = context.claudeWorker
         if (worker.closed) throw unavailable('Claude 连接已关闭')
-        if (operation !== 'queue' && (!worker.busy || worker.turnId !== context.expected_turn_id)) throw messageError('SESSION_MESSAGE_TURN_CHANGED', 'Claude 当前轮次已变化；没有执行控制')
+        if (operation === 'compact' && worker.busy) throw messageError('SESSION_COMPACT_BUSY', 'Claude 会话正在运行，请等待本轮结束后再压缩')
+        if (!['queue', 'compact'].includes(operation) && (!worker.busy || worker.turnId !== context.expected_turn_id)) throw messageError('SESSION_MESSAGE_TURN_CHANGED', 'Claude 当前轮次已变化；没有执行控制')
         if (operation === 'stop') {
           const done = worker.finished.promise
           await worker.driver.interrupt()
@@ -205,6 +216,14 @@ export function createClaudeMessageProvider({ dataRoot = process.env.CLAUDE_CONF
         worker.sent.set(context.message_id, { operation, acknowledged: false })
         worker.pending.set(context.message_id, pending)
         try {
+          if (operation === 'compact') {
+            clearTimeout(worker.idleTimer)
+            worker.busy = true
+            worker.driver.send({ type: 'user', session_id: context.session.session_id, uuid: context.message_id, parent_tool_use_id: null,
+              message: { role: 'user', content: `/compact${context.text ? ` ${context.text}` : ''}` } })
+            await timeout(pending.promise, Math.max(1, context.deadline - Date.now()))
+            return { kind: 'native_compacted', completed: true, pre_tokens: worker.sent.get(context.message_id).pre_tokens }
+          }
           worker.driver.send({ type: 'user', session_id: context.session.session_id, uuid: context.message_id, parent_tool_use_id: null,
             priority: operation === 'queue' ? 'next' : 'now', message: { role: 'user', content: context.text } })
           await timeout(pending.promise, 10000)
@@ -218,13 +237,17 @@ export function createClaudeMessageProvider({ dataRoot = process.env.CLAUDE_CONF
     id: 'claude', dataRoot: root, storeId,
     transports: [transport('claude-sdk', sdkDriver), transport('claude-cli', cliDriver), ...(terminal ? [terminal] : [])],
     resolve: metadata,
-    async capabilities() { return [{ operation: 'queue', priority: ['claude-sdk', 'claude-cli', ...(terminal ? ['terminal'] : [])] }, { operation: 'steer', priority: ['claude-sdk', 'claude-cli'], requires: 'owned_connection' }, { operation: 'stop', priority: ['claude-sdk', 'claude-cli'], requires: 'owned_connection' }] },
+    async capabilities() { return [{ operation: 'queue', priority: ['claude-sdk', 'claude-cli', ...(terminal ? ['terminal'] : [])] }, { operation: 'steer', priority: ['claude-sdk', 'claude-cli'], requires: 'owned_connection' }, { operation: 'stop', priority: ['claude-sdk', 'claude-cli'], requires: 'owned_connection' }, { operation: 'compact', priority: ['claude-sdk', 'claude-cli'], instructions: true, requires: 'idle_session' }] },
     async describe(session) {
       const target = await metadata(session), worker = workers.get(session.session_id)
       return { workspace: target.workspace, active_turn_id: worker?.turnId ?? null, owned_connection: Boolean(worker), operations: await this.capabilities() }
     },
     async reconcile(receipt) {
       const worker = workers.get(receipt.session.session_id)
+      if (receipt.operation === 'compact') {
+        const sent = worker?.sent.get(receipt.message_id)
+        return sent?.acknowledged ? { kind: 'native_compacted', completed: true, pre_tokens: sent.pre_tokens, transport: receipt.transport } : null
+      }
       return worker?.sent.get(receipt.message_id)?.acknowledged ? { kind: 'native_input_accepted', native_message_id: receipt.message_id } : null
     },
     async close() { closed = true; await Promise.allSettled([...workers.values()].map(worker => worker.driver.close())); workers.clear() },

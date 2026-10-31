@@ -8,7 +8,7 @@
     {
       "name": "rillo",
       "description": "Search native agent sessions, read conversation history, and manage scheduled automation",
-      "version": "0.15.0",
+      "version": "0.16.0",
       "source": "./adapters/claude/rillo",
       "author": {
         "name": "Joi Sun"

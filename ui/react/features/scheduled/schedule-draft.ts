@@ -20,6 +20,10 @@ export interface ScheduleDraft {
   prompt: string
   workspace: string
   agent: string
+  thread_mode: 'new' | 'reuse' | 'auto'
+  compactMode: 'inherit' | 'custom'
+  autoCompactTokenLimit: string
+  maxInheritRuns: string
   cadenceKind: CadenceKind
   intervalMinutes: string
   workHoursEnabled: boolean
@@ -103,6 +107,8 @@ function onceInstant(value: unknown) {
 export function defaultScheduleDraft(): ScheduleDraft {
   return {
     title: '', prompt: '', workspace: '', agent: 'codex', cadenceKind: 'daily',
+    thread_mode: 'new', compactMode: 'inherit', autoCompactTokenLimit: '',
+    maxInheritRuns: '20',
     intervalMinutes: '10', workHoursEnabled: false, workWeekdays: [1, 2, 3, 4, 5],
     workWindows: [{ start: '09:00', end: '18:00' }],
     onceAt: '', minute: '0', hour: '9', weekdays: [1], day: '1',
@@ -115,6 +121,7 @@ export function defaultScheduleDraft(): ScheduleDraft {
 export function changeDraftAgent(draft: ScheduleDraft, agent: string): ScheduleDraft {
   return {
     ...draft, agent, model: '', reasoning_effort: '', fast_mode: '', network_access: '',
+    compactMode: 'inherit', autoCompactTokenLimit: '',
     sandbox_mode: agent === 'opencode' ? 'danger-full-access' : 'read-only',
     dangerConfirmed: false,
     loadSkills: agent === 'opencode',
@@ -136,6 +143,10 @@ export function scheduleToDraft(source: Partial<ScheduleRecord> = {}): ScheduleD
     prompt: text(source.prompt),
     workspace: text(source.workspace),
     agent: AGENT_ID.test(text(source.agent)) ? text(source.agent) : 'codex',
+    thread_mode: ['new', 'reuse', 'auto'].includes(source.thread_mode ?? '') ? source.thread_mode! : 'new',
+    compactMode: source.auto_compact_token_limit == null ? 'inherit' : 'custom',
+    autoCompactTokenLimit: source.auto_compact_token_limit == null ? '' : String(source.auto_compact_token_limit),
+    maxInheritRuns: String(source.max_inherit_runs ?? 20),
     cadenceKind,
     intervalMinutes: cadence.kind === 'interval' ? String(cadence.minutes) : '10',
     workHoursEnabled: Boolean(workHours),
@@ -193,6 +204,9 @@ export function draftToScheduleInput(
   { modelCatalog = [] }: { modelCatalog?: ModelOption[] } = {},
 ): ScheduleMutationInput {
   if (!CADENCE_KINDS.has(draft.cadenceKind)) throw new TypeError('执行频率无效')
+  if (!['new', 'reuse', 'auto'].includes(draft.thread_mode)) throw new TypeError('会话方式无效')
+  if (!['inherit', 'custom'].includes(draft.compactMode)) throw new TypeError('自动压缩方式无效')
+  if (draft.compactMode === 'custom' && draft.agent !== 'codex') throw new TypeError('当前仅 Codex 支持自定义自动压缩 token 阈值')
   if (!SANDBOX_MODES.has(draft.sandbox_mode)) throw new TypeError('Sandbox mode 无效')
   if (draft.sandbox_mode === 'danger-full-access' && !draft.dangerConfirmed) {
     throw new TypeError('使用 danger-full-access 前需要明确确认风险')
@@ -278,6 +292,9 @@ export function draftToScheduleInput(
     prompt: boundedText(draft.prompt, 'Prompt', 20_000),
     workspace: boundedText(draft.workspace, 'Workspace', 4_096),
     agent: AGENT_ID.test(text(draft.agent)) ? text(draft.agent) : 'codex',
+    thread_mode: draft.thread_mode,
+    max_inherit_runs: integer(draft.maxInheritRuns, '最大继承轮数', 1, 10000),
+    auto_compact_token_limit: draft.compactMode === 'custom' ? integer(draft.autoCompactTokenLimit, '自动压缩 token 阈值', 1000, 10000000) : null,
     cadence,
     sandbox_mode: draft.sandbox_mode,
     model: model || null,

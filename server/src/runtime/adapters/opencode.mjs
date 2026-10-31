@@ -246,8 +246,11 @@ function createSession({ launch, run, signal, emit, onSpawn, open, pollMs, logs 
       client = await open({ executable: launch.executable, cwd: run.workspace, signal: startup.signal, onSpawn,
         onStdout: chunk => serverOutput('stdout', chunk), onStderr: chunk => serverOutput('stderr', chunk) })
       if (finished || finishing) { client.close(); return completion }
-      const created = await client.request('POST', '/session', { title: run.title })
+      const created = run.resume_session_id
+        ? await client.request('GET', `/session/${encodeURIComponent(run.resume_session_id)}`)
+        : await client.request('POST', '/session', { title: run.title })
       if (typeof created?.id !== 'string' || !/^ses[a-zA-Z0-9_-]+$/.test(created.id)) throw runtimeError('RUNTIME_PROTOCOL_INVALID', 'Invalid OpenCode session ID')
+      if (run.resume_session_id && created.id !== run.resume_session_id) throw runtimeError('RUNTIME_PROTOCOL_INVALID', 'OpenCode returned another session')
       sessionId = created.id
       if (finished || finishing) { client.close(); return completion }
       send('session', { session_id: sessionId })

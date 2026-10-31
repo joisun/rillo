@@ -83,6 +83,10 @@ Registry list 只验证 executable availability，不探测登录态。登录态
 
 ## Run lifecycle
 
+Run 创建事务在 snapshot 中确定 `session_mode`、`session_mode_reason`、`resume_session_id` 和 `inherit_run_number`，列表也返回这些摘要字段。默认 new；reuse/auto 只匹配同 schedule、runtime 和 workspace 的最近原生会话，无匹配时首次新建。`max_inherit_runs` 默认20，首次新建不计入，只统计实际记录了相同原生 session ID 的继承执行；达到上限后换新会话。计数、选择和单任务只能有一个 active Run 的约束共用事务，服务重启后从原 Run 恢复，不新增会话数据表。
+
+auto 的成功 final_message 末尾标记 `<!-- rillo:next-session=new|reuse -->` 决定下一轮；失败或缺失默认 reuse，上限优先。RunService 注入协议但不修改 Markdown 正文。Codex 选择 thread/start 或 thread/resume，OpenCode 选择新建 session 或获取原 session；恢复失败不降级新建。Codex 的自定义 `auto_compact_token_limit` 仅通过原生线程 config 覆盖，null 不覆盖。Runtime settings 通过新 stdio 连接 config/read 动态读取有效本地值，不沿用 model catalog 缓存，未设置与读取失败分开返回。
+
 ```text
 queued
   ├── running
@@ -294,6 +298,8 @@ OpenCode 不支持 OS sandbox 或独立禁用 Skills/MCP。定义与执行边界
 历史读取使用原生消息接口，最多 100 条、1 MiB 文本；已结束 Run 的 Session ID 是 Terminal Resume 入口，恢复前验证 Session，再用已解析的 executable 与 `--session` 参数启动。Session ID、workspace 与 runtime ID 均取自可信 Run，不接受浏览器构造命令。服务 stdout/stderr 写入有大小上限的私有 Run 日志；stdout 只追加工具名、OpenCode 给出的标题或脱敏命令摘要，不记录工具参数或结果正文。provider 错误在 Run final message 中保留有上限的可读原因，并使用稳定错误码区分类别。
 
 ## 原生会话消息控制
+
+`POST /api/v1/session-control/compact` 与 MCP `session_compact` 复用 SessionMessaging 的 provider/store 校验、per-session lane、请求 fingerprint 和持久化回执。compact 不要求 expected_turn_id，也不主动 interrupt；忙碌会话明确拒绝。Codex resume 订阅指定线程后调用 thread/compact/start，RPC 成功仅为 accepted，contextCompaction 完成通知才置 completed=true，session_delivery 可刷新该状态；不支持自定义指令、CLI 文本伪装压缩或未知结果后的跨通道重发。Claude SDK/CLI 只在空闲的 owned worker 或安全 resume 后发送原生 /compact，并以 compact_boundary 确认完成，用户消息回显不算压缩完成。服务重启后保留原回执，不把丢失的完成通知推断为成功。
 
 `server/src/runtime/session-messaging.mjs` 负责验证完整 SessionRef、请求去重、会话级串行与通道调度；`session-messaging/providers` 各 provider 实现原生能力，通用调用失败不能直接当作未发送。每个操作筛选并顺序调用支持该动作的 transport，仅 delivery=not_sent 且 fallback=true 才降级。未知异常、写入后超时及断线保持 unknown。
 

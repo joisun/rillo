@@ -15,7 +15,7 @@ Rillo 是运行在本机的 coding-agent 会话与自动化控制台。Sessions 
 - runtime registry 已按 multi-CLI contract 设计，后续 runtime 只增加 adapter，不增加第二套调度链路；
 - 所有数据都保存在本机，不需要 cloud account 或 auth token。
 
-Rillo 0.15.0 使用 `rillo` 命令、插件标识和发布资产名称，GitHub 仓库为 `joisun/rillo`。旧版本的配置、定时任务和执行记录由安装脚本迁移，详见[更名与安装迁移](docs/migrations/rillo-rename.md)。
+Rillo 0.16.0 使用 `rillo` 命令、插件标识和发布资产名称，GitHub 仓库为 `joisun/rillo`。旧版本的配置、定时任务和执行记录由安装脚本迁移，详见[更名与安装迁移](docs/migrations/rillo-rename.md)。
 
 ## Quick start
 
@@ -37,7 +37,7 @@ rillo status
 普通安装不需要 clone repository、`npm install` 或 `npm ci`。更谨慎的固定版本安装方式：
 
 ```bash
-version=v0.15.0
+version=v0.16.0
 curl -fsSLO "https://raw.githubusercontent.com/joisun/rillo/${version}/install.sh"
 less install.sh
 bash install.sh --version "$version"
@@ -212,8 +212,38 @@ Live Session 只干预当前 active Turn，不在 Dashboard 内创建第二轮�
 | `session_link`、`session_unlink` | 登记或解除手动委派关系 |
 | `session_control_sources`、`session_control_capabilities` | 查询消息数据源、通道优先级和目标当前轮次 |
 | `session_send`、`session_interrupt`、`session_delivery` | 排队、执行中追加、打断、打断后发送及查询投递回执 |
+| `session_compact` | 压缩空闲会话的上下文，保留会话 ID 与历史记录 |
 
 修改、删除、启停需传入 `schedule_get` 返回的最新 `etag`，字段名为 `expected_etag`。发生 `SCHEDULE_VERSION_CONFLICT` 后重新读取并核对修改，工具不会自动覆盖。`schedule_create` 创建启用状态的任务，默认只读 sandbox、禁用 skills 和 integrations；`cadence` 支持 once、interval、hourly、daily、weekly、monthly，interval 的 minutes 为 1–1440 的整数，周期 cadence 可设置 work_hours（weekdays 与多个 start/end windows），周期时间使用服务所在机器的时区，weekly 的 weekdays 为周一 1 至周日 7。workspace 必须是服务器上存在的绝对路径。
+
+### 定时任务的会话方式与上下文压缩
+
+网页编辑器依次展示任务内容、执行时间、会话与上下文。工作时段和高级设置直接展开；补充说明通过字段旁的 info 图标查看。
+
+创建和编辑计划、Markdown 定义及 MCP `schedule_create/update` 使用相同字段：
+
+| 字段 | 行为 |
+| --- | --- |
+| `thread_mode: new` | 默认值。每轮新建独立会话，保持旧任务的原有行为 |
+| `thread_mode: reuse` | 首次运行新建，此后原生 resume 本任务、同 Agent、同 workspace 的上次会话。恢复失败明确报错，不偷偷新建 |
+| `thread_mode: auto` | 首次新建，以后默认继承；本轮成功结果末尾的标记决定下一轮新建还是继承 |
+| `max_inherit_runs: 20` | 同一会话最多继承 20 轮，首次新建不计入；下一轮改为新建并重置计数。可设置 1–10000，自动模式也遵守此上限 |
+| `auto_compact_token_limit: 60000` | Codex 自动压缩的上下文 token 阈值，可设为 1000–10000000；不是轮数上限 |
+
+`auto_compact_token_limit` 省略或为 `null` 表示每轮跟随本地配置，不把页面读取的值保存成覆盖值。编辑器括号显示当前有效的本地配置；未配置时显示“未设置，使用模型默认”，不伪造数值。打开表单、改变 workspace、返回页面及每 15 秒重新读取；HTTP `GET /api/v1/runtimes/:id/settings?workspace=...` 提供相同读取。自定义值仅覆盖本次执行，不修改 `~/.codex/config.toml`。OpenCode 暂不提供自定义 token 阈值。
+
+自动模式会在每轮执行 Prompt 中附加控制说明。Agent 在最终结果末尾单独输出 `<!-- rillo:next-session=new -->` 或 `<!-- rillo:next-session=reuse -->`。标记缺失、无效或本轮失败时默认继承；新建不删除旧会话。任务正文可说明何时需要连续上下文，例如“连续跟进未完成缺陷时继承，已完成完整日报时下一轮新建”。Rillo 使用已有执行记录保存选择和计数，不写第二份会话正文。运行记录显示本轮实际方式与继承序号，达到上限或自动决策导致的新建有单独标记。
+
+### 手动压缩接口
+
+HTTP：`POST /api/v1/session-control/compact`；MCP：`session_compact`。输入为 `{session: {provider, store_id, session_id}, request_id, instructions?}`，应先查询 `session_control_capabilities`。同一 `request_id` 重试不会重复触发压缩；运行中的会话拒绝压缩，不隐式打断。
+
+- Codex：原生 `thread/compact/start`，不接受 `instructions`，不把 `/compact ...` 作为普通聊天发送。`accepted` 仅表示原生接受，使用 `session_delivery` 查询 `completed`；服务重启或连接丢失后无法确认完成时不宣称成功，也不盲目重发。
+- Claude：SDK 优先，stream-json CLI 次之；受控空闲连接或确认无外部活动会话后 resume。可传自定义说明，由原生 `/compact [instructions]` 处理；观察 `compact_boundary` 才确认完成，可能返回 `pre_tokens`。不接管外部正在运行的会话。
+
+压缩保留会话 ID，不删除原始历史，也不保证完全忘记历史。缩短上下文与计费节省不是同一指标，缓存命中可能在压缩后的首次请求下降。
+
+### 通过 MCP 创建定时任务示例
 
 例如，每天 09:00 执行：
 

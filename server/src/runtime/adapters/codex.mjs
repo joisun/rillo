@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { homedir } from 'node:os'
 
 import { buildCodexInvocation } from '../../scheduler/codex-run-spec.mjs'
 import { createCodexModelCatalog } from '../../scheduler/codex-model-catalog.mjs'
@@ -81,6 +82,17 @@ export function createCodexRuntimeDefinition({
       }),
     }),
     createInteractiveSession: (input) => sessions.create(input),
+    async readSettings({ launch, workspace }) {
+      const client = createAppServerClient({ executable: launch.executable, cwd: workspace || homedir(), runtimeEnvironment })
+      try {
+        await client.started
+        await client.request('initialize', { clientInfo: { name: 'rillo-settings', version: '0.16.0' } })
+        const response = await client.request('config/read', { cwd: workspace || homedir(), includeLayers: false })
+        const value = response?.config?.model_auto_compact_token_limit
+        if (value != null && (!Number.isSafeInteger(value) || value <= 0)) throw runtimeError('RUNTIME_PROTOCOL_INVALID', 'Invalid local auto-compaction threshold')
+        return { auto_compact_token_limit: { supported: true, configured_tokens: value ?? null, source: value == null ? 'model_default' : 'local_config' } }
+      } finally { client.close() }
+    },
     async readConversation({ launch, run }) {
       const threadId = run?.session_id
       const workspace = run?.snapshot?.workspace
@@ -240,6 +252,8 @@ function invocationSnapshot(run) {
     reasoning_effort: run.reasoning_effort ?? null,
     ...(run.network_access != null ? { network_access: run.network_access } : {}),
     ...(run.fast_mode != null ? { fast_mode: run.fast_mode } : {}),
+    ...(run.resume_session_id ? { resume_session_id: run.resume_session_id } : {}),
+    ...(run.auto_compact_token_limit != null ? { auto_compact_token_limit: run.auto_compact_token_limit } : {}),
     timeout_seconds: run.timeout_seconds,
   }
 }

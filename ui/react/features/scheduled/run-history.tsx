@@ -1,5 +1,6 @@
 import { m } from 'motion/react'
 import { transition } from '@/lib/motion'
+import { Pill } from '@/components/kibo-ui/pill'
 import type { RunDispatchRecord, RunRecord } from '@/lib/api/types'
 import {
   compactDateTime,
@@ -10,6 +11,14 @@ import {
 
 function runTimestamp(run: RunRecord) {
   return Date.parse(run.finished_at ?? run.started_at ?? run.created_at) || 0
+}
+
+function sessionModeLabel(run: RunRecord) {
+  if (run.session_mode === 'reuse') return `继承 ${run.inherit_run_number ?? 1}/${run.max_inherit_runs ?? 20}`
+  if (run.session_mode_reason === 'inherit_limit') return '新建 · 上限'
+  if (run.session_mode_reason === 'agent_choice') return '新建 · 自动'
+  if (run.session_mode_reason === 'first_run') return '新建 · 首轮'
+  return '新建'
 }
 
 function dispatchTimestamp(dispatch: RunDispatchRecord) {
@@ -89,6 +98,9 @@ export function RunHistory({
                   <span className="run-history__status">
                     <i data-status={run.status} aria-hidden="true" />
                     {runStatusLabel(run.status)}
+                    <Pill title={run.session_mode_reason === 'inherit_limit'
+                      ? `已达到 ${run.max_inherit_runs ?? 20} 轮继承上限，本轮新建会话`
+                      : run.thread_mode === 'auto' ? '配置为自动；此标签显示本轮实际使用的方式' : '本轮执行的会话方式'}>{sessionModeLabel(run)}</Pill>
                   </span>
                   <small>{triggerLabel(run.trigger)}{run.reviewed_at ? '' : ' · 未读'}</small>
                 </td>

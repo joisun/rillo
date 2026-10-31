@@ -4,6 +4,7 @@ import { dirname } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
 import { runtimeError } from '../runtime/runtime-errors.mjs'
+import { nextSessionMode } from '../session-policy.mjs'
 import {
   createRunSchema,
   RUN_SCHEMA_VERSION,
@@ -112,6 +113,30 @@ export function createRunStore({
 
       const timestamp = nowIso(clock)
       const id = requiredString(createId(), 'run_id')
+      const snapshot = { ...value.schedule }
+      snapshot.session_mode_reason = 'always_new'
+      snapshot.inherit_run_number = 0
+      if (['reuse', 'auto'].includes(snapshot.thread_mode)) {
+        const previous = db.prepare(`
+          SELECT * FROM scheduled_runs
+          WHERE schedule_id = ? AND runtime_id = ? AND session_id IS NOT NULL
+            AND session_id != '' AND json_extract(snapshot_json, '$.workspace') = ?
+          ORDER BY created_at DESC, rowid DESC LIMIT 1
+        `).get(snapshot.id, value.runtime_id, snapshot.workspace)
+        const inherited = previous ? db.prepare(`
+          SELECT count(*) AS count FROM scheduled_runs
+          WHERE schedule_id = ? AND runtime_id = ? AND session_id = ?
+            AND json_extract(snapshot_json, '$.resume_session_id') = ?
+        `).get(snapshot.id, value.runtime_id, previous.session_id, previous.session_id).count : 0
+        const limitReached = inherited >= (snapshot.max_inherit_runs ?? 20)
+        const useNew = limitReached
+          || (snapshot.thread_mode === 'auto' && nextSessionMode(previous) === 'new')
+        snapshot.resume_session_id = useNew ? null : previous?.session_id ?? snapshot.session_id ?? null
+        snapshot.session_mode_reason = limitReached ? 'inherit_limit' : useNew ? 'agent_choice'
+          : snapshot.resume_session_id ? 'reuse' : 'first_run'
+        snapshot.inherit_run_number = snapshot.resume_session_id ? inherited + 1 : 0
+      }
+      snapshot.session_mode = snapshot.resume_session_id ? 'reuse' : 'new'
       db.prepare(`
         INSERT INTO scheduled_runs (
           id, schedule_id, definition_etag, runtime_id, origin,
@@ -133,7 +158,7 @@ export function createRunStore({
         value.occurrence_key,
         value.idempotency_key,
         value.scheduled_for,
-        JSON.stringify(value.schedule),
+        JSON.stringify(snapshot),
         timestamp,
         timestamp,
       )
@@ -368,7 +393,13 @@ function normalizeCreation(input) {
 function publicRun(row, { includeSnapshot = false } = {}) {
   const result = { ...row }
   delete result.snapshot_json
-  if (includeSnapshot) result.snapshot = JSON.parse(row.snapshot_json)
+  const snapshot = JSON.parse(row.snapshot_json)
+  if (includeSnapshot) result.snapshot = snapshot
+  result.thread_mode = snapshot.thread_mode ?? 'new'
+  result.session_mode = snapshot.session_mode ?? 'new'
+  result.session_mode_reason = snapshot.session_mode_reason ?? 'always_new'
+  result.inherit_run_number = snapshot.inherit_run_number ?? 0
+  result.max_inherit_runs = snapshot.max_inherit_runs ?? 20
   result.usage = row.usage_json === null ? null : JSON.parse(row.usage_json)
   result.file_changes = row.file_changes_json === null
     ? null

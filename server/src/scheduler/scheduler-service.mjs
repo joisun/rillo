@@ -3,10 +3,12 @@ import { isAbsolute } from 'node:path'
 
 import { nextOccurrence, validateCadence } from './cadence.mjs'
 import { SchedulerError } from './scheduler-errors.mjs'
+import { THREAD_MODES, validAutoCompactLimit, validInheritanceLimit } from '../session-policy.mjs'
 
 const JOB_FIELDS = new Set([
   'title', 'prompt', 'workspace', 'agent', 'cadence', 'sandbox_mode', 'model',
   'reasoning_effort', 'fast_mode', 'network_access', 'timeout_seconds', 'capabilities',
+  'thread_mode', 'auto_compact_token_limit', 'max_inherit_runs',
 ])
 const SANDBOX_MODES = new Set(['read-only', 'workspace-write', 'danger-full-access'])
 const CAPABILITY_MODES = new Set(['inherit', 'disabled'])
@@ -48,6 +50,20 @@ export function createDefinitionScheduleService({
     allowOnly(input, JOB_FIELDS, patch ? 'Schedule patch' : 'Schedule')
     const output = { ...input }
     const openCode = (input.agent ?? existingAgent) === 'opencode'
+    if (!patch || own(output, 'max_inherit_runs')) {
+      output.max_inherit_runs ??= 20
+      if (!validInheritanceLimit(output.max_inherit_runs)) fail('SCHEDULE_INPUT_INVALID', 'max_inherit_runs must be 1–10000', { field: 'max_inherit_runs' })
+    }
+    if (!patch || own(output, 'thread_mode')) {
+      output.thread_mode ??= 'new'
+      if (!THREAD_MODES.has(output.thread_mode)) fail('SCHEDULE_INPUT_INVALID', 'thread_mode must be new, reuse or auto', { field: 'thread_mode' })
+    }
+    if (!patch || own(output, 'auto_compact_token_limit')) {
+      output.auto_compact_token_limit ??= null
+      if (!validAutoCompactLimit(output.auto_compact_token_limit) || (output.auto_compact_token_limit !== null && (input.agent ?? existingAgent) !== 'codex')) {
+        fail('SCHEDULE_INPUT_INVALID', 'auto_compact_token_limit requires Codex and 1000–10000000 tokens, or null to inherit', { field: 'auto_compact_token_limit' })
+      }
+    }
     if (!patch || own(output, 'title')) output.title = boundedString(output.title, 'title', 200)
     if (!patch || own(output, 'prompt')) output.prompt = boundedString(output.prompt, 'prompt', 20_000)
     if (!patch || own(output, 'workspace')) output.workspace = await canonicalWorkspace(output.workspace)
@@ -107,7 +123,6 @@ export function createDefinitionScheduleService({
     const normalized = await normalizedInput(input)
     return { job: await view(await definitions.create({
       ...normalized,
-      thread_mode: 'new',
       timezone_mode: 'system',
     })) }
   }

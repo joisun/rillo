@@ -191,22 +191,25 @@ function createSession({
           forceReload: true,
         }), { cwd: run.workspace })
         : null
-      const startedThread = await client.request('thread/start', compact({
+      const config = {
+        ...threadConfig,
+        ...(run.network_access == null ? {} : { 'sandbox_workspace_write.network_access': run.network_access }),
+        ...(run.auto_compact_token_limit == null ? {} : { model_auto_compact_token_limit: run.auto_compact_token_limit }),
+      }
+      const startedThread = await client.request(run.resume_session_id ? 'thread/resume' : 'thread/start', compact({
+        ...(run.resume_session_id ? { threadId: run.resume_session_id } : { ephemeral: false }),
         cwd: run.workspace,
         model: run.model,
         approvalPolicy: 'never',
         sandbox: run.sandbox_mode,
-        ephemeral: false,
-        config: run.network_access == null ? threadConfig : {
-          ...threadConfig,
-          'sandbox_workspace_write.network_access': run.network_access,
-        },
+        config: Object.keys(config).length ? config : null,
       }))
       if (settled) return completion
       threadId = startedThread?.thread?.id
       if (typeof threadId !== 'string' || threadId.length === 0) {
         throw sessionError('RUNTIME_PROTOCOL_INVALID')
       }
+      if (run.resume_session_id && threadId !== run.resume_session_id) throw sessionError('RUNTIME_PROTOCOL_INVALID')
       safeEmit(emit, { type: 'session', payload: { session_id: threadId } })
       await startTurn(run.prompt, 'prompt')
     } catch (error) {

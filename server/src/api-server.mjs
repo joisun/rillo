@@ -138,6 +138,8 @@ function scheduleJob(row, { detail = false, runSummary = null } = {}) {
     cadence,
     timezone_mode: row.timezone_mode,
     thread_mode: row.thread_mode,
+    auto_compact_token_limit: row.auto_compact_token_limit ?? null,
+    max_inherit_runs: row.max_inherit_runs ?? 20,
     sandbox_mode: row.sandbox_mode,
     model: row.model,
     reasoning_effort: row.reasoning_effort,
@@ -295,6 +297,11 @@ function scheduledRun(row) {
     trigger: row.origin ?? row.trigger,
     status: row.status,
     thread_id: row.session_id ?? row.thread_id ?? null,
+    thread_mode: row.thread_mode ?? 'new',
+    session_mode: row.session_mode ?? 'new',
+    session_mode_reason: row.session_mode_reason ?? 'always_new',
+    inherit_run_number: row.inherit_run_number ?? 0,
+    max_inherit_runs: row.max_inherit_runs ?? 20,
     scheduled_for: row.scheduled_for ?? null,
     claimed_at: row.created_at ?? row.claimed_at ?? null,
     started_at: row.started_at ?? null,
@@ -469,12 +476,13 @@ export function createApiServer({
         if (request.method === 'GET' && delivery) {
           sendJson(response, 200, await messaging.delivery({ request_id: safeSegment(delivery[1]) })); return
         }
-        if (request.method === 'POST' && ['/api/v1/session-control/send', '/api/v1/session-control/interrupt'].includes(pathname)) {
+        if (request.method === 'POST' && ['/api/v1/session-control/send', '/api/v1/session-control/interrupt', '/api/v1/session-control/compact'].includes(pathname)) {
           requireJson(request)
           const stop = pathname.endsWith('/interrupt')
+          const compact = pathname.endsWith('/compact')
           const input = exactBody(await readJson(request, { limit: 128 * 1024 }), new Set(stop
-            ? ['session', 'request_id', 'expected_turn_id'] : ['session', 'request_id', 'mode', 'text', 'expected_turn_id']), 'Session message')
-          const result = await messaging[stop ? 'interrupt' : 'send'](input)
+            ? ['session', 'request_id', 'expected_turn_id'] : compact ? ['session', 'request_id', 'instructions'] : ['session', 'request_id', 'mode', 'text', 'expected_turn_id']), 'Session message')
+          const result = await messaging[stop ? 'interrupt' : compact ? 'compact' : 'send'](input)
           hub.publish()
           sendJson(response, 200, result); return
         }
@@ -561,6 +569,13 @@ export function createApiServer({
         exactBody(await readJson(request), new Set(), 'Runtime refresh')
         runtimeRegistry.refresh()
         sendJson(response, 200, { runtimes: await runtimeRegistry.list() })
+        return
+      }
+      const runtimeSettings = pathname.match(/^\/api\/v1\/runtimes\/([^/]+)\/settings$/)
+      if (request.method === 'GET' && runtimeSettings && runtimeRegistry) {
+        const workspace = url.searchParams.get('workspace') || undefined
+        if (workspace && (!workspace.startsWith('/') || workspace.length > 4096 || workspace.includes('\0'))) throw httpError('RUNTIME_INPUT_INVALID', 'Workspace must be an absolute directory', 400)
+        sendJson(response, 200, await runtimeRegistry.settings(safeSegment(runtimeSettings[1]), { workspace }))
         return
       }
       const runtimeModels = pathname.match(/^\/api\/v1\/runtimes\/([^/]+)\/models$/)
@@ -798,6 +813,7 @@ export function createApiServer({
         const input = exactBody(await readJson(request), new Set([
           'title', 'prompt', 'workspace', 'agent', 'cadence', 'sandbox_mode', 'model',
           'reasoning_effort', 'fast_mode', 'network_access', 'timeout_seconds', 'capabilities',
+          'thread_mode', 'auto_compact_token_limit', 'max_inherit_runs',
         ]), 'Schedule')
         const result = scheduleMutationResult(await schedulerService.createJob(input))
         hub.publish()

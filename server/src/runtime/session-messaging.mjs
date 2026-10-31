@@ -44,12 +44,12 @@ export function createSessionMessaging({ providers, store, requestTimeoutMs = 25
     const session = normalizeSessionReference(input.session)
     const provider = providerFor(session)
     const operation = input.operation ?? input.mode ?? 'queue'
-    if (![...MESSAGE_MODES, 'stop'].includes(operation)) throw messageError('SESSION_MESSAGE_INPUT_INVALID', '消息模式无效', { statusCode: 400 })
+    if (![...MESSAGE_MODES, 'stop', 'compact'].includes(operation)) throw messageError('SESSION_MESSAGE_INPUT_INVALID', '消息模式无效', { statusCode: 400 })
     if (typeof input.request_id !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(input.request_id)) throw messageError('SESSION_MESSAGE_INPUT_INVALID', 'request_id 必须为 1–128 个字母、数字或 ._:-', { statusCode: 400 })
-    const text = operation === 'stop' ? '' : input.text
-    if (typeof text !== 'string' || (operation !== 'stop' && !text.trim()) || text.length > 16000 || text.includes('\0')) throw messageError('SESSION_MESSAGE_INPUT_INVALID', '消息必须为 1–16000 字符', { statusCode: 400 })
+    const text = operation === 'stop' ? '' : operation === 'compact' ? input.instructions ?? '' : input.text
+    if (typeof text !== 'string' || (!['stop', 'compact'].includes(operation) && !text.trim()) || text.length > 16000 || text.includes('\0')) throw messageError('SESSION_MESSAGE_INPUT_INVALID', '消息或压缩说明必须为最多 16000 字符', { statusCode: 400 })
     const expected_turn_id = input.expected_turn_id ?? null
-    if (operation !== 'queue' && (typeof expected_turn_id !== 'string' || !expected_turn_id || expected_turn_id.length > 256)) throw messageError('SESSION_MESSAGE_INPUT_INVALID', '追加或打断必须指定 expected_turn_id', { statusCode: 400 })
+    if (['steer', 'interrupt', 'stop'].includes(operation) && (typeof expected_turn_id !== 'string' || !expected_turn_id || expected_turn_id.length > 256)) throw messageError('SESSION_MESSAGE_INPUT_INVALID', '追加或打断必须指定 expected_turn_id', { statusCode: 400 })
     const canonical = { request_id: input.request_id, session, operation, text, expected_turn_id }
     if (active.size >= 100 && !active.has(input.request_id) && !store.get(input.request_id)) throw messageError('SESSION_MESSAGE_LIMIT', '投递请求达到并发上限，请稍后重试', { statusCode: 429 })
     const begun = store.begin(canonical)
@@ -90,12 +90,13 @@ export function createSessionMessaging({ providers, store, requestTimeoutMs = 25
     },
     send: execute,
     interrupt: input => execute({ ...input, operation: 'stop' }),
+    compact: input => execute({ ...input, operation: 'compact' }),
     async delivery({ request_id }) {
       if (closed) throw messageError('SESSION_MESSAGE_UNAVAILABLE', '消息服务已关闭', { statusCode: 503 })
       if (typeof request_id !== 'string' || !request_id) throw messageError('SESSION_MESSAGE_INPUT_INVALID', '缺少 request_id', { statusCode: 400 })
       const delivery = store.get(request_id)
       if (!delivery) throw messageError('SESSION_MESSAGE_NOT_FOUND', '发送回执不存在', { statusCode: 404 })
-      if (delivery.status === 'unknown') {
+      if (delivery.status === 'unknown' || (delivery.status === 'accepted' && delivery.operation === 'compact' && delivery.completed !== true)) {
         const verified = await providerFor(delivery.session).reconcile?.(delivery).catch(() => null)
         if (verified && !closed) return { delivery: store.update(request_id, 'accepted', { ...verified, ...(delivery.interrupted_turn_id ? { interrupted_turn_id: delivery.interrupted_turn_id } : {}), reconciled: true, attempts: delivery.attempts ?? [] }) }
       }

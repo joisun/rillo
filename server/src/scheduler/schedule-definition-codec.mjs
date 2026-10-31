@@ -5,6 +5,7 @@ import { parseDocument, stringify } from '../../vendor/yaml.mjs'
 import { validateCadence } from './cadence.mjs'
 import { SchedulerError } from './scheduler-errors.mjs'
 import { isCodexModelSlug, isCodexReasoningLevel } from './codex-model-selection.mjs'
+import { THREAD_MODES, validAutoCompactLimit, validInheritanceLimit } from '../session-policy.mjs'
 
 const DEFINITION_TYPE = 'rillo/schedule'
 // Read existing user Markdown without rewriting it during installation. New writes use Rillo.
@@ -18,6 +19,7 @@ const MARKER = /^type:\s*["']?(?:rillo|tasks?[-_]recorder)\/schedule["']?\s*(?:#
 const FIELDS = new Set([
   'type', 'id', 'title', 'enabled', 'workspace', 'agent', 'schedule', 'capabilities',
   'sandbox', 'model', 'reasoning', 'fast_mode', 'network_access', 'timeout', 'session_id',
+  'thread_mode', 'auto_compact_token_limit', 'max_inherit_runs',
 ])
 const SANDBOXES = new Set(['read-only', 'workspace-write', 'danger-full-access'])
 const OPENCODE_MODEL = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9~][A-Za-z0-9._:/~-]*$/
@@ -109,6 +111,18 @@ function timeoutSeconds(value) {
     fail('SCHEDULE_DEFINITION_INVALID', 'timeout must be from 60s to 24h', { field: 'timeout' })
   }
   return seconds
+}
+
+function sessionPolicy(value, agent) {
+  const thread_mode = value.thread_mode ?? 'new'
+  if (!THREAD_MODES.has(thread_mode)) fail('SCHEDULE_DEFINITION_INVALID', 'thread_mode must be new, reuse or auto', { field: 'thread_mode' })
+  const auto_compact_token_limit = value.auto_compact_token_limit ?? null
+  const max_inherit_runs = value.max_inherit_runs ?? 20
+  if (!validInheritanceLimit(max_inherit_runs)) fail('SCHEDULE_DEFINITION_INVALID', 'max_inherit_runs must be 1–10000', { field: 'max_inherit_runs' })
+  if (!validAutoCompactLimit(auto_compact_token_limit) || (auto_compact_token_limit !== null && agent !== 'codex')) {
+    fail('SCHEDULE_DEFINITION_INVALID', 'auto_compact_token_limit requires Codex and 1000–10000000 tokens, or null to inherit', { field: 'auto_compact_token_limit' })
+  }
+  return { thread_mode, auto_compact_token_limit, max_inherit_runs }
 }
 
 function duration(seconds) {
@@ -238,7 +252,7 @@ export function parseScheduleDefinition(source, {
     ...(frontMatter.session_id != null ? { session_id: string(frontMatter.session_id, 'session_id', 128) } : {}),
     timeout_seconds: timeoutSeconds(frontMatter.timeout),
     capabilities: capabilities(frontMatter.capabilities),
-    thread_mode: 'new',
+    ...sessionPolicy(frontMatter, agentId(frontMatter.agent)),
     timezone_mode: 'system',
     prompt,
   }
@@ -282,6 +296,10 @@ export function serializeScheduleDefinition(job, { clock = () => new Date() } = 
     frontMatter.fast_mode = value.fast_mode
   }
   validateOpenCodeSettings(frontMatter.agent, frontMatter.sandbox, frontMatter.capabilities)
+  const policy = sessionPolicy(value, frontMatter.agent)
+  frontMatter.thread_mode = policy.thread_mode
+  frontMatter.max_inherit_runs = policy.max_inherit_runs
+  if (policy.auto_compact_token_limit !== null) frontMatter.auto_compact_token_limit = policy.auto_compact_token_limit
   frontMatter.timeout = duration(timeoutSeconds(value.timeout_seconds))
   if (value.session_id != null) frontMatter.session_id = string(value.session_id, 'session_id', 128)
   const prompt = string(value.prompt, 'prompt', 20000)

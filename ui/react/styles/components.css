@@ -117,7 +117,7 @@
   .schedule-list { padding-inline: 14px; }
 }
 
-.ui-dialog.schedule-editor-dialog { width: min(780px, calc(100vw - 32px)); }
+.ui-dialog.schedule-editor-dialog { width: min(720px, calc(100vw - 32px)); }
 
 .ui-sheet-overlay > .ui-dialog__backdrop { z-index: 0; }
 .ui-sheet-overlay > .ui-sheet-viewport { z-index: 1; }
