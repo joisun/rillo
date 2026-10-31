@@ -138,16 +138,19 @@ export function sessionMessageRange(session: BrowserSession, pages: SessionTimel
 }
 
 // Empty seconds stay implicit, so long idle sessions do not allocate millions of cells.
-export function secondHeatCells(points: { at: string }[], from: number, to: number) {
-  const cells = new Map<number, number>()
+export function secondHeatCells(points: { at: string; role?: MessagePoint['role'] }[], from: number, to: number) {
+  const cells = new Map<number, { start: number; count: number; user: number; assistant: number; unknown: number }>()
   for (const point of points) {
     const at = Date.parse(point.at)
     if (at >= from && at < to) {
       const second = Math.floor(at / 1000) * 1000
-      cells.set(second, (cells.get(second) ?? 0) + 1)
+      const cell = cells.get(second) ?? { start: second, count: 0, user: 0, assistant: 0, unknown: 0 }
+      cell.count++
+      cell[point.role ?? 'unknown']++
+      cells.set(second, cell)
     }
   }
-  return [...cells].sort(([a], [b]) => a - b).map(([start, count]) => ({ start, count }))
+  return [...cells.values()].sort((a, b) => a.start - b.start)
 }
 
 export function nearestMessage(points: MessagePoint[], at: number) {

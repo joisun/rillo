@@ -208,7 +208,7 @@
 }
 @media (prefers-reduced-motion: reduce) { .session-row-resume { transition: none; } }
 .session-density { border-radius: 2px; background: color-mix(in oklab, var(--text-muted) 6%, transparent); }
-.session-density__cells { display: block; width: 100%; height: 100%; color: var(--accent-strong); }
+.session-density__cells { display: block; width: 100%; height: 100%; color: var(--text-muted); }
 .session-density__reading { position: absolute; z-index: 6; bottom: -5px; width: 0; height: 0; border-right: 4px solid transparent; border-bottom: 5px solid var(--accent-strong); border-left: 4px solid transparent; transform: translateX(-50%); pointer-events: none; }
 .session-density__tooltip { bottom: calc(100% + 3px); max-width: min(240px, 100%); line-height: 1.4; }
 .session-message [data-role] > div { font-size: 12px; line-height: 1.65; }
@@ -373,3 +373,11 @@
 .session-pin[data-pinned] svg { fill: currentColor; }
 .session-status-sort > button > svg { width: 12px; height: 12px; }
 .session-status-sort > button:disabled { opacity: .5; cursor: default; }
+
+.session-density, .session-timeline-legend { --timeline-user-color: var(--success); --timeline-agent-color: var(--accent-strong); }
+.session-timeline-legend { display: inline-flex; flex-shrink: 0; align-items: center; gap: 10px; color: var(--text-muted); font-size: 10px; }
+.session-timeline-legend > span { display: inline-flex; align-items: center; gap: 4px; }
+.session-timeline-legend > span::before { width: 5px; height: 8px; border-radius: 1px; content: ''; background: var(--timeline-agent-color); }
+.session-timeline-legend > [data-role='user']::before { background: var(--timeline-user-color); }
+
+.session-density__tooltip { white-space: normal; overflow-wrap: anywhere; }

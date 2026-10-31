@@ -33,6 +33,7 @@ export function SessionDensity({ title, intervals, points, from, to, selectedAt,
   const readingPosition = instant ? 50 : readingTime === null ? 0 : Math.max(0, Math.min(100, (readingTime - from) / (to - from) * 100))
   const cell = cursor === null ? null : cells.find(entry => entry.start === Math.floor(cursor / 1000) * 1000)
   const countLabel = complete ? `${cell?.count ?? 0} 条消息` : cell?.count ? `${cell.count}+ 条消息` : ''
+  const roleLabel = cell ? [cell.user ? `用户 ${cell.user}` : '', cell.assistant ? `Agent ${cell.assistant}` : ''].filter(Boolean).join(' · ') : ''
   const timeLabel = cursor === null ? '' : new Date(cursor).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
   const disabled = pending || (points !== undefined && events.length === 0)
   const hoverTarget = useRef<number | null>(null)
@@ -54,18 +55,29 @@ export function SessionDensity({ title, intervals, points, from, to, selectedAt,
       const maximum = Math.max(1, ...cells.map(entry => entry.count))
       // Multiple logical seconds can share an overview pixel. Keep its strongest
       // second rather than accumulating opacity into a fictitious message count.
-      const pixels = new Map<number, { width: number; count: number }>()
+      const pixels = new Map<number, { width: number; user: number; assistant: number; unknown: number }>()
       for (const entry of cells) {
         const left = instant ? width / 2 - 1 : Math.max(0, (Math.max(from, entry.start) - from) / (to - from) * width)
         const right = instant ? left + 2 : Math.min(width, (entry.start + 1000 - from) / (to - from) * width)
         const x = Math.min(Math.floor(left * ratio) / ratio, width - 1 / ratio)
         const previous = pixels.get(x)
-        pixels.set(x, { width: Math.max(1 / ratio, right - left - (right - left > 2 ? 1 : 0)), count: Math.max(entry.count, previous?.count ?? 0) })
+        pixels.set(x, {
+          width: Math.max(1 / ratio, right - left - (right - left > 2 ? 1 : 0)),
+          user: Math.max(entry.user, previous?.user ?? 0),
+          assistant: Math.max(entry.assistant, previous?.assistant ?? 0),
+          unknown: Math.max(entry.unknown, previous?.unknown ?? 0),
+        })
       }
-      context.fillStyle = getComputedStyle(element).color
+      const style = getComputedStyle(element)
+      const colors = { user: style.getPropertyValue('--timeline-user-color').trim(), assistant: style.getPropertyValue('--timeline-agent-color').trim(), unknown: style.color }
       for (const [left, entry] of pixels) {
-        context.globalAlpha = .3 + .7 * Math.log1p(entry.count) / Math.log1p(maximum)
-        context.fillRect(left, 2, entry.width, Math.max(1, height - 4))
+        const roles = (['user', 'assistant', 'unknown'] as const).filter(role => entry[role] > 0)
+        const laneHeight = Math.max(1, height - 4) / roles.length
+        roles.forEach((role, index) => {
+          context.fillStyle = colors[role]
+          context.globalAlpha = .3 + .7 * Math.log1p(entry[role]) / Math.log1p(maximum)
+          context.fillRect(left, 2 + index * laneHeight, entry.width, laneHeight)
+        })
       }
     }
     draw()
@@ -118,7 +130,7 @@ export function SessionDensity({ title, intervals, points, from, to, selectedAt,
     aria-disabled={onSeek ? disabled : undefined} aria-busy={pending || undefined}
     aria-describedby={onSeek ? hintId : undefined} tabIndex={onSeek ? 0 : undefined}
     aria-valuemin={onSeek ? from : undefined} aria-valuemax={onSeek ? to - 1 : undefined} aria-valuenow={onSeek ? cursor ?? from : undefined}
-    aria-valuetext={onSeek ? `${timeLabel}${countLabel ? `，${countLabel}` : ''}` : undefined}
+    aria-valuetext={onSeek ? `${timeLabel}${countLabel ? `，${countLabel}` : ''}${roleLabel ? `，${roleLabel}` : ''}` : undefined}
     onFocus={() => setFocused(true)} onBlur={() => { setFocused(false); leave() }}
     onPointerMove={event => {
       if (!onSeek) return
@@ -155,7 +167,7 @@ export function SessionDensity({ title, intervals, points, from, to, selectedAt,
     {readingTime !== null && Number.isFinite(readingTime) ? <span className="session-density__reading" role="img" aria-label="当前阅读位置" data-at={readingAt} style={{ left: `${readingPosition}%` }} /> : null}
     {onSeek && cursor !== null && cursor >= from && cursor < to ? <>
       <span className="session-density__cursor" aria-hidden="true" style={{ left: `${position}%` }} />
-      {hoverAt !== null || focused ? <span className="session-density__tooltip" aria-hidden="true" style={{ left: `clamp(80px, ${position}%, calc(100% - 80px))` }}>{timeLabel}{countLabel ? ` · ${countLabel}` : ''}</span> : null}
+      {hoverAt !== null || focused ? <span className="session-density__tooltip" aria-hidden="true" style={{ left: `clamp(min(120px, 50%), ${position}%, max(calc(100% - 120px), 50%))` }}>{timeLabel}{countLabel ? ` · ${countLabel}` : ''}{roleLabel ? ` · ${roleLabel}` : ''}</span> : null}
     </> : null}
   </div>
 }
