@@ -1,0 +1,9 @@
+{
+  "product": "Rillo",
+  "mascot": "刺刺",
+  "provider": "built-in image_gen",
+  "model": "not exposed by tool",
+  "reference": "../2026-10-29/rillo-baby-porcupine.png",
+  "transparent_background": true,
+  "prompt": "Use case: identity-preserve / logo-brand. Edit target: the provided Rillo baby porcupine mascot. Create ONE refined square app-logo asset of the SAME baby porcupine, now as a close-up portrait, on a genuinely transparent alpha background. Preserve its cream fluffy face, cocoa-mauve short soft rounded quills, tiny round ears, two glossy black curious eyes, and signature large soft rose-pink snout with two visible nostrils. Composition: the baby leans very close toward the camera as if inquisitively sniffing the lens, friendly and a little goofy, not aggressive. Its rounded HEAD alone should occupy roughly TWO THIRDS of the total square image area, approximately 80–85% of the canvas width and height, with a small even transparent margin so the complete head/quill silhouette is legible at 24px. Strong close-camera perspective: the big plump pink NOSE is foremost and the main focal point, around 40% of the whole canvas width, wet with a subtle soft highlight, projecting forward; its curious eyes sit slightly behind it on either side. Face centered, slight natural head tilt, chin near the bottom, short soft quills forming a simple recognizable outer silhouette. No visible full body, no standing feet, no torso filling the lower half. Keep the same premium soft three-dimensional tactile illustration and gentle lighting as the reference, simplified enough for a small navigation logo. ABSOLUTELY NO lavender background, no colored square, no rounded app tile, no badge, no enclosing circle, no scenery, no floor, no cast shadow behind or underneath the head, no text or watermark. All space outside the porcupine silhouette must be transparent, not painted white and not a checkerboard pattern. Deliver the clean isolated mascot head only."
+}
