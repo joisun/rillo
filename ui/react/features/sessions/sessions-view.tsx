@@ -261,7 +261,7 @@ export function SessionsView({ api }: { api: DashboardApi }) {
       {family.missingParents.map(reference => <SessionAncestorSource key={sessionKey(reference)} api={api} reference={reference} onData={rememberAncestor} onUnavailable={ancestorUnavailable} />)}
       <header className="sessions-toolbar" inert={Boolean(connectionError)}>
         <div className="sessions-toolbar__search">
-          <SessionSearch key={providerId + ':' + workspace + ':' + branch} api={api} provider={providerId} workspace={workspace} branch={branch}
+          <SessionSearch key={providerId} api={api} provider={providerId}
             enabled={Boolean(provider?.capabilities.full_text_search)} activity={nativeActivity} statuses={nativeStatuses}
             onSelect={selectSession} />
         </div>

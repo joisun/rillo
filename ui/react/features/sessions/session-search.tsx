@@ -12,9 +12,8 @@ import { Highlight, sessionKey } from './session-format'
 import { SessionOrigin } from './session-origin'
 import { sessionWithStatus } from './session-status'
 
-export function SessionSearch({ api, provider, workspace, branch = '', enabled, activity, statuses, onSelect }: {
-  api: DashboardApi; provider: string; workspace: string; enabled: boolean
-  branch?: string
+export function SessionSearch({ api, provider, enabled, activity, statuses, onSelect }: {
+  api: DashboardApi; provider: string; enabled: boolean
   activity: SessionActivityPage | undefined; statuses: Map<string, BrowserSession>; onSelect: (session: BrowserSession, query: string) => void
 }) {
   const [draft, setDraft] = useState('')
@@ -24,9 +23,9 @@ export function SessionSearch({ api, provider, workspace, branch = '', enabled, 
     return () => window.clearTimeout(timer)
   }, [draft])
   const results = useInfiniteQuery({
-    queryKey: queryKeys.sessionSearch(provider, workspace, query, false, branch),
+    queryKey: queryKeys.sessionSearch(provider, query, false),
     initialPageParam: null as string | null,
-    queryFn: ({ pageParam, signal }) => api.sessions(provider, { workspace, branch, query, cursor: pageParam }, signal),
+    queryFn: ({ pageParam, signal }) => api.sessions(provider, { query, cursor: pageParam }, signal),
     getNextPageParam: (page: SessionPage) => page.next_cursor ?? undefined,
     enabled: enabled && Boolean(query), retry: false, gcTime: 0,
   })
@@ -44,10 +43,12 @@ export function SessionSearch({ api, provider, workspace, branch = '', enabled, 
   return (
     <div className="session-search">
     <Combobox.Root<BrowserSession> items={items} itemToStringLabel={session => session.title} itemToStringValue={sessionKey} filter={null} value={null} inputValue={draft}
-      onInputValueChange={(value, details) => { if (details.reason !== 'item-press') setDraft(value) }}
+      onInputValueChange={(value, details) => {
+        if (details.reason === 'input-change' || details.reason === 'clear-press') setDraft(value)
+      }}
       disabled={!enabled} onValueChange={(selected) => { if (selected) onSelect(selected, query) }}>
       <InputGroup size="sm"><InputGroupAddon><Search /></InputGroupAddon>
-        <Combobox.Input render={<Input placeholder="搜索讨论过的内容…" maxLength={256} aria-label="搜索会话正文" />} />
+        <Combobox.Input render={<Input placeholder="全局搜索会话内容…" maxLength={256} aria-label="搜索会话正文" />} />
       </InputGroup>
       <Combobox.Portal><Combobox.Positioner className="ui-positioner" sideOffset={8} align="start">
       <Combobox.Popup className="session-search__popover ui-popover">
